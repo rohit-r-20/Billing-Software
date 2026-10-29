@@ -1,0 +1,4 @@
+PyQt5==5.15.11
+PyQtWebEngine==5.15.7
+pytest>=8.0.0
+reportlab>=4.0.0
