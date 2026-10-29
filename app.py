@@ -4,6 +4,18 @@ Anti Matrix Commercial Billing & POS System
 Entry Point for Desktop ERP Application.
 """
 import sys
+import os
+from pathlib import Path
+
+# Auto-delegate to local project virtual environment if run via system python
+_project_dir = Path(__file__).resolve().parent
+_venv_python = _project_dir / ".venv" / "bin" / "python"
+if _venv_python.exists() and sys.executable != str(_venv_python):
+    try:
+        import PyQt5
+    except ImportError:
+        os.execv(str(_venv_python), [str(_venv_python)] + sys.argv)
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
