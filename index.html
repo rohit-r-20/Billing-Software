@@ -1012,6 +1012,8 @@
               />
             </div>
             <button type="button" class="btn-pos-action" id="btn-pos-search-item" title="Manual Search (F1)">Search (F1)</button>
+            <button type="button" class="btn-pos-action pos-mobile-btn" id="btn-pos-mobile-scanner" title="Connect Mobile Phone as Wi-Fi Barcode Scanner">📱 Mobile Scanner</button>
+            <button type="button" class="btn-pos-action pos-simulate-btn" id="btn-pos-simulate-scan" title="Simulate Barcode Scan for Testing">🧪 Simulate Scan</button>
             <button type="button" class="btn-pos-action" id="btn-pos-hold" title="Hold Sale (F2)">Hold Sale (F2)</button>
             <button type="button" class="btn-pos-action" id="btn-pos-resume" title="Resume Sale (F3)">Held Bills (<span id="held-count">0</span>)</button>
             <button type="button" class="btn-pos-action danger" id="btn-pos-clear" title="Clear Cart (Esc)">Clear</button>
@@ -1475,9 +1477,213 @@
       </div>
     </div>
 
+    <!-- =========================================================
+         POPUP MODAL: WI-FI MOBILE BARCODE SCANNER PAIRING
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-mobile-scanner" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box modal-scanner-box" style="width: 580px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">📱</span>
+            <h2>Wi-Fi Mobile Barcode Scanner</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-mobile-scanner">&times;</button>
+        </div>
+        <div class="scanner-modal-body" style="padding: 16px;">
+          <!-- Status Banner -->
+          <div class="scanner-status-banner" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 14px;">
+            <div>
+              <span style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.5px;">Scanner Link Status:</span>
+              <div id="mobile-scanner-status-text" style="font-size: 13px; font-weight: 600; color: #0284c7; margin-top: 2px;">
+                ● Ready / Waiting for Phone Connection
+              </div>
+            </div>
+            <span class="mobile-status-pill" id="mobile-scanner-pill" style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+              LAN READY
+            </span>
+          </div>
+
+          <!-- Pairing Area: QR Code + Connection Details -->
+          <div style="display: flex; gap: 16px; margin-bottom: 14px; align-items: stretch;">
+            <!-- QR Box -->
+            <div style="flex: 0 0 170px; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+              <div id="mobile-scanner-qr-svg" style="width: 150px; height: 150px; display: flex; align-items: center; justify-content: center;">
+                <span style="color: #94a3b8; font-size: 11px; text-align: center;">Generating QR Code...</span>
+              </div>
+              <span style="font-size: 10px; color: #64748b; margin-top: 6px; font-weight: 600; text-align: center;">Scan with Phone Camera</span>
+            </div>
+
+            <!-- Instructions & Link -->
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <h4 style="margin: 0 0 6px 0; font-size: 13px; color: #0f172a;">How to connect your phone:</h4>
+                <ol style="margin: 0 0 10px 18px; padding: 0; font-size: 11.5px; color: #334155; line-height: 1.5;">
+                  <li>Connect phone to this <strong>same Wi-Fi network</strong>.</li>
+                  <li>Scan the QR code with your iPhone / Android camera, or open the link below in Chrome / Safari.</li>
+                  <li>Point your phone camera at barcodes. Scans instantly appear in this Fast Billing cart!</li>
+                </ol>
+              </div>
+
+              <!-- URL display -->
+              <div>
+                <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Direct Pairing URL:</label>
+                <div style="display: flex; gap: 6px;">
+                  <input type="text" id="mobile-scanner-url-input" readonly style="flex: 1; font-family: monospace; font-size: 11px; padding: 6px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; color: #0f172a;" value="Loading URL..." />
+                  <button type="button" class="btn-action" id="btn-copy-scanner-url" title="Copy to clipboard" style="padding: 0 10px; font-size: 11px; white-space: nowrap;">Copy</button>
+                  <button type="button" class="btn-action" id="btn-open-scanner-browser" title="Open in local browser tab for testing" style="padding: 0 10px; font-size: 11px; white-space: nowrap;">Open Tab</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Test Demo Barcodes in Modal -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; font-weight: 700; color: #334155;">Test Demo Barcodes (Click to test scanner stream):</span>
+              <span style="font-size: 10px; color: #64748b;">Instant Simulation</span>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-demo-test" data-barcode="890_TEST_001" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 5px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
+                🍪 Milk Bikis (890_TEST_001)
+              </button>
+              <button type="button" class="btn-demo-test" data-barcode="890_TEST_002" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 5px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
+                🍪 Hide &amp; Seek (890_TEST_002)
+              </button>
+              <button type="button" class="btn-demo-test danger" data-barcode="8909263004690" style="background: #fffbeb; border: 1px solid #fde68a; color: #b45309; padding: 5px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
+                ⚠️ Levosalbutamol (8909263004690)
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Activity Log -->
+          <div style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Scanner Activity:</span>
+              <button type="button" id="btn-clear-scanner-log" style="background: none; border: none; font-size: 10px; color: #94a3b8; cursor: pointer; text-decoration: underline;">Clear Log</button>
+            </div>
+            <div id="mobile-scanner-log" style="height: 60px; overflow-y: auto; background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 11px; padding: 6px 10px; border-radius: 4px; line-height: 1.4;">
+              [Ready] Mobile scanner service active. Waiting for connection...
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+            <button type="button" class="btn-action danger" id="btn-revoke-scanner-token" style="font-size: 11px; padding: 6px 12px;">
+              🔒 Revoke / Regenerate Token
+            </button>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-action primary-btn" id="btn-dismiss-mobile-scanner" style="font-size: 11px; padding: 6px 16px;">
+                Keep Running &amp; Close Modal
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: SIMULATE BARCODE SCAN (DESKTOP TEST MODE)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-simulate-scan" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 480px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #1e293b;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">🧪</span>
+            <h2>Simulate Barcode Scan (Test Mode)</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-simulate-scan">&times;</button>
+        </div>
+        <div style="padding: 16px;">
+          <p style="font-size: 12px; color: #475569; margin-bottom: 12px;">
+            Simulate a barcode scan directly inside Fast Billing without a physical USB or wireless hardware scanner.
+          </p>
+
+          <form id="form-simulate-scan" onsubmit="event.preventDefault();">
+            <div style="margin-bottom: 14px;">
+              <label for="sim-barcode-input" style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Enter or Select Barcode:</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="sim-barcode-input" placeholder="e.g. 890_TEST_001" style="flex: 1; padding: 8px 10px; font-size: 13px; font-family: monospace; border: 1px solid #cbd5e1; border-radius: 4px;" autofocus />
+                <button type="submit" class="btn-action primary-btn" id="btn-submit-simulate-scan" style="padding: 0 16px; font-weight: 700;">Scan ⏎</button>
+              </div>
+            </div>
+          </form>
+
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 14px;">
+            <span style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 8px;">Quick Test Demo Barcodes:</span>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <button type="button" class="btn-action btn-sim-quick" data-code="890_TEST_001" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; text-align: left;">
+                <div>
+                  <strong style="color: #0f172a;">Milk Bikis</strong> (Biscuits)
+                  <div style="font-size: 11px; font-family: monospace; color: #64748b;">Barcode: 890_TEST_001</div>
+                </div>
+                <span style="font-weight: 700; color: #166534;">₹ 10.00</span>
+              </button>
+              <button type="button" class="btn-action btn-sim-quick" data-code="890_TEST_002" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; text-align: left;">
+                <div>
+                  <strong style="color: #0f172a;">Hide &amp; Seek</strong> (Biscuits)
+                  <div style="font-size: 11px; font-family: monospace; color: #64748b;">Barcode: 890_TEST_002</div>
+                </div>
+                <span style="font-weight: 700; color: #166534;">₹ 20.00</span>
+              </button>
+              <button type="button" class="btn-action btn-sim-quick" data-code="8909263004690" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; text-align: left; border-left: 3px solid #f59e0b;">
+                <div>
+                  <strong style="color: #b45309;">Levosalbutamol sulfate</strong> (DEMO / Medical)
+                  <div style="font-size: 11px; font-family: monospace; color: #64748b;">Barcode: 8909263004690</div>
+                </div>
+                <span style="font-weight: 700; color: #dc2626; font-size: 11px;">⚠️ Unconfigured (₹0)</span>
+              </button>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-action" id="btn-close-sim-dialog">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: MEDICAL PRODUCT VERIFICATION WARNING
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-medical-verification" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 500px; max-width: 95vw; border-top: 4px solid #f59e0b;">
+        <div class="create-comp-header" style="background: #fffbeb; color: #92400e;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">⚠️</span>
+            <h2 style="color: #92400e;">Product Verification Required</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-medical-verification" style="color: #92400e;">&times;</button>
+        </div>
+        <div style="padding: 16px;">
+          <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 12px; margin-bottom: 14px;">
+            <strong style="color: #92400e; font-size: 13px; display: block; margin-bottom: 4px;">DEMO / UNVERIFIED MEDICAL RECORD DETECTED</strong>
+            <p style="font-size: 12px; color: #78350f; margin: 0; line-height: 1.45;">
+              Barcode <strong>8909263004690</strong> is registered as a demo placeholder for <em>Levosalbutamol sulfate</em>.
+              Commercial sale and checkout are strictly blocked until the packaging is inspected and verified.
+            </p>
+          </div>
+
+          <table style="width: 100%; font-size: 12px; margin-bottom: 14px; border-collapse: collapse;">
+            <tbody>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Product Name:</td><td style="padding: 6px; font-weight: 700;">Levosalbutamol sulfate</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Barcode:</td><td style="padding: 6px; font-family: monospace;">8909263004690</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Current Price:</td><td style="padding: 6px; color: #dc2626; font-weight: 700;">Not Configured (₹ 0.00)</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">GST Tax Category:</td><td style="padding: 6px; color: #dc2626; font-weight: 700;">Unconfigured (Verification Required)</td></tr>
+              <tr><td style="padding: 6px; color: #64748b; font-weight: 600;">Verification Requirement:</td><td style="padding: 6px; color: #b45309;">Verify actual strength, dosage form, manufacturer, pack size, MRP, selling price &amp; GST rate before billing.</td></tr>
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn-action primary-btn" id="btn-ack-medical-verification">Acknowledge</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="qwebchannel.js"></script>
+  <script src="desktop/static/qrcode.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

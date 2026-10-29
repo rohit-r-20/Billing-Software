@@ -18,6 +18,8 @@ from services.printing_service import printing_service
 from services.backup_service import backup_service
 from services.reporting_service import reporting_service
 from services.migration_service import migration_service
+from services.demo_product_service import demo_product_service
+from services.mobile_scanner_service import mobile_scanner_service
 from core.configuration import config
 from core.logging_config import logger
 
@@ -26,10 +28,21 @@ class BackendBridge(QObject):
     # Signals to send notifications or async events back to UI
     notification_signal = pyqtSignal(str)
     backup_status_signal = pyqtSignal(str)
+    mobile_scan_signal = pyqtSignal(str, str)
+    mobile_status_signal = pyqtSignal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_window = parent
+        # Register mobile scanner callbacks
+        mobile_scanner_service.scan_callback = self._on_mobile_scan
+        mobile_scanner_service.status_callback = self._on_mobile_status
+
+    def _on_mobile_scan(self, barcode: str, device: str):
+        self.mobile_scan_signal.emit(barcode, device)
+
+    def _on_mobile_status(self, status: str, details: str):
+        self.mobile_status_signal.emit(status, details)
 
     # --- Companies ---
     @pyqtSlot(result=str)
@@ -296,6 +309,72 @@ class BackendBridge(QObject):
             payload = json.loads(payload_json)
             summary = migration_service.import_localstorage_payload(payload)
             return json.dumps({"success": True, "data": summary})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Mobile Wi-Fi Scanner & Demo Products ---
+    @pyqtSlot(str, result=str)
+    def startMobileScanner(self, company_id: str) -> str:
+        try:
+            info = mobile_scanner_service.start_server(company_id=company_id)
+            return json.dumps({"success": True, "data": info})
+        except Exception as e:
+            logger.error(f"Error starting mobile scanner: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def stopMobileScanner(self) -> str:
+        try:
+            res = mobile_scanner_service.stop_server()
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def revokeMobileScannerToken(self) -> str:
+        try:
+            info = mobile_scanner_service.revoke_token()
+            return json.dumps({"success": True, "data": info})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def getMobileScannerInfo(self) -> str:
+        try:
+            info = mobile_scanner_service.get_info()
+            return json.dumps({"success": True, "data": info})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def simulateScan(self, company_id: str, barcode: str) -> str:
+        try:
+            res = mobile_scanner_service.simulate_scan(company_id=company_id, barcode=barcode)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def seedDemoProducts(self) -> str:
+        try:
+            res = demo_product_service.seed_demo_products()
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def cleanupDemoProducts(self) -> str:
+        try:
+            res = demo_product_service.cleanup_demo_products()
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def getDemoProductsStatus(self) -> str:
+        try:
+            items = demo_product_service.get_status()
+            return json.dumps({"success": True, "data": items})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 

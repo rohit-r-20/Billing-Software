@@ -2597,3 +2597,80 @@ html, body {
   width: 32px;
   height: 32px;
 }
+
+/* =========================================================
+   MOBILE SCANNER & SIMULATION TOOLBAR & MODAL STYLES
+========================================================== */
+.pos-mobile-btn {
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pos-mobile-btn:hover {
+  background: #bfdbfe;
+  border-color: #2563eb;
+  color: #1e40af;
+}
+
+.pos-simulate-btn {
+  background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%);
+  border-color: #8b5cf6;
+  color: #6d28d9;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pos-simulate-btn:hover {
+  background: #ddd6fe;
+  border-color: #7c3aed;
+  color: #5b21b6;
+}
+
+.mobile-status-pill.connected {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #86efac;
+}
+
+.mobile-status-pill.waiting {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border: 1px solid #bae6fd;
+}
+
+.btn-demo-test:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.btn-sim-quick {
+  cursor: pointer;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-sim-quick:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  transform: translateX(2px);
+}
+
+.cart-unverified-tag {
+  display: inline-block;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  margin-top: 2px;
+}
+

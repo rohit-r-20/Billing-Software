@@ -23,6 +23,11 @@ class CatalogueService:
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
+            # Resolve actual company UUID if code was supplied
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (company_id, str(company_id).upper()))
+            c_row = cursor.fetchone()
+            actual_company_id = c_row["id"] if c_row else company_id
+
             cursor.execute("""
                 SELECT i.*, b.barcode as matched_barcode,
                        COALESCE(sb.current_qty, 0.0) as current_stock
@@ -32,10 +37,17 @@ class CatalogueService:
                 LEFT JOIN stock_balances sb ON sb.branch_id = br.id AND sb.item_id = i.id
                 WHERE b.company_id = ? AND b.barcode = ? AND i.is_active = 1
                 LIMIT 1;
-            """, (company_id, code_str))
+            """, (actual_company_id, code_str))
             row = cursor.fetchone()
             if row:
-                return dict(row)
+                res = dict(row)
+                desc = (res.get("description") or "").upper()
+                name = (res.get("name") or "").upper()
+                if "UNVERIFIED" in desc or "UNVERIFIED" in name or float(res.get("sales_price") or 0) <= 0:
+                    res["is_verified"] = 0
+                else:
+                    res["is_verified"] = 1
+                return res
 
             # Fallback: Check if barcode matches item alias or name directly
             cursor.execute("""
@@ -46,10 +58,17 @@ class CatalogueService:
                 LEFT JOIN stock_balances sb ON sb.branch_id = br.id AND sb.item_id = i.id
                 WHERE i.company_id = ? AND (i.alias = ? OR i.name = ?) AND i.is_active = 1
                 LIMIT 1;
-            """, (company_id, code_str, code_str))
+            """, (actual_company_id, code_str, code_str))
             row2 = cursor.fetchone()
             if row2:
-                return dict(row2)
+                res2 = dict(row2)
+                desc2 = (res2.get("description") or "").upper()
+                name2 = (res2.get("name") or "").upper()
+                if "UNVERIFIED" in desc2 or "UNVERIFIED" in name2 or float(res2.get("sales_price") or 0) <= 0:
+                    res2["is_verified"] = 0
+                else:
+                    res2["is_verified"] = 1
+                return res2
 
         return None
 

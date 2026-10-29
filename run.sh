@@ -7,3 +7,4 @@ if [ -f ".venv/bin/python" ]; then
 else
     exec python3 app.py "$@"
 fi
+
