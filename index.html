@@ -1526,11 +1526,18 @@
 
               <!-- URL display -->
               <div>
-                <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Direct Pairing URL:</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <label style="font-size: 11px; font-weight: 700; color: #475569;">Direct Pairing URL (HTTPS):</label>
+                  <span id="badge-scanner-https" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 4px;">🔒 TLS HTTPS</span>
+                </div>
                 <div style="display: flex; gap: 6px;">
                   <input type="text" id="mobile-scanner-url-input" readonly style="flex: 1; font-family: monospace; font-size: 11px; padding: 6px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; color: #0f172a;" value="Loading URL..." />
                   <button type="button" class="btn-action" id="btn-copy-scanner-url" title="Copy to clipboard" style="padding: 0 10px; font-size: 11px; white-space: nowrap;">Copy</button>
                   <button type="button" class="btn-action" id="btn-open-scanner-browser" title="Open in local browser tab for testing" style="padding: 0 10px; font-size: 11px; white-space: nowrap;">Open Tab</button>
+                </div>
+                <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                  <a href="#" id="link-download-ca" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">📜 Download Root CA (ca.crt)</a>
+                  <a href="#" id="link-open-setup-guide" target="_blank" style="color: #475569; text-decoration: underline;">📱 Android Setup Guide</a>
                 </div>
               </div>
             </div>

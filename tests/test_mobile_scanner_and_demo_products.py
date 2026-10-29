@@ -3,6 +3,7 @@ Unit tests for Demo Products Seeding and Mobile Wi-Fi Barcode Scanner Service.
 """
 import json
 import time
+import ssl
 import urllib.request
 import urllib.error
 import pytest
@@ -11,6 +12,7 @@ from db.database import DatabaseManager
 from services.catalogue_service import CatalogueService
 from services.demo_product_service import DemoProductService, DEMO_PRODUCTS
 from services.mobile_scanner_service import MobileScannerService
+from services.cert_service import cert_service
 
 
 @pytest.fixture
@@ -143,88 +145,139 @@ def test_mobile_scanner_server_endpoints_and_security(scanner_test_env):
 
     info = scanner_svc.start_server(company_id="C_DEMO", port=9123)
     assert info["is_running"] is True
+    assert info["protocol"] == "https"
+    assert info["url"].startswith("https://")
     actual_port = info["port"]
+    http_port = info["http_port"]
     token = info["token"]
     assert token is not None and len(token) >= 8
 
-    base_url = f"http://127.0.0.1:{actual_port}"
+    # TLS Client Context using Anti Matrix Root CA
+    client_ctx = ssl.create_default_context(cafile=str(cert_service.ca_crt_path))
+    https_base = f"https://127.0.0.1:{actual_port}"
+    http_base = f"http://127.0.0.1:{http_port}"
 
     try:
-        # 1. Status endpoint
-        req = urllib.request.Request(f"{base_url}/api/status?token={token}")
-        with urllib.request.urlopen(req) as resp:
+        # 1. Status endpoint over TLS HTTPS
+        req = urllib.request.Request(f"{https_base}/api/status?token={token}")
+        with urllib.request.urlopen(req, context=client_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             assert data["active"] is True
             assert data["token_valid"] is True
+            assert data["is_https"] is True
 
-        # 2. Scanner HTML endpoint with invalid token -> 401 Unauthorized
+        # 2. CA Certificate download over HTTPS
+        req_ca = urllib.request.Request(f"{https_base}/ca.crt")
+        with urllib.request.urlopen(req_ca, context=client_ctx) as resp:
+            assert resp.code == 200
+            assert "application/x-x509-ca-cert" in resp.headers.get("Content-Type", "")
+            ca_pem = resp.read()
+            assert b"BEGIN CERTIFICATE" in ca_pem
+
+        # 3. CA Certificate download over plain HTTP companion server (for zero-TLS friction phone setup)
+        req_http_ca = urllib.request.Request(f"{http_base}/ca.crt")
+        with urllib.request.urlopen(req_http_ca) as resp:
+            assert resp.code == 200
+            assert b"BEGIN CERTIFICATE" in resp.read()
+
+        # 4. Setup page
+        req_setup = urllib.request.Request(f"{https_base}/setup?token={token}")
+        with urllib.request.urlopen(req_setup, context=client_ctx) as resp:
+            assert resp.code == 200
+            setup_html = resp.read().decode("utf-8")
+            assert "Enable Camera Scanner" in setup_html
+            assert "Option 1" in setup_html
+
+        # 5. Scanner HTML endpoint with invalid token -> 401 Unauthorized
         with pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(f"{base_url}/scanner?token=INVALID_TOKEN")
+            urllib.request.urlopen(f"{https_base}/scanner?token=INVALID_TOKEN", context=client_ctx)
         assert exc_info.value.code == 401
 
-        # 3. Scanner HTML endpoint with valid token -> 200 OK
-        with urllib.request.urlopen(f"{base_url}/scanner?token={token}") as resp:
+        # 6. Scanner HTML endpoint with valid token over TLS -> 200 OK
+        with urllib.request.urlopen(f"{https_base}/scanner?token={token}", context=client_ctx) as resp:
             assert resp.code == 200
             html = resp.read().decode("utf-8")
             assert "Anti Matrix" in html
             assert "Mobile Barcode Scanner" in html
+            assert "playsinline" in html
+            assert "validateCameraPrerequisites" in html
 
-        # 4. Pair device handshake
+        # 7. Companion HTTP redirect to HTTPS
+        class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+            def http_error_302(self, req, fp, code, msg, headers):
+                return fp
+
+        opener = urllib.request.build_opener(NoRedirectHandler)
+        resp_redirect = opener.open(f"{http_base}/scanner?token={token}")
+        assert resp_redirect.code in (302, 200)
+
+        # 8. Pair device handshake over TLS
         pair_req = urllib.request.Request(
-            f"{base_url}/api/pair",
-            data=json.dumps({"token": token, "device": "iPhone 15 Pro", "user_agent": "Mozilla"}).encode("utf-8"),
+            f"{https_base}/api/pair",
+            data=json.dumps({"token": token, "device": "Android Chrome 120", "user_agent": "Mozilla"}).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(pair_req) as resp:
+        with urllib.request.urlopen(pair_req, context=client_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             assert data["success"] is True
 
-        assert scanner_svc.connected_device == "iPhone 15 Pro"
+        assert scanner_svc.connected_device == "Android Chrome 120"
 
-        # 5. Scan submission with valid token
+        # 9. Scan submission with valid token
         scan_req = urllib.request.Request(
-            f"{base_url}/api/scan",
-            data=json.dumps({"token": token, "barcode": "890_TEST_001", "device": "iPhone 15 Pro"}).encode("utf-8"),
+            f"{https_base}/api/scan",
+            data=json.dumps({"token": token, "barcode": "890_TEST_001", "device": "Android Chrome 120"}).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(scan_req) as resp:
+        with urllib.request.urlopen(scan_req, context=client_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             assert data["success"] is True
             assert data["barcode"] == "890_TEST_001"
 
         # Verify callback received scan
         assert len(received_scans) == 1
-        assert received_scans[0] == ("890_TEST_001", "iPhone 15 Pro")
+        assert received_scans[0] == ("890_TEST_001", "Android Chrome 120")
 
-        # 6. Debounce test: rapid identical scan within 800ms is ignored
+        # 10. Debounce test: rapid identical scan within 800ms is ignored
         scan_dup = urllib.request.Request(
-            f"{base_url}/api/scan",
-            data=json.dumps({"token": token, "barcode": "890_TEST_001", "device": "iPhone 15 Pro"}).encode("utf-8"),
+            f"{https_base}/api/scan",
+            data=json.dumps({"token": token, "barcode": "890_TEST_001", "device": "Android Chrome 120"}).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(scan_dup) as resp:
+        with urllib.request.urlopen(scan_dup, context=client_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             assert data["success"] is True
             assert data.get("debounced") is True
 
         assert len(received_scans) == 1  # Still 1 because duplicate was debounced
 
-        # 7. Scan submission with invalid token -> 401
+        # 11. Oversized payload security rejection (>10KB) -> 413
+        oversized_data = {"token": token, "barcode": "A" * 12000}
+        oversized_req = urllib.request.Request(
+            f"{https_base}/api/scan",
+            data=json.dumps(oversized_data).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(oversized_req, context=client_ctx)
+        assert exc_info.value.code == 413
+
+        # 12. Scan submission with invalid token -> 401
         bad_scan_req = urllib.request.Request(
-            f"{base_url}/api/scan",
+            f"{https_base}/api/scan",
             data=json.dumps({"token": "WRONG_TOKEN", "barcode": "890_TEST_002"}).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
         with pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(bad_scan_req)
+            urllib.request.urlopen(bad_scan_req, context=client_ctx)
         assert exc_info.value.code == 401
 
-        # 8. Token Revocation
+        # 13. Token Revocation
         new_info = scanner_svc.revoke_token()
         assert new_info["token"] != token
         # Old token is now invalid
         with pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(f"{base_url}/scanner?token={token}")
+            urllib.request.urlopen(f"{https_base}/scanner?token={token}", context=client_ctx)
         assert exc_info.value.code == 401
 
     finally:

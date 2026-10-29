@@ -1,13 +1,15 @@
 """
 Mobile Wi-Fi Barcode Scanner Service for Anti Matrix Billing ERP.
-Hosts a secure local HTTP service allowing smartphones on the same Wi-Fi
-network to act as wireless barcode scanners for the desktop POS terminal.
+Hosts a local HTTPS service with TLS certificate management allowing smartphones
+on the same Wi-Fi network to act as high-speed wireless barcode scanners.
 """
 import os
+import ssl
 import sys
 import json
 import time
 import socket
+import atexit
 import secrets
 import threading
 from typing import Dict, Any, Optional, Callable
@@ -16,6 +18,7 @@ from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 
 from services.catalogue_service import catalogue_service
+from services.cert_service import cert_service
 from core.logging_config import logger
 
 
@@ -37,12 +40,12 @@ def get_local_lan_ip() -> str:
 
 
 class ScannerHTTPHandler(BaseHTTPRequestHandler):
-    """Handles mobile scanner webpage delivery, pairing handshake, and barcode scans."""
-    
+    """Handles mobile scanner webpage delivery, pairing handshake, and barcode scans over HTTPS."""
+
     server_instance = None  # Reference to MobileScannerService
 
     def log_message(self, format, *args):
-        # Silence standard HTTP access logs to keep terminal output clean
+        # Silence access logs to keep terminal output clean
         pass
 
     def send_json_response(self, status_code: int, data: Dict[str, Any]):
@@ -69,7 +72,25 @@ class ScannerHTTPHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
         token = query.get("token", [""])[0]
 
-        # 1. Serve static ZXing library
+        # 1. Download Root CA Certificate
+        if path == "/ca.crt":
+            try:
+                content = cert_service.get_ca_cert_pem()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-x509-ca-cert")
+                self.send_header("Content-Disposition", 'attachment; filename="anti_matrix_ca.crt"')
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            except Exception as e:
+                logger.error(f"Error serving CA certificate: {e}")
+                self.send_response(500)
+                self.end_headers()
+                return
+
+        # 2. Serve Static ZXing library
         if path == "/static/zxing.min.js":
             zxing_path = Path(__file__).resolve().parent.parent / "desktop" / "static" / "zxing.min.js"
             if zxing_path.exists():
@@ -86,23 +107,37 @@ class ScannerHTTPHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-        # 2. Status API endpoint
+        # 3. Setup and Instructions Page
+        if path == "/setup":
+            svc = self.server_instance
+            html = svc.generate_setup_html(token) if svc else "<h1>Setup</h1>"
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # 4. Status API endpoint
         if path == "/api/status":
             svc = self.server_instance
             if not svc:
                 self.send_json_response(500, {"error": "Server not initialized"})
                 return
-            valid_token = svc.current_token and token == svc.current_token
+            valid_token = bool(svc.current_token and token == svc.current_token)
             self.send_json_response(200, {
                 "active": svc.is_running,
                 "token_valid": valid_token,
                 "status": svc.status,
+                "is_https": True,
+                "port": svc.port,
                 "connected_device": svc.connected_device,
                 "last_scan": svc.last_scan
             })
             return
 
-        # 3. Serve Mobile Scanner HTML Webpage
+        # 5. Serve Mobile Scanner HTML Webpage
         if path == "/scanner" or path == "/":
             svc = self.server_instance
             if not svc:
@@ -120,8 +155,8 @@ class ScannerHTTPHandler(BaseHTTPRequestHandler):
                 <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Unauthorized - Anti Matrix Scanner</title>
                 <style>body{font-family:sans-serif;text-align:center;padding:40px 20px;background:#0f172a;color:#fff;}
-                .box{max-width:380px;margin:auto;background:#1e293b;padding:24px;border-radius:12px;}
-                h1{color:#ef4444;font-size:22px;} p{color:#94a3b8;font-size:14px;}</style>
+                .box{max-width:380px;margin:auto;background:#1e293b;padding:24px;border-radius:12px;border:1px solid #334155;}
+                h1{color:#ef4444;font-size:20px;margin-bottom:12px;} p{color:#94a3b8;font-size:14px;line-height:1.5;}</style>
                 </head><body><div class="box">
                 <h1>⚠️ Invalid or Expired Pairing Token</h1>
                 <p>This wireless scanner link is unauthorized. Please scan the QR code displayed on your desktop billing screen to link your phone.</p>
@@ -205,8 +240,80 @@ class ScannerHTTPHandler(BaseHTTPRequestHandler):
         self.send_json_response(404, {"error": "Endpoint not found"})
 
 
+class CompanionHTTPHandler(BaseHTTPRequestHandler):
+    """
+    Companion plain-HTTP server that runs alongside the primary HTTPS server.
+    Serves Root CA downloads without certificate warnings and redirects HTTP traffic to HTTPS.
+    """
+
+    server_instance = None  # Reference to MobileScannerService
+
+    def log_message(self, format, *args):
+        pass
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        token = query.get("token", [""])[0]
+        svc = self.server_instance
+
+        # 1. Download Root CA Certificate over plain HTTP
+        if path == "/ca.crt":
+            try:
+                content = cert_service.get_ca_cert_pem()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-x509-ca-cert")
+                self.send_header("Content-Disposition", 'attachment; filename="anti_matrix_ca.crt"')
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            except Exception as e:
+                logger.error(f"Error serving CA cert on companion port: {e}")
+                self.send_response(500)
+                self.end_headers()
+                return
+
+        # 2. Setup Guide
+        if path == "/setup":
+            html = svc.generate_setup_html(token) if svc else "<h1>Setup</h1>"
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # 3. Static ZXing library
+        if path == "/static/zxing.min.js":
+            zxing_path = Path(__file__).resolve().parent.parent / "desktop" / "static" / "zxing.min.js"
+            if zxing_path.exists():
+                content = zxing_path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+
+        # 4. Redirect all other HTTP requests to HTTPS
+        if svc:
+            target_token = token or svc.current_token
+            redirect_url = f"https://{svc.lan_ip}:{svc.port}/scanner?token={target_token}"
+            self.send_response(302)
+            self.send_header("Location", redirect_url)
+            self.end_headers()
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+
 class MobileScannerService:
-    """Manages the background HTTP scanner server, pairing tokens, and scan callbacks."""
+    """Manages the background HTTPS scanner server, TLS certificates, pairing tokens, and scan callbacks."""
 
     def __init__(
         self,
@@ -215,10 +322,14 @@ class MobileScannerService:
     ):
         self.server: Optional[HTTPServer] = None
         self.server_thread: Optional[threading.Thread] = None
+        self.http_server: Optional[HTTPServer] = None
+        self.http_server_thread: Optional[threading.Thread] = None
+
         self.lan_ip: str = "127.0.0.1"
         self.port: int = 8990
+        self.http_port: int = 8989
         self.current_token: str = ""
-        self.status: str = "Disconnected"  # Disconnected, Waiting for Pairing, Connected, Error
+        self.status: str = "Disconnected"
         self.connected_device: str = ""
         self.connected_ip: str = ""
         self.active_company_id: str = "COMP0001"
@@ -229,8 +340,11 @@ class MobileScannerService:
         self._last_scan_time: float = 0
         self._last_scan_code: str = ""
 
+        # Auto-register process exit hook
+        atexit.register(self.stop_server)
+
     def start_server(self, company_id: str = "COMP0001", port: int = 8990) -> Dict[str, Any]:
-        """Starts the local Wi-Fi scanner server on LAN interface."""
+        """Starts the local HTTPS scanner server and companion HTTP helper on LAN interfaces."""
         if self.is_running and self.server:
             self.active_company_id = company_id
             return self.get_info()
@@ -242,51 +356,109 @@ class MobileScannerService:
         self.connected_device = ""
         self.connected_ip = ""
 
-        # Find available port starting from requested port
-        selected_port = port
-        for attempt_port in range(port, port + 10):
+        # 1. Ensure TLS certificates exist with current LAN IP in SAN
+        try:
+            certs = cert_service.get_or_create_server_certificate(self.lan_ip)
+            server_crt = certs["server_crt"]
+            server_key = certs["server_key"]
+        except Exception as e:
+            logger.error(f"Failed to generate TLS certificates: {e}")
+            self.status = "Error"
+            return {"error": f"TLS Certificate Error: {e}"}
+
+        # 2. Bind primary HTTPS Server (wrapped with TLS)
+        ScannerHTTPHandler.server_instance = self
+        selected_https_port = port
+        self.server = None
+
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_ctx.load_cert_chain(certfile=server_crt, keyfile=server_key)
+
+        for attempt in range(port, port + 10):
             try:
-                ScannerHTTPHandler.server_instance = self
-                self.server = HTTPServer(("0.0.0.0", attempt_port), ScannerHTTPHandler)
-                selected_port = attempt_port
+                base_srv = HTTPServer(("0.0.0.0", attempt), ScannerHTTPHandler)
+                base_srv.socket = ssl_ctx.wrap_socket(base_srv.socket, server_side=True)
+                self.server = base_srv
+                selected_https_port = attempt
                 break
             except OSError:
                 continue
 
         if not self.server:
             self.status = "Error"
-            logger.error(f"Failed to bind Mobile Scanner server on ports {port}-{port+9}")
-            return {"error": "Failed to bind to local network port"}
+            logger.error(f"Failed to bind Mobile Scanner HTTPS server on ports {port}-{port+9}")
+            return {"error": "Failed to bind to local network HTTPS port"}
 
-        self.port = selected_port
+        self.port = selected_https_port
+
+        # 3. Bind Companion HTTP Server (for plain-HTTP CA cert download and redirect)
+        CompanionHTTPHandler.server_instance = self
+        selected_http_port = 8989
+        self.http_server = None
+        for attempt_http in [8989, selected_https_port + 1, 8988, 8987]:
+            try:
+                self.http_server = HTTPServer(("0.0.0.0", attempt_http), CompanionHTTPHandler)
+                selected_http_port = attempt_http
+                break
+            except OSError:
+                continue
+
+        self.http_port = selected_http_port
         self.is_running = True
 
+        # Launch threads
         self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
 
-        logger.info(f"Mobile Wi-Fi Scanner server started at http://{self.lan_ip}:{self.port}/scanner?token={self.current_token}")
+        if self.http_server:
+            self.http_server_thread = threading.Thread(target=self.http_server.serve_forever, daemon=True)
+            self.http_server_thread.start()
+
+        logger.info(f"Mobile Wi-Fi Scanner HTTPS server started at https://{self.lan_ip}:{self.port}/scanner?token={self.current_token}")
+        logger.info(f"Companion HTTP server active at http://{self.lan_ip}:{self.http_port}/ (CA cert: /ca.crt)")
+
         if self.status_callback:
-            self.status_callback("WAITING_PAIRING", f"Listening on {self.lan_ip}:{self.port}")
+            self.status_callback("WAITING_PAIRING", f"Listening on https://{self.lan_ip}:{self.port}")
 
         return self.get_info()
 
     def stop_server(self) -> Dict[str, Any]:
-        """Stops the running HTTP scanner server."""
+        """Stops the running HTTPS scanner and companion HTTP servers cleanly."""
+        if not self.is_running and not self.server and not self.http_server:
+            return {"success": True, "status": "Disconnected"}
+
         if self.server:
             try:
                 self.server.shutdown()
                 self.server.server_close()
             except Exception as e:
-                logger.warning(f"Error closing scanner server: {e}")
+                logger.warning(f"Error closing HTTPS scanner server: {e}")
+
+        if self.http_server:
+            try:
+                self.http_server.shutdown()
+                self.http_server.server_close()
+            except Exception as e:
+                logger.warning(f"Error closing HTTP companion server: {e}")
+
         self.server = None
         self.server_thread = None
+        self.http_server = None
+        self.http_server_thread = None
         self.is_running = False
         self.status = "Disconnected"
         self.connected_device = ""
         self.connected_ip = ""
-        logger.info("Mobile Wi-Fi Scanner server stopped.")
+
+        try:
+            logger.info("Mobile Wi-Fi Scanner service stopped.")
+        except Exception:
+            pass
         if self.status_callback:
-            self.status_callback("DISCONNECTED", "Scanner server stopped")
+            try:
+                self.status_callback("DISCONNECTED", "Scanner server stopped")
+            except Exception:
+                pass
         return {"success": True, "status": "Disconnected"}
 
     def revoke_token(self) -> Dict[str, Any]:
@@ -376,22 +548,196 @@ class MobileScannerService:
         return self.handle_barcode_received(barcode.strip().upper(), "Desktop Simulator")
 
     def get_info(self) -> Dict[str, Any]:
-        """Returns full network URL, QR payload, and status for desktop UI."""
-        pairing_url = f"http://{self.lan_ip}:{self.port}/scanner?token={self.current_token}"
+        """Returns full HTTPS network URL, QR payload, and status for desktop UI."""
+        pairing_url = f"https://{self.lan_ip}:{self.port}/scanner?token={self.current_token}"
         return {
             "is_running": self.is_running,
+            "protocol": "https",
             "lan_ip": self.lan_ip,
             "port": self.port,
+            "http_port": self.http_port,
             "token": self.current_token,
             "url": pairing_url,
+            "http_url": f"http://{self.lan_ip}:{self.http_port}/scanner?token={self.current_token}",
+            "ca_url": f"http://{self.lan_ip}:{self.http_port}/ca.crt",
+            "setup_url": f"https://{self.lan_ip}:{self.port}/setup?token={self.current_token}",
             "status": self.status,
             "connected_device": self.connected_device,
             "connected_ip": self.connected_ip,
             "last_scan": self.last_scan
         }
 
+    def generate_setup_html(self, token: str) -> str:
+        """Generates the mobile-friendly step-by-step certificate and camera setup page."""
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Anti Matrix Scanner &bull; Mobile Camera Setup</title>
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      padding: 20px 16px;
+      line-height: 1.5;
+    }}
+    .container {{
+      max-width: 520px;
+      margin: 0 auto;
+    }}
+    .header {{
+      text-align: center;
+      margin-bottom: 24px;
+    }}
+    .badge {{
+      background: #2563eb;
+      color: #fff;
+      font-weight: 900;
+      font-size: 13px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 8px;
+    }}
+    h1 {{
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+    }}
+    .card {{
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }}
+    .card-title {{
+      font-size: 15px;
+      font-weight: 800;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }}
+    p, li {{
+      font-size: 13px;
+      color: #cbd5e1;
+    }}
+    ol {{
+      margin: 10px 0 10px 20px;
+    }}
+    li {{
+      margin-bottom: 8px;
+    }}
+    .btn-download {{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      background: #10b981;
+      color: #ffffff;
+      text-decoration: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 14px;
+      margin: 12px 0 6px 0;
+    }}
+    .btn-download:active {{
+      background: #059669;
+    }}
+    .code-box {{
+      background: #090d16;
+      border: 1px solid #334155;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #34d399;
+      word-break: break-all;
+      margin: 8px 0;
+      user-select: all;
+    }}
+    .btn-scanner {{
+      display: block;
+      text-align: center;
+      width: 100%;
+      background: #2563eb;
+      color: #fff;
+      text-decoration: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 14px;
+      margin-top: 16px;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <span class="badge">&alpha; Anti Matrix</span>
+      <h1>Enable Camera Scanner</h1>
+      <p style="margin-top: 4px; color: #94a3b8; font-size: 12px;">Android &amp; iOS Secure Context Setup</p>
+    </div>
+
+    <!-- Option 1: Install CA Certificate -->
+    <div class="card">
+      <div class="card-title">
+        <span>📜 Option 1 (Recommended): Trust CA Certificate</span>
+      </div>
+      <p>Android requires installing the local Anti Matrix Certificate Authority to grant the green lock and continuous camera streaming.</p>
+      
+      <a href="/ca.crt" class="btn-download" download="anti_matrix_ca.crt">
+        <span>📥 Download anti_matrix_ca.crt</span>
+      </a>
+
+      <ol>
+        <li>Tap the button above to download <code>anti_matrix_ca.crt</code>.</li>
+        <li>On Android, open <strong>Settings &rarr; Security &amp; Privacy &rarr; More Security Settings &rarr; Encryption &amp; Credentials</strong>.</li>
+        <li>Tap <strong>Install a certificate &rarr; CA certificate</strong>.</li>
+        <li>Tap <strong>Install anyway</strong> and select the downloaded <code>anti_matrix_ca.crt</code>.</li>
+        <li>Return to the scanner. Chrome will now show the trusted green lock and stream the camera!</li>
+      </ol>
+    </div>
+
+    <!-- Option 2: Chrome Insecure Origin Flag -->
+    <div class="card">
+      <div class="card-title">
+        <span>⚡ Option 2 (Fastest): Chrome Flag (No Install)</span>
+      </div>
+      <p>If you don't want to install a certificate, Android Chrome allows developer origin whitelisting in 30 seconds:</p>
+      <ol>
+        <li>Copy this URL into Android Chrome address bar:
+          <div class="code-box">chrome://flags/#unsafely-treat-insecure-origin-as-secure</div>
+        </li>
+        <li>In the text field under that flag, enter:
+          <div class="code-box">https://{self.lan_ip}:{self.port}</div>
+        </li>
+        <li>Change the dropdown to <strong>Enabled</strong> and tap <strong>Relaunch</strong> at bottom.</li>
+      </ol>
+    </div>
+
+    <!-- Option 3: Fallback -->
+    <div class="card">
+      <div class="card-title">
+        <span>📷 Option 3: Instant Fallback Photo Mode</span>
+      </div>
+      <p>No configuration required! Open the scanner and tap <strong>Take Barcode Photo</strong>. It works immediately on 100% of mobile browsers.</p>
+    </div>
+
+    <a href="/scanner?token={token}" class="btn-scanner">&larr; Return to Barcode Scanner</a>
+  </div>
+</body>
+</html>"""
+
     def generate_scanner_html(self, token: str) -> str:
-        """Generates the lightweight, responsive mobile camera scanner webpage."""
+        """Generates the lightweight, responsive mobile camera scanner webpage with HTTPS checks."""
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -410,7 +756,7 @@ class MobileScannerService:
     }}
     header {{
       background: #1e293b;
-      padding: 14px 16px;
+      padding: 12px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -425,12 +771,12 @@ class MobileScannerService:
       background: #2563eb;
       color: #fff;
       font-weight: 900;
-      font-size: 14px;
+      font-size: 13px;
       padding: 2px 7px;
       border-radius: 4px;
     }}
     .brand-title {{
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 800;
       letter-spacing: 0.3px;
     }}
@@ -445,12 +791,18 @@ class MobileScannerService:
       background: #064e3b;
       color: #34d399;
       border: 1px solid #059669;
+      transition: all 0.2s ease;
+    }}
+    .status-pill.disconnected {{
+      background: #7f1d1d !important;
+      color: #fca5a5 !important;
+      border-color: #ef4444 !important;
     }}
     .status-dot {{
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #34d399;
+      background: currentColor;
       animation: pulse 1.5s infinite;
     }}
     @keyframes pulse {{
@@ -460,13 +812,44 @@ class MobileScannerService:
     }}
     main {{
       flex: 1;
-      padding: 16px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
       max-width: 500px;
       margin: 0 auto;
       width: 100%;
     }}
+
+    /* Security / Capability Alert Banners */
+    .alert-banner {{
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      margin-bottom: 12px;
+      display: none;
+    }}
+    .alert-banner.warning {{
+      background: #451a03;
+      border: 1px solid #d97706;
+      color: #fde68a;
+    }}
+    .alert-banner.error {{
+      background: #450a0a;
+      border: 1px solid #dc2626;
+      color: #fca5a5;
+    }}
+    .alert-banner.info {{
+      background: #082f49;
+      border: 1px solid #0284c7;
+      color: #bae6fd;
+    }}
+    .alert-banner a {{
+      color: #38bdf8;
+      font-weight: 700;
+      text-decoration: underline;
+    }}
+
     .viewfinder-card {{
       background: #020617;
       border: 2px solid #334155;
@@ -478,7 +861,7 @@ class MobileScannerService:
       align-items: center;
       justify-content: center;
       box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }}
     video {{
       width: 100%;
@@ -495,6 +878,7 @@ class MobileScannerService:
       box-shadow: 0 0 8px #ef4444;
       animation: laserSweep 2s ease-in-out infinite alternate;
       z-index: 10;
+      display: none;
     }}
     @keyframes laserSweep {{
       0% {{ top: 20%; }}
@@ -522,7 +906,7 @@ class MobileScannerService:
       color: #ffffff;
       border: none;
       border-radius: 8px;
-      padding: 13px;
+      padding: 12px;
       font-size: 14px;
       font-weight: 800;
       cursor: pointer;
@@ -530,11 +914,11 @@ class MobileScannerService:
       align-items: center;
       justify-content: center;
       gap: 8px;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
       box-shadow: 0 4px 10px rgba(37,99,235,0.3);
+      transition: all 0.15s ease;
     }}
     .btn-camera-trigger:active {{
-      background: #1d4ed8;
       transform: translateY(1px);
     }}
     .manual-entry-box {{
@@ -542,10 +926,10 @@ class MobileScannerService:
       border: 1px solid #334155;
       border-radius: 8px;
       padding: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }}
     .manual-title {{
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       color: #94a3b8;
       margin-bottom: 8px;
@@ -558,7 +942,7 @@ class MobileScannerService:
     }}
     .barcode-input {{
       flex: 1;
-      height: 40px;
+      height: 38px;
       background: #0f172a;
       border: 1px solid #475569;
       border-radius: 6px;
@@ -590,7 +974,7 @@ class MobileScannerService:
       border: 1px solid #334155;
       border-radius: 8px;
       padding: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }}
     .quick-chips {{
       display: flex;
@@ -682,13 +1066,16 @@ class MobileScannerService:
   </header>
 
   <main>
+    <!-- Dynamic Alert Banner for Camera / Context / Permission Status -->
+    <div id="camera-alert-banner" class="alert-banner"></div>
+
     <!-- Viewfinder -->
     <div class="viewfinder-card" id="viewfinder-card">
-      <video id="scanner-video" playsinline muted></video>
-      <div class="laser-line"></div>
+      <video id="scanner-video" playsinline muted autoplay></video>
+      <div class="laser-line" id="laser-line"></div>
       <div class="viewfinder-overlay"></div>
       <div class="camera-notice" id="camera-notice">
-        Tap "Start Camera" below to scan barcodes continuously with your rear camera.
+        Tap <strong>"Start Live Camera Scan"</strong> below to begin continuous rear-camera scanning.
       </div>
     </div>
 
@@ -745,12 +1132,18 @@ class MobileScannerService:
   <script>
     const TOKEN = "{token}";
     const videoElem = document.getElementById("scanner-video");
+    const laserLine = document.getElementById("laser-line");
     const cameraNotice = document.getElementById("camera-notice");
+    const alertBanner = document.getElementById("camera-alert-banner");
+    const statusPill = document.getElementById("status-pill");
+    const statusText = document.getElementById("status-text");
+
     const btnToggleCam = document.getElementById("btn-toggle-camera");
     const btnSnap = document.getElementById("btn-snap-photo");
     const fileSnapInput = document.getElementById("file-snap-input");
     const manualInput = document.getElementById("manual-barcode-input");
     const btnSendManual = document.getElementById("btn-send-manual");
+
     const lastScanCard = document.getElementById("last-scan-card");
     const scanName = document.getElementById("scan-name");
     const scanCode = document.getElementById("scan-code");
@@ -760,6 +1153,50 @@ class MobileScannerService:
     let isScanning = false;
     let codeReader = null;
     let audioCtx = null;
+    let isRequestInFlight = false;
+
+    // Client-side debounce state to prevent duplicate cart entries
+    let lastScannedText = "";
+    let lastScannedTime = 0;
+
+    function showAlert(type, htmlContent) {{
+      alertBanner.className = `alert-banner ${{type}}`;
+      alertBanner.innerHTML = htmlContent;
+      alertBanner.style.display = "block";
+    }}
+
+    function hideAlert() {{
+      alertBanner.style.display = "none";
+    }}
+
+    // Pre-flight Secure Context and Capability Validation
+    function validateCameraPrerequisites() {{
+      if (!window.isSecureContext) {{
+        showAlert("warning", '⚠️ <strong>Insecure Context:</strong> Android Chrome blocks camera streaming on non-HTTPS origins. <br><a href="/setup" target="_blank">&rarr; Tap here for 1-minute Setup Guide (Install CA or Chrome Flag)</a>');
+        return false;
+      }}
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
+        showAlert("error", '⚠️ <strong>Camera Unavailable:</strong> Your browser does not expose camera APIs in this context. Please use Chrome on Android over HTTPS, or use the <strong>Take Barcode Photo</strong> fallback below.');
+        return false;
+      }}
+      return true;
+    }}
+
+    // Check camera permission if Permissions API is supported
+    if (navigator.permissions && navigator.permissions.query) {{
+      navigator.permissions.query({{ name: "camera" }}).then(res => {{
+        if (res.state === "denied") {{
+          showAlert("error", '🚫 <strong>Camera Permission Blocked:</strong> Tap the lock or tune icon in your browser address bar &rarr; Permissions &rarr; Camera &rarr; Allow, then refresh.');
+        }}
+        res.onchange = () => {{
+          if (res.state === "granted") hideAlert();
+          else if (res.state === "denied") showAlert("error", '🚫 <strong>Camera Permission Blocked:</strong> Please allow camera access in browser settings.');
+        }};
+      }}).catch(() => {{}});
+    }}
+
+    // Run prerequisite check on load
+    validateCameraPrerequisites();
 
     // Web Audio Synthesizer Beep
     function playBeep() {{
@@ -771,7 +1208,7 @@ class MobileScannerService:
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.type = "sine";
-        osc.frequency.setValueAtTime(1760, audioCtx.currentTime); // 1.76kHz crisp POS beep
+        osc.frequency.setValueAtTime(1760, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
         osc.start();
@@ -795,19 +1232,58 @@ class MobileScannerService:
       else if (/Android/i.test(userAgent)) devName = "Android Device";
 
       try {{
-        await fetch("/api/pair", {{
+        const resp = await fetch("/api/pair", {{
           method: "POST",
           headers: {{ "Content-Type": "application/json" }},
           body: JSON.stringify({{ token: TOKEN, device: devName }})
         }});
-      }} catch (e) {{}}
+        if (resp.ok) {{
+          statusPill.className = "status-pill";
+          statusText.textContent = "Linked to POS";
+        }}
+      }} catch (e) {{
+        statusPill.className = "status-pill disconnected";
+        statusText.textContent = "POS Offline";
+      }}
     }}
     sendPairHandshake();
 
-    // Barcode Delivery to Desktop
+    // Heartbeat to detect POS connection state
+    setInterval(async () => {{
+      try {{
+        const resp = await fetch(`/api/status?token=${{TOKEN}}`);
+        if (resp.ok) {{
+          const data = await resp.json();
+          if (data.active) {{
+            statusPill.className = "status-pill";
+            statusText.textContent = "Linked to POS";
+          }} else {{
+            statusPill.className = "status-pill disconnected";
+            statusText.textContent = "POS Standby";
+          }}
+        }} else {{
+          statusPill.className = "status-pill disconnected";
+          statusText.textContent = "POS Disconnected";
+        }}
+      }} catch (err) {{
+        statusPill.className = "status-pill disconnected";
+        statusText.textContent = "POS Offline";
+      }}
+    }}, 8000);
+
+    // Barcode Delivery to Desktop POS with Client-Side Debouncing
     async function transmitBarcode(barcode) {{
       const code = String(barcode).trim();
       if (!code) return;
+
+      const now = Date.now();
+      // Client-side debounce: ignore identical barcode within 1.2s to prevent multiple frame triggers
+      if (code === lastScannedText && (now - lastScannedTime) < 1200) {{
+        return;
+      }}
+      lastScannedText = code;
+      lastScannedTime = now;
+
       playBeep();
 
       try {{
@@ -818,6 +1294,8 @@ class MobileScannerService:
         }});
         const data = await resp.json();
         if (data.success) {{
+          if (data.debounced) return; // Server debounced
+
           showToast(`✓ Sent: ${{code}}`);
           lastScanCard.style.display = "block";
           scanTime.textContent = new Date().toLocaleTimeString();
@@ -840,25 +1318,39 @@ class MobileScannerService:
     // Continuous Live Camera Scanning via ZXing
     async function startCameraScanner() {{
       if (typeof ZXing === "undefined") {{
-        showToast("ZXing library loading...", true);
+        showToast("ZXing scanner library loading...", true);
         return;
       }}
+
+      if (!validateCameraPrerequisites()) {{
+        return;
+      }}
+
       try {{
+        hideAlert();
+        cameraNotice.textContent = "Connecting to device camera...";
+        cameraNotice.style.display = "block";
+
         codeReader = new ZXing.BrowserMultiFormatReader();
         const devices = await codeReader.listVideoInputDevices();
-        if (devices.length === 0) {{
-          alert("No camera found on this device.");
+        if (!devices || devices.length === 0) {{
+          showAlert("error", "📷 No camera devices detected on this smartphone.");
+          cameraNotice.textContent = "No camera found.";
           return;
         }}
-        // Prefer back camera
+
+        // Prefer back / environment camera
         let selectedId = devices[0].deviceId;
         const backCam = devices.find(d => /back|rear|environment/i.test(d.label));
         if (backCam) selectedId = backCam.deviceId;
 
         cameraNotice.style.display = "none";
+        laserLine.style.display = "block";
         isScanning = true;
         btnToggleCam.innerHTML = "<span>⏹ Stop Live Camera</span>";
         btnToggleCam.style.background = "#dc2626";
+
+        showToast("✓ Live Camera Active");
 
         codeReader.decodeFromVideoDevice(selectedId, "scanner-video", (result, err) => {{
           if (result) {{
@@ -866,11 +1358,26 @@ class MobileScannerService:
           }}
         }});
       }} catch (e) {{
-        cameraNotice.innerHTML = "Live camera access requires HTTPS on some mobile browsers.<br>Use the <b>Take Barcode Photo</b> button below as fallback!";
-        cameraNotice.style.display = "block";
         isScanning = false;
+        laserLine.style.display = "none";
         btnToggleCam.innerHTML = "<span>📹 Start Live Camera Scan</span>";
         btnToggleCam.style.background = "#2563eb";
+
+        const errName = e.name || "";
+        if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {{
+          showAlert("error", '🚫 <strong>Camera Permission Blocked:</strong> Please allow camera permission in Chrome site settings and refresh.<br><a href="/setup" target="_blank">&rarr; Setup Guide</a>');
+          cameraNotice.textContent = "Camera permission was denied.";
+        }} else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {{
+          showAlert("error", "📷 No back camera found on this device.");
+          cameraNotice.textContent = "No camera device available.";
+        }} else if (errName === "NotReadableError" || errName === "TrackStartError") {{
+          showAlert("error", "⚠️ Camera is currently in use by another app.");
+          cameraNotice.textContent = "Camera hardware busy.";
+        }} else {{
+          showAlert("warning", `⚠️ <strong>Camera Error (${{errName || e.message}}):</strong> Android Chrome requires a trusted certificate or flag for camera access.<br><a href="/setup" target="_blank">&rarr; Open 1-Minute Setup Guide</a>`);
+          cameraNotice.innerHTML = 'Live camera requires HTTPS trust.<br>Use <strong>Take Barcode Photo</strong> below!';
+        }}
+        cameraNotice.style.display = "block";
       }}
     }}
 
@@ -880,8 +1387,10 @@ class MobileScannerService:
         codeReader = null;
       }}
       isScanning = false;
+      laserLine.style.display = "none";
       btnToggleCam.innerHTML = "<span>📹 Start Live Camera Scan</span>";
       btnToggleCam.style.background = "#2563eb";
+      cameraNotice.textContent = 'Tap "Start Live Camera Scan" below to begin scanning.';
       cameraNotice.style.display = "block";
     }}
 
@@ -890,12 +1399,14 @@ class MobileScannerService:
       else startCameraScanner();
     }});
 
-    // Camera Photo Fallback (works on 100% of mobile browsers without HTTPS constraints)
+    // Camera Photo Fallback (Works on 100% of mobile browsers regardless of context)
     btnSnap.addEventListener("click", () => fileSnapInput.click());
     fileSnapInput.addEventListener("change", async (e) => {{
       const file = e.target.files[0];
       if (!file) return;
       if (typeof ZXing === "undefined") return;
+
+      showToast("Processing photo...");
       try {{
         const reader = new FileReader();
         reader.onload = async (event) => {{
@@ -904,7 +1415,9 @@ class MobileScannerService:
             const zx = new ZXing.BrowserMultiFormatReader();
             try {{
               const result = await zx.decodeFromImage(img);
-              if (result) transmitBarcode(result.getText());
+              if (result) {{
+                transmitBarcode(result.getText());
+              }}
             }} catch (decodeErr) {{
               showToast("Could not detect barcode in photo. Try closer.", true);
             }}
@@ -941,4 +1454,5 @@ class MobileScannerService:
 </html>"""
 
 
+# Global singleton instance
 mobile_scanner_service = MobileScannerService()

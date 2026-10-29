@@ -2641,15 +2641,20 @@ function renderMobileScannerInfo(info) {
   const qrBox = document.getElementById("mobile-scanner-qr-svg");
   const statusText = document.getElementById("mobile-scanner-status-text");
   const statusPill = document.getElementById("mobile-scanner-pill");
+  const linkCa = document.getElementById("link-download-ca");
+  const linkSetup = document.getElementById("link-open-setup-guide");
 
   if (urlInput) urlInput.value = info.url || "";
+  if (linkCa && info.ca_url) linkCa.href = info.ca_url;
+  if (linkSetup && info.setup_url) linkSetup.href = info.setup_url;
   
   if (statusText) {
     if (info.connected_device) {
       statusText.textContent = `● Connected: ${info.connected_device}`;
       statusText.style.color = "#16a34a";
     } else {
-      statusText.textContent = `● Ready / Listening on ${info.lan_ip || "LAN"}:${info.port || 8990}`;
+      const proto = info.protocol ? info.protocol.toUpperCase() : "HTTPS";
+      statusText.textContent = `● Ready / Listening on ${info.lan_ip || "LAN"}:${info.port || 8990} (${proto})`;
       statusText.style.color = "#0284c7";
     }
   }
@@ -2659,7 +2664,7 @@ function renderMobileScannerInfo(info) {
       statusPill.textContent = "PHONE CONNECTED";
       statusPill.className = "mobile-status-pill connected";
     } else {
-      statusPill.textContent = "LAN READY";
+      statusPill.textContent = "LAN READY (HTTPS)";
       statusPill.className = "mobile-status-pill waiting";
     }
   }

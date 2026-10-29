@@ -53,5 +53,10 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Controlled application shutdown."""
         logger.info("Application shutting down cleanly.")
+        try:
+            from services.mobile_scanner_service import mobile_scanner_service
+            mobile_scanner_service.stop_server()
+        except Exception as e:
+            logger.warning(f"Error shutting down mobile scanner service: {e}")
         event.accept()
 
