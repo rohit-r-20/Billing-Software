@@ -31,9 +31,110 @@
     <main class="workspace-area" id="main-workspace">
 
       <!-- =========================================================
-           VIEW 1: LIST OF COMPANIES (Startup Screen)
+           VIEW 0: STANDALONE LOGIN SCREEN (Screen 1 - Launch)
       ========================================================== -->
-      <section class="screen-view active" id="view-companies">
+      <section class="screen-view active" id="view-login">
+        <div class="login-screen-canvas">
+          <div class="login-card-container">
+            <!-- Brand & Product Header -->
+            <div class="login-brand-header">
+              <div class="login-brand-logo-wrap">
+                <span class="login-brand-symbol">&alpha;</span>
+              </div>
+              <h1 class="login-product-name">Alpha Billing Software</h1>
+              <p class="login-product-by">Commercial Billing &amp; POS &bull; Anti Matrix</p>
+            </div>
+
+            <!-- Login Form Card -->
+            <div class="login-card">
+              <div class="login-card-header">
+                <h2>Sign In to Workspace</h2>
+                <p>Enter your credentials to access your retail billing terminal</p>
+              </div>
+
+              <!-- Inline Alert / Error Notice -->
+              <div class="login-alert-banner" id="login-alert" style="display: none;" role="alert">
+                <span class="alert-icon">⚠️</span>
+                <span class="alert-text" id="login-alert-text">Invalid User ID or Password.</span>
+              </div>
+
+              <form class="login-form-body" id="login-main-form" onsubmit="return false;" autocomplete="off">
+                <!-- Company Selector Row -->
+                <div class="login-input-group">
+                  <label for="login-company-select">Company / Business Store</label>
+                  <div class="input-with-icon-wrap">
+                    <span class="field-icon">🏢</span>
+                    <select id="login-company-select" class="login-select-field">
+                      <option value="COMP0001">ANTI MATRIX (COMP0001)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- User ID Field -->
+                <div class="login-input-group">
+                  <label for="login-user-input">User ID / Username</label>
+                  <div class="input-with-icon-wrap">
+                    <span class="field-icon">👤</span>
+                    <input 
+                      type="text" 
+                      id="login-user-input" 
+                      class="login-text-input" 
+                      placeholder="e.g. A or Admin" 
+                      value="A" 
+                      required 
+                      autocomplete="username"
+                    />
+                  </div>
+                </div>
+
+                <!-- Password Field with Show/Hide Toggle -->
+                <div class="login-input-group">
+                  <label for="login-pwd-input">Password</label>
+                  <div class="input-with-icon-wrap">
+                    <span class="field-icon">🔒</span>
+                    <input 
+                      type="password" 
+                      id="login-pwd-input" 
+                      class="login-text-input" 
+                      placeholder="Enter password" 
+                      required 
+                      autocomplete="current-password"
+                    />
+                    <button type="button" class="btn-toggle-pwd" id="btn-toggle-pwd" title="Show or hide password" aria-label="Show or hide password">
+                      <span id="pwd-toggle-icon">👁️</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Submit Button with Spinner -->
+                <button type="submit" class="btn-login-submit" id="btn-login-submit">
+                  <span class="login-btn-spinner" id="login-btn-spinner" style="display: none;"></span>
+                  <span class="login-btn-text" id="login-btn-text">Sign In &rarr;</span>
+                </button>
+
+                <!-- Company Management Link -->
+                <div class="login-card-links">
+                  <button type="button" class="btn-link-action" id="btn-goto-companies">
+                    <span>📋 Switch / Manage Companies</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Footer Meta -->
+            <div class="login-footer-meta">
+              <span>Anti Matrix Retail ERP v2.1.0</span>
+              <span class="meta-dot">&bull;</span>
+              <span id="login-db-status" class="login-db-pill">● SQLite Persistence Active</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 1: LIST OF COMPANIES (Dedicated Company Selector)
+      ========================================================== -->
+      <section class="screen-view" id="view-companies">
         <div class="dialog-window">
           <div class="dialog-header">
             <h1 class="dialog-title">List of Companies</h1>
@@ -49,7 +150,6 @@
                 class="search-input" 
                 placeholder="Search Company" 
                 autocomplete="off" 
-                autofocus 
                 aria-label="Search company"
               />
             </div>
@@ -88,8 +188,9 @@
 
               <div class="footer-right">
                 <button type="button" class="btn-action primary-btn" id="btn-create-company-modal">+ Create Company</button>
-                <button type="button" class="btn-action" id="btn-select">Select</button>
-                <button type="button" class="btn-action" id="btn-quit">Quit</button>
+                <button type="button" class="btn-action" id="btn-select">Select Company</button>
+                <button type="button" class="btn-action" id="btn-companies-back">&larr; Back to Login</button>
+                <button type="button" class="btn-action" id="btn-quit" style="display:none;">Quit</button>
               </div>
             </div>
 
@@ -100,7 +201,7 @@
       </section>
 
       <!-- =========================================================
-           VIEW: DUAL BILLING MODE SELECTION
+           VIEW: DUAL BILLING MODE SELECTION (Screen 2)
       ========================================================== -->
       <section class="screen-view mode-selection-view" id="view-mode-selection">
         <!-- Top Session Status Bar -->
@@ -120,7 +221,7 @@
 
           <div class="mode-header-actions">
             <button type="button" class="btn-mode-nav" id="btn-mode-settings" title="Configure company options">⚙ Settings</button>
-            <button type="button" class="btn-mode-nav logout-btn" id="btn-mode-logout" title="Switch company or logout">🚪 Switch Company</button>
+            <button type="button" class="btn-mode-nav logout-btn" id="btn-mode-logout" title="End session and return to Login">🚪 Logout</button>
           </div>
         </header>
 
@@ -136,10 +237,16 @@
             <div class="mode-card card-billing" id="card-mode-billing" tabindex="0" role="button" aria-label="Open Traditional Billing">
               <span class="mode-card-badge">ENTERPRISE INVOICING</span>
               <div class="mode-card-icon-wrap">
-                <span>🧾</span>
+                <svg class="mode-card-icon-svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
               </div>
               <h2 class="mode-card-title">Billing</h2>
-              <h3 class="mode-card-subtitle">Complete Billing & Accounting</h3>
+              <h3 class="mode-card-subtitle">Traditional Billing &amp; Accounting</h3>
               <p class="mode-card-desc">
                 Create detailed sales invoices, manage customers, select products, configure applicable taxes, and handle traditional billing workflows.
               </p>
@@ -158,10 +265,14 @@
             <div class="mode-card card-fast-billing" id="card-mode-fast-billing" tabindex="0" role="button" aria-label="Open Fast Billing POS">
               <span class="mode-card-badge">HIGH-SPEED SUPERMARKET POS</span>
               <div class="mode-card-icon-wrap">
-                <span>⚡</span>
+                <svg class="mode-card-icon-svg" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                  <path d="M6 8h.01M6 12h.01M6 16h.01M10 8h8M10 12h8M10 16h4"></path>
+                  <circle cx="18" cy="16" r="1"></circle>
+                </svg>
               </div>
               <h2 class="mode-card-title">Fast Billing</h2>
-              <h3 class="mode-card-subtitle">Supermarket POS & Barcode Checkout</h3>
+              <h3 class="mode-card-subtitle">High-Speed Retail POS</h3>
               <p class="mode-card-desc">
                 Scan products, add items instantly, calculate totals automatically, collect payments, and print customer receipts.
               </p>
@@ -179,7 +290,7 @@
 
           <!-- Bottom Keyboard Shortcuts Hints -->
           <div class="mode-footer-hints">
-            [ 1 ] or [ B ] - Open Billing &nbsp;&bull;&nbsp; [ 2 ] or [ F ] - Open Fast Billing &nbsp;&bull;&nbsp; [ S ] - Settings &nbsp;&bull;&nbsp; [ Esc ] - Switch Company
+            [ 1 ] or [ B ] - Open Billing &nbsp;&bull;&nbsp; [ 2 ] or [ F ] - Open Fast Billing &nbsp;&bull;&nbsp; [ S ] - Settings &nbsp;&bull;&nbsp; [ Esc ] - Logout
           </div>
         </div>
       </section>
@@ -905,6 +1016,7 @@
             <button type="button" class="btn-pos-action" id="btn-pos-resume" title="Resume Sale (F3)">Held Bills (<span id="held-count">0</span>)</button>
             <button type="button" class="btn-pos-action danger" id="btn-pos-clear" title="Clear Cart (Esc)">Clear</button>
           </div>
+          <div id="pos-scan-feedback" class="pos-scan-feedback" style="display: none;" role="status"></div>
 
           <!-- Main Layout: Left Cart Table, Right Summary & Payments -->
           <div class="pos-main-grid">
@@ -955,6 +1067,25 @@
                 <div class="summary-grand-total">
                   <span class="grand-label">PAYABLE AMOUNT</span>
                   <span class="grand-val" id="pos-payable-amount">₹ 0.00</span>
+                </div>
+              </div>
+
+              <!-- Real-time Tender & Change Due Calculator -->
+              <div class="pos-tender-box">
+                <div class="pos-tender-row">
+                  <label for="pos-tender-received">Amount Received (₹):</label>
+                  <input type="number" id="pos-tender-received" class="pos-tender-input" placeholder="0.00" step="1" min="0" />
+                </div>
+                <div class="pos-quick-tender-chips">
+                  <button type="button" class="btn-tender-chip" id="chip-tender-exact">Exact</button>
+                  <button type="button" class="btn-tender-chip" data-amt="100">₹100</button>
+                  <button type="button" class="btn-tender-chip" data-amt="200">₹200</button>
+                  <button type="button" class="btn-tender-chip" data-amt="500">₹500</button>
+                  <button type="button" class="btn-tender-chip" data-amt="2000">₹2000</button>
+                </div>
+                <div class="pos-change-due-row">
+                  <span>Change Due:</span>
+                  <strong id="pos-change-due-val">₹ 0.00</strong>
                 </div>
               </div>
 

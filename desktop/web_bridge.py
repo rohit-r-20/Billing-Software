@@ -49,6 +49,18 @@ class BackendBridge(QObject):
                 return json.dumps({"success": True, "data": comp})
             return json.dumps({"success": False, "error": "Invalid username or password."})
         except Exception as e:
+            logger.error(f"Error in authenticateCompany: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def authenticateUser(self, company_code: str, username: str, password: str) -> str:
+        try:
+            comp = company_service.authenticate(company_code or username, password, username)
+            if comp:
+                return json.dumps({"success": True, "data": comp})
+            return json.dumps({"success": False, "error": "Invalid User ID or password. Please try again."})
+        except Exception as e:
+            logger.error(f"Error in authenticateUser: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, result=str)

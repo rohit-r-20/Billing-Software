@@ -24,16 +24,38 @@ class CompanyService:
             """)
             return [dict(r) for r in cursor.fetchall()]
 
-    def authenticate(self, code: str, password: str) -> Optional[Dict[str, Any]]:
-        """Verify password for the selected company."""
-        code_str = code.strip().upper()
+    def authenticate(self, code_or_user: str, password: str, username: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Verify password for the selected company code or username."""
+        ident = (code_or_user or "").strip().upper()
+        uname = (username or "").strip().upper()
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM companies WHERE UPPER(code) = ?;", (code_str,))
-            row = cursor.fetchone()
+            row = None
+            if ident:
+                # 1. Match company code
+                cursor.execute("SELECT * FROM companies WHERE UPPER(code) = ?;", (ident,))
+                row = cursor.fetchone()
+                # 2. If not found by code, try matching company username
+                if not row:
+                    cursor.execute("SELECT * FROM companies WHERE UPPER(username) = ?;", (ident,))
+                    row = cursor.fetchone()
+            # 3. If still not found and username is provided
+            if not row and uname:
+                cursor.execute("SELECT * FROM companies WHERE UPPER(username) = ?;", (uname,))
+                row = cursor.fetchone()
+            # 4. If identifier is empty or not matched, check if single company exists
+            if not row and not ident:
+                cursor.execute("SELECT * FROM companies ORDER BY created_at ASC LIMIT 1;")
+                row = cursor.fetchone()
+
             if not row:
                 return None
+
             comp = dict(row)
+            # If a username was specified, verify it matches
+            if uname and comp.get("username") and comp["username"].strip().upper() != uname:
+                return None
+
             stored_hash = comp.get("password_hash") or ""
             if verify_password(stored_hash, password):
                 return {
@@ -43,7 +65,8 @@ class CompanyService:
                     "finYear": comp["fin_year"],
                     "taxNo": comp["gstin"],
                     "state": comp["state"],
-                    "username": comp["username"]
+                    "username": comp["username"] or "A",
+                    "role": "Administrator"
                 }
             return None
 

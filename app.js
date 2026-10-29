@@ -35,6 +35,7 @@ const menuZoomOut = document.getElementById("menu-zoom-out");
 const menuZoomReset = document.getElementById("menu-zoom-reset");
 
 // DOM Elements - Views
+const viewLogin = document.getElementById("view-login");
 const viewCompanies = document.getElementById("view-companies");
 const viewModeSelection = document.getElementById("view-mode-selection");
 const viewDashboard = document.getElementById("view-dashboard");
@@ -42,6 +43,21 @@ const viewAddAccountMaster = document.getElementById("view-add-account-master");
 const viewAddItemMaster = document.getElementById("view-add-item-master");
 const viewSalesVoucher = document.getElementById("view-sales-voucher");
 const viewSalesList = document.getElementById("view-sales-list");
+const viewFastBilling = document.getElementById("view-fast-billing");
+
+// DOM Elements - Screen 1: Standalone Login
+const loginCompanySelect = document.getElementById("login-company-select");
+const loginUserInput = document.getElementById("login-user-input");
+const loginPwdInput = document.getElementById("login-pwd-input");
+const btnTogglePwd = document.getElementById("btn-toggle-pwd");
+const pwdToggleIcon = document.getElementById("pwd-toggle-icon");
+const btnLoginSubmit = document.getElementById("btn-login-submit");
+const loginBtnSpinner = document.getElementById("login-btn-spinner");
+const loginBtnText = document.getElementById("login-btn-text");
+const loginAlert = document.getElementById("login-alert");
+const loginAlertText = document.getElementById("login-alert-text");
+const btnGotoCompanies = document.getElementById("btn-goto-companies");
+const btnCompaniesBack = document.getElementById("btn-companies-back");
 
 // DOM Elements - Companies List
 const searchInput = document.getElementById("company-search");
@@ -162,7 +178,6 @@ const btnCloseSalesList = document.getElementById("btn-close-sales-list");
 const btnSalesListClose = document.getElementById("btn-sales-list-close");
 
 // Fast Billing (POS) Elements
-const viewFastBilling = document.getElementById("view-fast-billing");
 const posBarcodeInput = document.getElementById("pos-barcode-input");
 const posCartTbody = document.getElementById("pos-cart-tbody");
 const posEmptyCartMsg = document.getElementById("pos-empty-cart-msg");
@@ -256,10 +271,14 @@ const btnPosBarCancel = document.getElementById("btn-pos-bar-cancel");
 const btnPosBarCheckout = document.getElementById("btn-pos-bar-checkout");
 const btnPosBarReprint = document.getElementById("btn-pos-bar-reprint");
 
-// POS State
+// POS State & Usability Elements
 let posCart = [];
 let heldBills = [];
 let lastCompletedVoucher = null;
+const posScanFeedback = document.getElementById("pos-scan-feedback");
+const posTenderReceived = document.getElementById("pos-tender-received");
+const posChangeDueVal = document.getElementById("pos-change-due-val");
+const chipTenderExact = document.getElementById("chip-tender-exact");
 
 // =============================================================
 // STORAGE & MIGRATION UTILITIES
@@ -360,6 +379,7 @@ menuZoomReset.addEventListener("click", () => applyZoom(1.0));
 function showScreen(screenId) {
   currentScreen = screenId;
   const allViews = [
+    viewLogin,
     viewCompanies,
     viewModeSelection,
     viewDashboard,
@@ -376,7 +396,18 @@ function showScreen(screenId) {
     }
   });
 
-  if (screenId === "view-companies") {
+  if (screenId === "view-login") {
+    populateLoginCompanies();
+    hideLoginAlert();
+    if (loginPwdInput) loginPwdInput.value = "";
+    setTimeout(() => {
+      if (loginUserInput && !loginUserInput.value) {
+        loginUserInput.focus();
+      } else if (loginPwdInput) {
+        loginPwdInput.focus();
+      }
+    }, 50);
+  } else if (screenId === "view-companies") {
     searchInput.focus();
     renderCompanyTable();
   } else if (screenId === "view-mode-selection") {
@@ -490,50 +521,199 @@ function filterCompanies() {
 }
 
 // =============================================================
-// LOGIN DIALOG
+// SCREEN 1: STANDALONE LOGIN ENGINE
 // =============================================================
-function openLoginModalForSelected() {
+function populateLoginCompanies() {
+  if (!loginCompanySelect) return;
+  const currentVal = loginCompanySelect.value;
+  loginCompanySelect.innerHTML = "";
+
+  companies.forEach((comp) => {
+    const opt = document.createElement("option");
+    opt.value = comp.code;
+    opt.textContent = `${comp.name} (${comp.code})`;
+    loginCompanySelect.appendChild(opt);
+  });
+
+  if (currentVal && Array.from(loginCompanySelect.options).some((o) => o.value === currentVal)) {
+    loginCompanySelect.value = currentVal;
+  } else if (loginCompanySelect.options.length > 0) {
+    loginCompanySelect.selectedIndex = 0;
+  }
+}
+
+function showLoginAlert(msg) {
+  if (loginAlert && loginAlertText) {
+    loginAlertText.textContent = msg;
+    loginAlert.style.display = "flex";
+  }
+}
+
+function hideLoginAlert() {
+  if (loginAlert) {
+    loginAlert.style.display = "none";
+  }
+}
+
+function setLoginLoading(isLoading) {
+  if (btnLoginSubmit) {
+    btnLoginSubmit.disabled = isLoading;
+  }
+  if (loginBtnSpinner) {
+    loginBtnSpinner.style.display = isLoading ? "inline-block" : "none";
+  }
+  if (loginBtnText) {
+    loginBtnText.textContent = isLoading ? "Verifying..." : "Sign In →";
+  }
+}
+
+function togglePasswordVisibility() {
+  if (!loginPwdInput) return;
+  const isPwd = loginPwdInput.type === "password";
+  loginPwdInput.type = isPwd ? "text" : "password";
+  if (pwdToggleIcon) {
+    pwdToggleIcon.textContent = isPwd ? "🙈" : "👁️";
+  }
+}
+
+function handleMainLoginSubmit() {
+  const companyCode = loginCompanySelect ? loginCompanySelect.value : (companies[0] ? companies[0].code : "COMP0001");
+  const username = (loginUserInput ? loginUserInput.value : "").trim();
+  const password = loginPwdInput ? loginPwdInput.value : "";
+
+  if (!username) {
+    showLoginAlert("Please enter your User ID / Username.");
+    if (loginUserInput) loginUserInput.focus();
+    return;
+  }
+  if (!password) {
+    showLoginAlert("Please enter your password.");
+    if (loginPwdInput) loginPwdInput.focus();
+    return;
+  }
+
+  setLoginLoading(true);
+  hideLoginAlert();
+
+  if (window.backend && window.backend.authenticateUser) {
+    window.backend.authenticateUser(companyCode, username, password, (resp) => {
+      setLoginLoading(false);
+      try {
+        const res = JSON.parse(resp);
+        if (res.success && res.data) {
+          activeCompany = res.data;
+          if (loginPwdInput) loginPwdInput.value = "";
+          openBillingModeSelection(activeCompany);
+        } else {
+          showLoginAlert(res.error || "Invalid User ID or Password. Please try again.");
+          if (loginPwdInput) {
+            loginPwdInput.select();
+            loginPwdInput.focus();
+          }
+        }
+      } catch (e) {
+        showLoginAlert("Authentication error: " + e.message);
+      }
+    });
+  } else if (window.backend && window.backend.authenticateCompany) {
+    window.backend.authenticateCompany(companyCode, password, (resp) => {
+      setLoginLoading(false);
+      try {
+        const res = JSON.parse(resp);
+        if (res.success && res.data) {
+          activeCompany = res.data;
+          if (loginPwdInput) loginPwdInput.value = "";
+          openBillingModeSelection(activeCompany);
+        } else {
+          showLoginAlert(res.error || "Invalid User ID or Password. Please try again.");
+          if (loginPwdInput) {
+            loginPwdInput.select();
+            loginPwdInput.focus();
+          }
+        }
+      } catch (e) {
+        showLoginAlert("Authentication error: " + e.message);
+      }
+    });
+  } else {
+    // Browser local fallback
+    setTimeout(() => {
+      setLoginLoading(false);
+      const comp = companies.find((c) => c.code === companyCode) || companies[0];
+      if (comp) {
+        const expectedUser = comp.username || "A";
+        const expectedPass = comp.password || "a";
+        const matchUser = username.toUpperCase() === expectedUser.toUpperCase();
+        const matchPass = password === expectedPass || (expectedPass === "a" && password === "a");
+        if (matchUser && matchPass) {
+          activeCompany = comp;
+          if (loginPwdInput) loginPwdInput.value = "";
+          openBillingModeSelection(activeCompany);
+        } else {
+          showLoginAlert("Invalid User ID or Password. Please try again.");
+          if (loginPwdInput) {
+            loginPwdInput.select();
+            loginPwdInput.focus();
+          }
+        }
+      } else {
+        showLoginAlert("Selected company not found. Please select a valid company.");
+      }
+    }, 150);
+  }
+}
+
+function selectCompanyFromList() {
   if (filteredCompanies.length === 0) return;
   const comp = filteredCompanies[selectedIndex];
-  currentPendingCompany = comp;
+  if (!comp) return;
 
-  loginUsername.value = comp.username || "A";
-  loginPassword.value = "";
-  loginErrorMsg.textContent = "";
+  if (loginCompanySelect) {
+    populateLoginCompanies();
+    loginCompanySelect.value = comp.code;
+  }
+  if (loginUserInput) {
+    loginUserInput.value = comp.username || "A";
+  }
+  showScreen("view-login");
+  if (loginPwdInput) {
+    loginPwdInput.value = "";
+    loginPwdInput.focus();
+  }
+}
 
-  modalLogin.classList.add("show");
-  setTimeout(() => loginPassword.focus(), 50);
+function logoutUser() {
+  if (currentScreen === "view-fast-billing" && posCart.length > 0) {
+    const choice = confirm(
+      `You have ${posCart.length} item(s) in your active POS cart.\n\n` +
+      `Click OK to HOLD this sale before logging out, or CANCEL to stay in cart.`
+    );
+    if (choice) {
+      if (btnPosHold) btnPosHold.click();
+      posCart = [];
+    } else {
+      return;
+    }
+  }
+  activeCompany = null;
+  if (loginPwdInput) loginPwdInput.value = "";
+  hideLoginAlert();
+  showScreen("view-login");
+  showNotification("Logged out successfully.");
+}
+
+// Legacy Modal Login Handlers
+function openLoginModalForSelected() {
+  selectCompanyFromList();
 }
 
 function closeLoginModal() {
-  modalLogin.classList.remove("show");
+  if (modalLogin) modalLogin.classList.remove("show");
   currentPendingCompany = null;
-  if (currentScreen === "view-companies") {
-    searchInput.focus();
-  }
 }
 
 function handleLoginSubmit() {
-  if (!currentPendingCompany) return;
-
-  const enteredPass = loginPassword.value;
-  const correctPass = currentPendingCompany.password || "";
-
-  const isValid =
-    enteredPass === correctPass ||
-    (correctPass === "" && (enteredPass === "" || enteredPass === "a" || enteredPass === "admin")) ||
-    (correctPass === "a" && (enteredPass === "a" || enteredPass === ""));
-
-  if (isValid) {
-    loginErrorMsg.textContent = "";
-    activeCompany = currentPendingCompany;
-    closeLoginModal();
-    openBillingModeSelection(activeCompany);
-  } else {
-    loginErrorMsg.textContent = "Invalid password! Try again.";
-    loginPassword.select();
-    loginPassword.focus();
-  }
+  handleMainLoginSubmit();
 }
 
 // =============================================================
@@ -593,9 +773,7 @@ function enterCompanyDashboard(comp) {
 }
 
 function closeCompany() {
-  activeCompany = null;
-  showScreen("view-companies");
-  showNotification("Company closed.");
+  logoutUser();
 }
 
 // =============================================================
@@ -1314,8 +1492,12 @@ function renderPosCart() {
       <td style="text-align: center; color: #64748b;">${idx + 1}</td>
       <td style="font-family: monospace; font-weight: 700; color: #1e40af;">${escapeHtml(item.barcode || "-")}</td>
       <td style="font-weight: 700;">${escapeHtml(item.name)}</td>
-      <td style="text-align: right;">
-        <input type="number" step="0.001" min="0.001" class="pos-cart-qty-input" data-index="${idx}" value="${item.qty}" />
+      <td style="text-align: center; white-space: nowrap;">
+        <div class="pos-qty-control">
+          <button type="button" class="pos-qty-btn btn-pos-qty-dec" data-index="${idx}" title="Decrease quantity">−</button>
+          <input type="number" step="0.001" min="0.001" class="pos-cart-qty-input" data-index="${idx}" value="${item.qty}" />
+          <button type="button" class="pos-qty-btn btn-pos-qty-inc" data-index="${idx}" title="Increase quantity">+</button>
+        </div>
       </td>
       <td style="color: #64748b;">${escapeHtml(item.unit || "Pcs.")}</td>
       <td style="text-align: right; font-weight: 600;">₹ ${item.price.toFixed(2)}</td>
@@ -1326,6 +1508,32 @@ function renderPosCart() {
       </td>
     `;
     posCartTbody.appendChild(tr);
+  });
+
+  // Attach Quantity increment/decrement buttons
+  posCartTbody.querySelectorAll(".btn-pos-qty-inc").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      posCart[idx].qty = Math.round((posCart[idx].qty + 1) * 1000) / 1000;
+      renderPosCart();
+      if (posBarcodeInput) posBarcodeInput.focus();
+    });
+  });
+
+  posCartTbody.querySelectorAll(".btn-pos-qty-dec").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (posCart[idx].qty > 1) {
+        posCart[idx].qty = Math.round((posCart[idx].qty - 1) * 1000) / 1000;
+        renderPosCart();
+      } else {
+        if (confirm(`Remove "${posCart[idx].name}" from cart?`)) {
+          posCart.splice(idx, 1);
+          renderPosCart();
+        }
+      }
+      if (posBarcodeInput) posBarcodeInput.focus();
+    });
   });
 
   // Attach Quantity input change handlers
@@ -1355,6 +1563,26 @@ function renderPosCart() {
   updatePosTotals();
 }
 
+let posFeedbackTimer = null;
+function showPosFeedback(message, type = "info") {
+  if (!posScanFeedback) return;
+  posScanFeedback.textContent = message;
+  posScanFeedback.className = `pos-scan-feedback ${type}`;
+  posScanFeedback.style.display = "block";
+  if (posFeedbackTimer) clearTimeout(posFeedbackTimer);
+  posFeedbackTimer = setTimeout(() => {
+    if (posScanFeedback) posScanFeedback.style.display = "none";
+  }, 3500);
+}
+
+function updatePosTenderCalc() {
+  if (!posPayableAmount || !posTenderReceived || !posChangeDueVal) return;
+  const payable = parseFloat(posPayableAmount.textContent.replace(/[^\d.]/g, "")) || 0;
+  const tendered = parseFloat(posTenderReceived.value) || 0;
+  const change = Math.max(0, tendered - payable);
+  posChangeDueVal.textContent = `₹ ${change.toFixed(2)}`;
+}
+
 function updatePosTotals() {
   let subtotal = 0;
   let taxTotal = 0;
@@ -1377,6 +1605,7 @@ function updatePosTotals() {
   if (posTaxTotal) posTaxTotal.textContent = `₹ ${taxTotal.toFixed(2)}`;
   if (posRoundOff) posRoundOff.textContent = (roundDiff >= 0 ? "+" : "") + roundDiff.toFixed(2);
   if (posPayableAmount) posPayableAmount.textContent = `₹ ${rounded.toFixed(2)}`;
+  updatePosTenderCalc();
 }
 
 // POS Barcode Scanner Handler
@@ -1390,8 +1619,10 @@ function handleBarcodeScan(barcodeStr) {
         const res = JSON.parse(resp);
         if (res.success && res.data) {
           addItemToPosCart(res.data);
+          showPosFeedback(`✓ Scanned: ${res.data.name}`, "success");
         } else {
-          showNotification(`⚠️ Barcode "${code}" not found! Press F1 to search.`);
+          showPosFeedback(`⚠️ Barcode "${code}" not found. Press F1 to search product.`, "error");
+          showNotification(`Barcode "${code}" not registered.`);
         }
       } catch (e) {
         searchLocalItemsForBarcode(code);
@@ -1780,17 +2011,63 @@ function escapeHtml(str) {
 // =============================================================
 // EVENT LISTENERS BINDING
 // =============================================================
+// Standalone Login Listeners
+const loginMainForm = document.getElementById("login-main-form");
+if (loginMainForm) {
+  loginMainForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    handleMainLoginSubmit();
+  });
+}
+if (btnLoginSubmit) {
+  btnLoginSubmit.addEventListener("click", (e) => {
+    e.preventDefault();
+    handleMainLoginSubmit();
+  });
+}
+if (btnTogglePwd) {
+  btnTogglePwd.addEventListener("click", togglePasswordVisibility);
+}
+if (btnGotoCompanies) {
+  btnGotoCompanies.addEventListener("click", () => showScreen("view-companies"));
+}
+if (btnCompaniesBack) {
+  btnCompaniesBack.addEventListener("click", () => showScreen("view-login"));
+}
+
 searchInput.addEventListener("input", filterCompanies);
 chkFinYear.addEventListener("change", renderCompanyTable);
 chkTaxNo.addEventListener("change", renderCompanyTable);
 
-btnSelect.addEventListener("click", openLoginModalForSelected);
+btnSelect.addEventListener("click", selectCompanyFromList);
 btnQuit.addEventListener("click", () => {
   if (confirm("Are you sure you want to quit Alpha Billing Software?")) {
     window.close();
   }
 });
 btnCreateCompanyModal.addEventListener("click", openCreateCompanyModal);
+
+// Tender Box Listeners
+if (posTenderReceived) {
+  posTenderReceived.addEventListener("input", updatePosTenderCalc);
+}
+if (chipTenderExact) {
+  chipTenderExact.addEventListener("click", () => {
+    if (posPayableAmount) {
+      posTenderReceived.value = parseFloat(posPayableAmount.textContent.replace(/[^\d.]/g, "")) || 0;
+      updatePosTenderCalc();
+    }
+  });
+}
+document.querySelectorAll(".btn-tender-chip[data-amt]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const val = parseFloat(chip.dataset.amt);
+    if (!isNaN(val) && posTenderReceived) {
+      posTenderReceived.value = val;
+      updatePosTenderCalc();
+    }
+  });
+});
 
 // Login Modal
 formLogin.addEventListener("submit", (e) => {
@@ -1896,7 +2173,7 @@ if (btnModeSettings) {
   btnModeSettings.addEventListener("click", () => openConfigurationModal());
 }
 if (btnModeLogout) {
-  btnModeLogout.addEventListener("click", () => closeCompany());
+  btnModeLogout.addEventListener("click", () => logoutUser());
 }
 if (menuSwitchMode) {
   menuSwitchMode.addEventListener("click", () => showScreen("view-mode-selection"));
@@ -1914,15 +2191,7 @@ if (btnPosClose) {
   btnPosClose.addEventListener("click", () => navigateAwayFromPos("view-mode-selection"));
 }
 if (btnPosLogout) {
-  btnPosLogout.addEventListener("click", () => {
-    if (posCart.length > 0) {
-      if (!confirm("You have active items in your POS cart. Exit anyway and discard current cart?")) {
-        return;
-      }
-      posCart = [];
-    }
-    closeCompany();
-  });
+  btnPosLogout.addEventListener("click", () => logoutUser());
 }
 
 // Fast Billing Bottom Cashier Action Bar
@@ -2292,7 +2561,12 @@ window.addEventListener("keydown", (e) => {
   }
 
   // View-specific hotkeys
-  if (currentScreen === "view-companies") {
+  if (currentScreen === "view-login") {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleMainLoginSubmit();
+    }
+  } else if (currentScreen === "view-companies") {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex(selectedIndex + 1);
@@ -2301,7 +2575,10 @@ window.addEventListener("keydown", (e) => {
       setSelectedIndex(selectedIndex - 1);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      openLoginModalForSelected();
+      selectCompanyFromList();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      showScreen("view-login");
     }
   } else if (currentScreen === "view-mode-selection") {
     if (e.key === "1" || e.key === "b" || e.key === "B") {
@@ -2315,7 +2592,7 @@ window.addEventListener("keydown", (e) => {
       openConfigurationModal();
     } else if (e.key === "Escape") {
       e.preventDefault();
-      closeCompany();
+      logoutUser();
     }
   } else if (currentScreen === "view-sales-voucher") {
     if (e.key === "F2") {
@@ -2409,7 +2686,8 @@ function updateSystemClock() {
 
 // Startup
 renderCompanyTable();
+populateLoginCompanies();
 updateSystemClock();
 setInterval(updateSystemClock, 10000);
 applyZoom(uiZoom);
-showScreen("view-companies");
+showScreen("view-login");

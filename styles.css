@@ -160,14 +160,15 @@ html, body {
 }
 
 .screen-view {
-  display: none;
+  display: none !important;
   width: 100%;
   height: 100%;
   position: relative;
+  overflow: hidden;
 }
 
 .screen-view.active {
-  display: flex;
+  display: flex !important;
   flex-direction: column;
 }
 
@@ -1737,7 +1738,6 @@ html, body {
    DUAL BILLING MODE SELECTION SCREEN STYLES
    ============================================================= */
 .mode-selection-view {
-  display: flex;
   flex-direction: column;
   height: 100%;
   background: #f8fafc;
@@ -2177,4 +2177,423 @@ html, body {
     gap: 10px;
     align-items: flex-start;
   }
+}
+
+/* =============================================================
+   VIEW 0: STANDALONE LOGIN SCREEN (Screen 1 - Launch)
+   ============================================================= */
+.login-screen-canvas {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 30%, #f8fafc 0%, #e2e8f0 100%);
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.login-card-container {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: loginFadeIn 0.25s ease-out;
+}
+
+@keyframes loginFadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-brand-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.login-brand-logo-wrap {
+  width: 52px;
+  height: 52px;
+  background: #1e3a8a;
+  border-radius: 12px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(30, 58, 138, 0.25);
+}
+
+.login-brand-symbol {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.login-product-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px;
+  letter-spacing: -0.5px;
+}
+
+.login-product-by {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 600;
+}
+
+.login-card {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  padding: 26px 28px 22px;
+}
+
+.login-card-header {
+  margin-bottom: 18px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+}
+
+.login-card-header h2 {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+
+.login-card-header p {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.login-alert-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #991b1b;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.login-alert-banner .alert-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.login-input-group {
+  margin-bottom: 16px;
+}
+
+.login-input-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.input-with-icon-wrap {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0 10px;
+  height: 40px;
+  transition: all 0.15s ease;
+}
+
+.input-with-icon-wrap:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.input-with-icon-wrap .field-icon {
+  font-size: 15px;
+  color: #94a3b8;
+  margin-right: 8px;
+  user-select: none;
+}
+
+.login-text-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13.5px;
+  color: #0f172a;
+  background: transparent;
+  height: 100%;
+}
+
+.login-text-input::placeholder {
+  color: #94a3b8;
+}
+
+.login-select-field {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+  background: transparent;
+  height: 100%;
+  cursor: pointer;
+}
+
+.btn-toggle-pwd {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.btn-toggle-pwd:hover {
+  color: #0f172a;
+}
+
+.btn-login-submit {
+  width: 100%;
+  height: 42px;
+  background: #1e40af;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(30, 64, 175, 0.25);
+  margin-top: 6px;
+}
+
+.btn-login-submit:hover {
+  background: #1d4ed8;
+  box-shadow: 0 4px 8px rgba(30, 64, 175, 0.35);
+}
+
+.btn-login-submit:active {
+  transform: translateY(1px);
+}
+
+.btn-login-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.login-btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spinnerRotate 0.6s linear infinite;
+}
+
+@keyframes spinnerRotate {
+  to { transform: rotate(360deg); }
+}
+
+.login-card-links {
+  margin-top: 18px;
+  text-align: center;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 14px;
+}
+
+.btn-link-action {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-link-action:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.login-footer-meta {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.login-db-pill {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+/* Fast Billing POS Quantity Controls & Tender Box */
+.pos-qty-control {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.pos-qty-btn {
+  width: 22px;
+  height: 24px;
+  border: none;
+  background: #f1f5f9;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 13px;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.pos-qty-btn:hover {
+  background: #e2e8f0;
+}
+
+.pos-cart-qty-input {
+  width: 50px;
+  height: 24px;
+  border: none;
+  border-left: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+  outline: none;
+}
+
+.pos-tender-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.pos-tender-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.pos-tender-input {
+  width: 105px;
+  height: 28px;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  padding: 0 8px;
+  font-weight: 800;
+  text-align: right;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.pos-quick-tender-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.btn-tender-chip {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  cursor: pointer;
+  color: #1e293b;
+  transition: all 0.1s ease;
+}
+
+.btn-tender-chip:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.pos-change-due-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #cbd5e1;
+  font-size: 12px;
+  font-weight: 800;
+  color: #047857;
+}
+
+.pos-scan-feedback {
+  margin: 6px 0 0;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  animation: feedbackSlide 0.2s ease-out;
+}
+
+@keyframes feedbackSlide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pos-scan-feedback.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.pos-scan-feedback.success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+/* Card SVG Icons in Mode Selection */
+.mode-card-icon-svg {
+  width: 32px;
+  height: 32px;
 }
