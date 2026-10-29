@@ -116,3 +116,4 @@ def test_migration_payload_import(test_db):
     assert res_second["items_skipped"] == 1
     assert res_second["vouchers_imported"] == 0
     assert res_second["vouchers_skipped"] == 1
+

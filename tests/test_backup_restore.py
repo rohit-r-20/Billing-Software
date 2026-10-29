@@ -68,3 +68,4 @@ def test_restore_workflow(backup_test_env):
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM companies WHERE id = 'C1';")
         assert cursor.fetchone()[0] == "INITIAL CO"
+

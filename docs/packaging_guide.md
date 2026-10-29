@@ -70,3 +70,4 @@ Ensure the following bundled assets are present alongside the executable:
 * `app.js`
 * `qwebchannel.js`
 * `db/migrations/001_initial_schema.sql`
+

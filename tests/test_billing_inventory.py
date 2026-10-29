@@ -105,3 +105,4 @@ def test_empty_invoice_raises_error(initialized_db):
             items=[],
             party_name="CASH"
         )
+

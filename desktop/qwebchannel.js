@@ -227,3 +227,4 @@ function QObject(name, data, webChannel) {
         }
     };
 }
+

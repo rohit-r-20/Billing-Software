@@ -65,3 +65,4 @@ def test_backup_and_restore(tmp_path):
         cursor.execute("SELECT name FROM companies WHERE id = 'C1';")
         name = cursor.fetchone()[0]
         assert name == "TEST COMPANY"
+

@@ -100,6 +100,91 @@
       </section>
 
       <!-- =========================================================
+           VIEW: DUAL BILLING MODE SELECTION
+      ========================================================== -->
+      <section class="screen-view mode-selection-view" id="view-mode-selection">
+        <!-- Top Session Status Bar -->
+        <header class="mode-selection-header">
+          <div class="mode-header-brand">
+            <span class="mode-brand-badge">&alpha;</span>
+            <span class="mode-app-title">ANTI MATRIX &bull; Alpha Billing Software</span>
+          </div>
+
+          <div class="mode-session-info">
+            <span class="mode-session-item">Company: <strong id="mode-company-name">ANTI MATRIX</strong></span>
+            <span class="mode-session-item">Branch: <strong id="mode-branch-name">Main Branch</strong></span>
+            <span class="mode-session-item">User: <strong id="mode-user-name">A (Administrator)</strong></span>
+            <span class="mode-session-item">FY: <strong id="mode-fy-name">2026-27</strong></span>
+            <span class="db-status-pill" id="mode-db-status">● SQLite Active</span>
+          </div>
+
+          <div class="mode-header-actions">
+            <button type="button" class="btn-mode-nav" id="btn-mode-settings" title="Configure company options">⚙ Settings</button>
+            <button type="button" class="btn-mode-nav logout-btn" id="btn-mode-logout" title="Switch company or logout">🚪 Switch Company</button>
+          </div>
+        </header>
+
+        <!-- Main Mode Selection Content -->
+        <div class="mode-selection-body">
+          <div class="mode-title-block">
+            <h1 class="mode-main-heading">Choose Your Billing Mode</h1>
+            <p class="mode-sub-heading">Select the specialized billing workspace for your retail counter</p>
+          </div>
+
+          <div class="mode-cards-grid">
+            <!-- Card A: Traditional Billing -->
+            <div class="mode-card card-billing" id="card-mode-billing" tabindex="0" role="button" aria-label="Open Traditional Billing">
+              <span class="mode-card-badge">ENTERPRISE INVOICING</span>
+              <div class="mode-card-icon-wrap">
+                <span>🧾</span>
+              </div>
+              <h2 class="mode-card-title">Billing</h2>
+              <h3 class="mode-card-subtitle">Complete Billing & Accounting</h3>
+              <p class="mode-card-desc">
+                Create detailed sales invoices, manage customers, select products, configure applicable taxes, and handle traditional billing workflows.
+              </p>
+              <ul class="mode-feature-list">
+                <li><span class="feature-check">&check;</span> Multi-item detailed tax invoices (A4 / Voucher)</li>
+                <li><span class="feature-check">&check;</span> Full Account Master & Customer GST profiles</li>
+                <li><span class="feature-check">&check;</span> CGST, SGST & IGST tax breakdown with bill sundries</li>
+                <li><span class="feature-check">&check;</span> Sales register, modifications, and credit ledgers</li>
+              </ul>
+              <button type="button" class="btn-mode-action btn-select-billing" id="btn-select-billing">
+                Open Billing [ 1 ] &rarr;
+              </button>
+            </div>
+
+            <!-- Card B: Fast Billing POS -->
+            <div class="mode-card card-fast-billing" id="card-mode-fast-billing" tabindex="0" role="button" aria-label="Open Fast Billing POS">
+              <span class="mode-card-badge">HIGH-SPEED SUPERMARKET POS</span>
+              <div class="mode-card-icon-wrap">
+                <span>⚡</span>
+              </div>
+              <h2 class="mode-card-title">Fast Billing</h2>
+              <h3 class="mode-card-subtitle">Supermarket POS & Barcode Checkout</h3>
+              <p class="mode-card-desc">
+                Scan products, add items instantly, calculate totals automatically, collect payments, and print customer receipts.
+              </p>
+              <ul class="mode-feature-list">
+                <li><span class="feature-check">&check;</span> Rapid USB HID barcode scanner support</li>
+                <li><span class="feature-check">&check;</span> Live cart, repeated scan quantity increment</li>
+                <li><span class="feature-check">&check;</span> Fractional quantities (0.250 kg vegetables, kg/litre)</li>
+                <li><span class="feature-check">&check;</span> Quick Cash, UPI & Card payments with 58/80mm receipts</li>
+              </ul>
+              <button type="button" class="btn-mode-action btn-select-fast-billing" id="btn-select-fast-billing">
+                Open Fast Billing [ 2 ] &rarr;
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom Keyboard Shortcuts Hints -->
+          <div class="mode-footer-hints">
+            [ 1 ] or [ B ] - Open Billing &nbsp;&bull;&nbsp; [ 2 ] or [ F ] - Open Fast Billing &nbsp;&bull;&nbsp; [ S ] - Settings &nbsp;&bull;&nbsp; [ Esc ] - Switch Company
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
            VIEW 2: ACTIVE COMPANY DASHBOARD (Main Accounting Desktop)
       ========================================================== -->
       <section class="screen-view" id="view-dashboard">
@@ -110,6 +195,8 @@
           <div class="menu-item-wrapper" data-menu="company">
             <button class="menu-btn">Company</button>
             <div class="dropdown-tree">
+              <div class="tree-item highlight" id="menu-switch-mode"><span class="tree-arrow">&rsaquo;</span> Switch Billing Mode</div>
+              <div class="tree-divider"></div>
               <div class="tree-item" id="menu-close-company"><span class="tree-arrow">&rsaquo;</span> Close Company</div>
               <div class="tree-item" id="menu-edit-company"><span class="tree-arrow">&rsaquo;</span> Edit Company</div>
               <div class="tree-divider"></div>
@@ -277,6 +364,9 @@
 
           <div class="menu-item-wrapper"><button class="menu-btn">Favourites</button></div>
           <div class="menu-item-wrapper"><button class="menu-btn">Add-On</button></div>
+          <div class="menu-item-wrapper" style="margin-left: auto; display: flex; align-items: center; padding-right: 6px;">
+            <button type="button" class="btn-switch-mode-pill" id="bar-switch-mode" title="Switch Billing Mode (Esc)">⚡ Switch Billing Mode</button>
+          </div>
         </nav>
 
         <!-- Main Dashboard Canvas -->
@@ -781,14 +871,18 @@
       <section class="screen-view erp-form-screen" id="view-fast-billing">
         <div class="form-screen-ribbon pos-ribbon">
           <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-pos-back-mode" title="Back to Billing Mode Selection">&larr; Switch Mode</button>
             <span class="screen-badge-title">⚡ FAST BILLING (POS)</span>
-            <span class="pos-branch-badge">Branch: Main Branch | Reg: 01</span>
+            <span class="pos-company-badge" id="pos-header-company">ANTI MATRIX</span>
+            <span class="pos-branch-badge" id="pos-header-branch">Branch: Main Branch | Reg: 01</span>
           </div>
           <div class="ribbon-center">
+            <span class="pos-cashier-badge">Cashier: <strong id="pos-header-cashier">A</strong></span>
             <span class="pos-vch-no-display">Bill No: <strong id="pos-vch-no">POS-001</strong></span>
           </div>
           <div class="ribbon-right">
             <span class="db-status-pill" id="pos-db-status">● SQLite Active</span>
+            <button type="button" class="btn-ribbon-logout" id="btn-pos-logout" title="Logout">&crarr; Logout</button>
             <button class="ribbon-btn-close" id="btn-pos-close" title="Close POS">&times;</button>
           </div>
         </div>
@@ -893,16 +987,30 @@
           </div>
         </div>
 
+        <!-- POS Cashier Bottom Action Bar -->
+        <div class="pos-cashier-action-bar">
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-new-sale"><span class="bar-key">F4</span> New Sale</button>
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-search"><span class="bar-key">F1</span> Search Product</button>
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-hold"><span class="bar-key">F2</span> Hold Sale</button>
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-resume"><span class="bar-key">F3</span> Resume Sale</button>
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-remove"><span class="bar-key">Del</span> Remove Item</button>
+          <button type="button" class="btn-cashier-bar danger" id="btn-pos-bar-cancel"><span class="bar-key">Esc</span> Cancel Sale</button>
+          <button type="button" class="btn-cashier-bar primary" id="btn-pos-bar-checkout"><span class="bar-key">F12</span> Checkout</button>
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-reprint"><span class="bar-key">F7</span> Reprint Receipt</button>
+        </div>
+
         <!-- POS Footer Keyboard Shortcuts -->
         <div class="form-bottom-shortcuts pos-shortcuts">
           <span>[ Enter / Scan - Add Item ]</span>
           <span>[ F1 - Item Search ]</span>
           <span>[ F2 - Hold Bill ]</span>
           <span>[ F3 - Resume Bill ]</span>
+          <span>[ F4 - New Sale ]</span>
+          <span>[ F7 - Reprint Receipt ]</span>
           <span>[ F9 - Cash Pay ]</span>
           <span>[ F10 - UPI Pay ]</span>
           <span>[ F12 - Complete & Print ]</span>
-          <span>[ Esc - Return to Dashboard ]</span>
+          <span>[ Esc - Switch Mode / Cancel ]</span>
         </div>
       </section>
 

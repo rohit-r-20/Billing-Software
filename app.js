@@ -36,6 +36,7 @@ const menuZoomReset = document.getElementById("menu-zoom-reset");
 
 // DOM Elements - Views
 const viewCompanies = document.getElementById("view-companies");
+const viewModeSelection = document.getElementById("view-mode-selection");
 const viewDashboard = document.getElementById("view-dashboard");
 const viewAddAccountMaster = document.getElementById("view-add-account-master");
 const viewAddItemMaster = document.getElementById("view-add-item-master");
@@ -224,6 +225,37 @@ const menuGstReports = document.getElementById("menu-gst-reports");
 const menuPrinterSettings = document.getElementById("menu-printer-settings");
 const menuBackupRestore = document.getElementById("menu-backup-restore");
 
+// Mode Selection Elements
+const modeCompanyName = document.getElementById("mode-company-name");
+const modeBranchName = document.getElementById("mode-branch-name");
+const modeUserName = document.getElementById("mode-user-name");
+const modeFyName = document.getElementById("mode-fy-name");
+const btnModeSettings = document.getElementById("btn-mode-settings");
+const btnModeLogout = document.getElementById("btn-mode-logout");
+const btnSelectBilling = document.getElementById("btn-select-billing");
+const btnSelectFastBilling = document.getElementById("btn-select-fast-billing");
+const cardModeBilling = document.getElementById("card-mode-billing");
+const cardModeFastBilling = document.getElementById("card-mode-fast-billing");
+const menuSwitchMode = document.getElementById("menu-switch-mode");
+const barSwitchMode = document.getElementById("bar-switch-mode");
+
+// Fast Billing Header Elements
+const btnPosBackMode = document.getElementById("btn-pos-back-mode");
+const btnPosLogout = document.getElementById("btn-pos-logout");
+const posHeaderCompany = document.getElementById("pos-header-company");
+const posHeaderBranch = document.getElementById("pos-header-branch");
+const posHeaderCashier = document.getElementById("pos-header-cashier");
+
+// Fast Billing Bottom Action Bar Buttons
+const btnPosBarNewSale = document.getElementById("btn-pos-bar-new-sale");
+const btnPosBarSearch = document.getElementById("btn-pos-bar-search");
+const btnPosBarHold = document.getElementById("btn-pos-bar-hold");
+const btnPosBarResume = document.getElementById("btn-pos-bar-resume");
+const btnPosBarRemove = document.getElementById("btn-pos-bar-remove");
+const btnPosBarCancel = document.getElementById("btn-pos-bar-cancel");
+const btnPosBarCheckout = document.getElementById("btn-pos-bar-checkout");
+const btnPosBarReprint = document.getElementById("btn-pos-bar-reprint");
+
 // POS State
 let posCart = [];
 let heldBills = [];
@@ -329,6 +361,7 @@ function showScreen(screenId) {
   currentScreen = screenId;
   const allViews = [
     viewCompanies,
+    viewModeSelection,
     viewDashboard,
     viewAddAccountMaster,
     viewAddItemMaster,
@@ -346,6 +379,8 @@ function showScreen(screenId) {
   if (screenId === "view-companies") {
     searchInput.focus();
     renderCompanyTable();
+  } else if (screenId === "view-mode-selection") {
+    renderModeSelection();
   } else if (screenId === "view-add-account-master") {
     accName.focus();
   } else if (screenId === "view-add-item-master") {
@@ -493,12 +528,52 @@ function handleLoginSubmit() {
     loginErrorMsg.textContent = "";
     activeCompany = currentPendingCompany;
     closeLoginModal();
-    enterCompanyDashboard(activeCompany);
+    openBillingModeSelection(activeCompany);
   } else {
     loginErrorMsg.textContent = "Invalid password! Try again.";
     loginPassword.select();
     loginPassword.focus();
   }
+}
+
+// =============================================================
+// DUAL BILLING MODE SELECTION
+// =============================================================
+function openBillingModeSelection(comp) {
+  activeCompany = comp;
+  showScreen("view-mode-selection");
+}
+
+function renderModeSelection() {
+  if (!activeCompany) return;
+  if (modeCompanyName) modeCompanyName.textContent = activeCompany.name;
+  if (modeBranchName) modeBranchName.textContent = activeCompany.branch || "Main Branch";
+  if (modeUserName) modeUserName.textContent = `${activeCompany.username || "A"} (Administrator)`;
+  if (modeFyName) modeFyName.textContent = (activeCompany.finYear || "2026-27").split(" ")[0];
+  showNotification(`Logged in to ${activeCompany.name}`);
+}
+
+function openFastBillingPos() {
+  if (!activeCompany) return;
+  if (posHeaderCompany) posHeaderCompany.textContent = activeCompany.name;
+  if (posHeaderBranch) posHeaderBranch.textContent = "Branch: Main Branch | Reg: 01";
+  if (posHeaderCashier) posHeaderCashier.textContent = `${activeCompany.username || "A"}`;
+  showScreen("view-fast-billing");
+}
+
+function navigateAwayFromPos(targetScreen = "view-mode-selection") {
+  if (posCart.length > 0) {
+    const choice = confirm(
+      `You have ${posCart.length} item(s) in your active POS cart.\n\n` +
+      `Click OK to HOLD this sale before leaving, or CANCEL to return to cart.`
+    );
+    if (choice) {
+      if (btnPosHold) btnPosHold.click();
+      showScreen(targetScreen);
+    }
+    return;
+  }
+  showScreen(targetScreen);
 }
 
 // =============================================================
@@ -514,7 +589,7 @@ function enterCompanyDashboard(comp) {
   dashboardBreadcrumb.textContent = `Transactions -> Sales -> Add (Billing)`;
 
   showScreen("view-dashboard");
-  showNotification(`Welcome to ${comp.name}`);
+  showNotification(`Billing & Accounting: ${comp.name}`);
 }
 
 function closeCompany() {
@@ -1786,10 +1861,137 @@ btnQuitSalesVoucher.addEventListener("click", () => showScreen("view-dashboard")
 btnSalesCloseTop.addEventListener("click", () => showScreen("view-dashboard"));
 
 // =============================================================
-// FAST BILLING & MODAL EVENT BINDINGS
+// DUAL BILLING MODE & FAST BILLING EVENT BINDINGS
 // =============================================================
-if (menuFastBilling) menuFastBilling.addEventListener("click", () => showScreen("view-fast-billing"));
-if (btnPosClose) btnPosClose.addEventListener("click", () => showScreen("view-dashboard"));
+// Mode Selection Actions
+if (btnSelectBilling) {
+  btnSelectBilling.addEventListener("click", () => enterCompanyDashboard(activeCompany));
+}
+if (cardModeBilling) {
+  cardModeBilling.addEventListener("click", (e) => {
+    if (e.target.tagName !== "BUTTON") enterCompanyDashboard(activeCompany);
+  });
+  cardModeBilling.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      enterCompanyDashboard(activeCompany);
+    }
+  });
+}
+if (btnSelectFastBilling) {
+  btnSelectFastBilling.addEventListener("click", () => openFastBillingPos());
+}
+if (cardModeFastBilling) {
+  cardModeFastBilling.addEventListener("click", (e) => {
+    if (e.target.tagName !== "BUTTON") openFastBillingPos();
+  });
+  cardModeFastBilling.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openFastBillingPos();
+    }
+  });
+}
+if (btnModeSettings) {
+  btnModeSettings.addEventListener("click", () => openConfigurationModal());
+}
+if (btnModeLogout) {
+  btnModeLogout.addEventListener("click", () => closeCompany());
+}
+if (menuSwitchMode) {
+  menuSwitchMode.addEventListener("click", () => showScreen("view-mode-selection"));
+}
+if (barSwitchMode) {
+  barSwitchMode.addEventListener("click", () => showScreen("view-mode-selection"));
+}
+
+// Fast Billing Header Navigation
+if (menuFastBilling) menuFastBilling.addEventListener("click", () => openFastBillingPos());
+if (btnPosBackMode) {
+  btnPosBackMode.addEventListener("click", () => navigateAwayFromPos("view-mode-selection"));
+}
+if (btnPosClose) {
+  btnPosClose.addEventListener("click", () => navigateAwayFromPos("view-mode-selection"));
+}
+if (btnPosLogout) {
+  btnPosLogout.addEventListener("click", () => {
+    if (posCart.length > 0) {
+      if (!confirm("You have active items in your POS cart. Exit anyway and discard current cart?")) {
+        return;
+      }
+      posCart = [];
+    }
+    closeCompany();
+  });
+}
+
+// Fast Billing Bottom Cashier Action Bar
+if (btnPosBarNewSale) {
+  btnPosBarNewSale.addEventListener("click", () => {
+    if (posCart.length > 0) {
+      if (confirm("Cart contains items. Click OK to PARK this sale before starting a new one.")) {
+        if (btnPosHold) btnPosHold.click();
+      } else if (!confirm("Discard current cart for a new sale?")) {
+        return;
+      } else {
+        posCart = [];
+        renderPosCart();
+      }
+    }
+    initFastBillingScreen();
+    showNotification("Ready for New POS Sale.");
+  });
+}
+if (btnPosBarSearch) {
+  btnPosBarSearch.addEventListener("click", () => {
+    const q = prompt("Enter product name, SKU or barcode to search:");
+    if (q) handleBarcodeScan(q);
+  });
+}
+if (btnPosBarHold) {
+  btnPosBarHold.addEventListener("click", () => {
+    if (btnPosHold) btnPosHold.click();
+  });
+}
+if (btnPosBarResume) {
+  btnPosBarResume.addEventListener("click", () => {
+    if (btnPosResume) btnPosResume.click();
+  });
+}
+if (btnPosBarRemove) {
+  btnPosBarRemove.addEventListener("click", () => {
+    if (posCart.length === 0) {
+      alert("Cart is empty.");
+      return;
+    }
+    const removed = posCart.pop();
+    renderPosCart();
+    showNotification(`Removed ${removed.name} from cart.`);
+    if (posBarcodeInput) posBarcodeInput.focus();
+  });
+}
+if (btnPosBarCancel) {
+  btnPosBarCancel.addEventListener("click", () => {
+    if (posCart.length > 0 && confirm("Cancel current sale and clear cart?")) {
+      posCart = [];
+      renderPosCart();
+      showNotification("Sale cancelled.");
+      if (posBarcodeInput) posBarcodeInput.focus();
+    }
+  });
+}
+if (btnPosBarCheckout) {
+  btnPosBarCheckout.addEventListener("click", () => triggerPosCheckout("CASH"));
+}
+if (btnPosBarReprint) {
+  btnPosBarReprint.addEventListener("click", () => {
+    if (lastCompletedVoucher) {
+      showReceiptModal(lastCompletedVoucher);
+    } else {
+      alert("No recent sale receipt available to reprint in this session.");
+    }
+  });
+}
 
 if (posBarcodeInput) {
   posBarcodeInput.addEventListener("keydown", (e) => {
@@ -2101,6 +2303,20 @@ window.addEventListener("keydown", (e) => {
       e.preventDefault();
       openLoginModalForSelected();
     }
+  } else if (currentScreen === "view-mode-selection") {
+    if (e.key === "1" || e.key === "b" || e.key === "B") {
+      e.preventDefault();
+      enterCompanyDashboard(activeCompany);
+    } else if (e.key === "2" || e.key === "f" || e.key === "F") {
+      e.preventDefault();
+      openFastBillingPos();
+    } else if (e.key === "s" || e.key === "S") {
+      e.preventDefault();
+      openConfigurationModal();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeCompany();
+    }
   } else if (currentScreen === "view-sales-voucher") {
     if (e.key === "F2") {
       e.preventDefault();
@@ -2123,6 +2339,12 @@ window.addEventListener("keydown", (e) => {
     } else if (e.key === "F3") {
       e.preventDefault();
       if (btnPosResume) btnPosResume.click();
+    } else if (e.key === "F4") {
+      e.preventDefault();
+      if (btnPosBarNewSale) btnPosBarNewSale.click();
+    } else if (e.key === "F7") {
+      e.preventDefault();
+      if (btnPosBarReprint) btnPosBarReprint.click();
     } else if (e.key === "F8") {
       e.preventDefault();
       if (btnPosPaySplit) btnPosPaySplit.click();
@@ -2137,7 +2359,7 @@ window.addEventListener("keydown", (e) => {
       if (btnPosCheckoutPrint) btnPosCheckoutPrint.click();
     } else if (e.key === "Escape") {
       e.preventDefault();
-      showScreen("view-dashboard");
+      navigateAwayFromPos("view-mode-selection");
     }
   } else if (currentScreen === "view-add-account-master") {
     if (e.key === "F2") {
@@ -2163,7 +2385,7 @@ window.addEventListener("keydown", (e) => {
   } else if (currentScreen === "view-dashboard") {
     if (e.key === "Escape") {
       e.preventDefault();
-      closeCompany();
+      showScreen("view-mode-selection");
     }
   }
 });

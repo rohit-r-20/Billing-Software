@@ -38,3 +38,4 @@ def setup_logging(log_filename: str = "application.log") -> logging.Logger:
 
 
 logger = setup_logging()
+

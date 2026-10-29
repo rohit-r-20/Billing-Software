@@ -107,3 +107,4 @@ def test_barcode_lookup_and_repeated_scan_increment(pos_test_env):
     # Total before round = 195.44 -> Rounded = 195.00
     assert totals["grand_total"] == 195.0
     assert round(totals["round_off"], 2) == -0.44
+

@@ -54,3 +54,4 @@ class MainWindow(QMainWindow):
         """Controlled application shutdown."""
         logger.info("Application shutting down cleanly.")
         event.accept()
+

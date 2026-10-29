@@ -56,3 +56,4 @@ def test_fractional_weight_and_round_off():
     assert result["subtotal"] == 18.75
     assert result["grand_total"] == 20.0
     assert round(result["round_off"], 2) == 0.31
+

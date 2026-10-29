@@ -52,3 +52,4 @@ class AppConfig:
 
 
 config = AppConfig
+

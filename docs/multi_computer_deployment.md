@@ -80,3 +80,4 @@ Or set the parameter in `core/configuration.py`.
   WHERE branch_id = :branch_id AND item_id = :item_id;
   ```
 * **Network Interruption**: If the central database is unreachable, terminals display an alert preventing incomplete or ghost sales.
+

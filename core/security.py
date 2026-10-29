@@ -33,3 +33,4 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
         return binascii.hexlify(dk).decode("ascii") == hash_hex
     except Exception:
         return False
+

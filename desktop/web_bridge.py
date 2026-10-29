@@ -286,3 +286,4 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": summary})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
+

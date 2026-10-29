@@ -164,3 +164,4 @@ class CatalogueService:
 
 
 catalogue_service = CatalogueService()
+

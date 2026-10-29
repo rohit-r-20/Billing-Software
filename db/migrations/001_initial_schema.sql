@@ -215,3 +215,4 @@ CREATE INDEX IF NOT EXISTS idx_barcodes_lookup ON item_barcodes(company_id, barc
 CREATE INDEX IF NOT EXISTS idx_stock_branch_item ON stock_balances(branch_id, item_id);
 CREATE INDEX IF NOT EXISTS idx_vouchers_comp_date ON sales_vouchers(company_id, vch_date);
 CREATE INDEX IF NOT EXISTS idx_voucher_items_vch ON sales_voucher_items(voucher_id);
+
