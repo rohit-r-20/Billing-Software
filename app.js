@@ -160,6 +160,75 @@ const btnNewBillFromList = document.getElementById("btn-new-bill-from-list");
 const btnCloseSalesList = document.getElementById("btn-close-sales-list");
 const btnSalesListClose = document.getElementById("btn-sales-list-close");
 
+// Fast Billing (POS) Elements
+const viewFastBilling = document.getElementById("view-fast-billing");
+const posBarcodeInput = document.getElementById("pos-barcode-input");
+const posCartTbody = document.getElementById("pos-cart-tbody");
+const posEmptyCartMsg = document.getElementById("pos-empty-cart-msg");
+const posItemCount = document.getElementById("pos-item-count");
+const posSubtotal = document.getElementById("pos-subtotal");
+const posTaxTotal = document.getElementById("pos-tax-total");
+const posRoundOff = document.getElementById("pos-round-off");
+const posPayableAmount = document.getElementById("pos-payable-amount");
+const posVchNo = document.getElementById("pos-vch-no");
+const btnPosClose = document.getElementById("btn-pos-close");
+const btnPosSearchItem = document.getElementById("btn-pos-search-item");
+const btnPosHold = document.getElementById("btn-pos-hold");
+const btnPosResume = document.getElementById("btn-pos-resume");
+const btnPosClear = document.getElementById("btn-pos-clear");
+const heldCountEl = document.getElementById("held-count");
+const btnPosPayCash = document.getElementById("btn-pos-pay-cash");
+const btnPosPayUpi = document.getElementById("btn-pos-pay-upi");
+const btnPosPayCard = document.getElementById("btn-pos-pay-card");
+const btnPosPaySplit = document.getElementById("btn-pos-pay-split");
+const btnPosCheckoutPrint = document.getElementById("btn-pos-checkout-print");
+
+// Cash Modal Elements
+const modalPosCash = document.getElementById("modal-pos-cash");
+const btnClosePosCash = document.getElementById("btn-close-pos-cash");
+const modalCashDueVal = document.getElementById("modal-cash-due-val");
+const posCashTendered = document.getElementById("pos-cash-tendered");
+const modalCashChangeVal = document.getElementById("modal-cash-change-val");
+const btnConfirmPosCash = document.getElementById("btn-confirm-pos-cash");
+
+// Thermal Receipt Modal Elements
+const modalReceiptPreview = document.getElementById("modal-receipt-preview");
+const receiptPreviewText = document.getElementById("receipt-preview-text");
+const btnCloseReceiptModal = document.getElementById("btn-close-receipt-modal");
+const btnDownloadPdfInvoice = document.getElementById("btn-download-pdf-invoice");
+const btnPrintReceiptAction = document.getElementById("btn-print-receipt-action");
+
+// Backup Modal Elements
+const modalBackup = document.getElementById("modal-backup");
+const btnCloseBackupModal = document.getElementById("btn-close-backup-modal");
+const btnTriggerBackup = document.getElementById("btn-trigger-backup");
+const backupExternalDrive = document.getElementById("backup-external-drive");
+const backupListTbody = document.getElementById("backup-list-tbody");
+
+// Reports Modal Elements
+const modalReports = document.getElementById("modal-reports");
+const btnCloseReportsModal = document.getElementById("btn-close-reports-modal");
+const reportContentView = document.getElementById("report-content-view");
+
+// Data Migration Modal Elements
+const modalDataMigration = document.getElementById("modal-data-migration");
+const btnCloseMigrationModal = document.getElementById("btn-close-migration-modal");
+const btnExportJsonAction = document.getElementById("btn-export-json-action");
+const btnImportJsonAction = document.getElementById("btn-import-json-action");
+const migrationStatusMsg = document.getElementById("migration-status-msg");
+
+// Menus
+const menuFastBilling = document.getElementById("menu-fast-billing");
+const menuDataExportImport = document.getElementById("menu-data-export-import");
+const menuGstReports = document.getElementById("menu-gst-reports");
+const menuPrinterSettings = document.getElementById("menu-printer-settings");
+const menuBackupRestore = document.getElementById("menu-backup-restore");
+
+// POS State
+let posCart = [];
+let heldBills = [];
+let lastCompletedVoucher = null;
+
 // =============================================================
 // STORAGE & MIGRATION UTILITIES
 // =============================================================
@@ -264,7 +333,8 @@ function showScreen(screenId) {
     viewAddAccountMaster,
     viewAddItemMaster,
     viewSalesVoucher,
-    viewSalesList
+    viewSalesList,
+    viewFastBilling
   ];
 
   allViews.forEach((view) => {
@@ -284,6 +354,8 @@ function showScreen(screenId) {
     initSalesVoucherScreen();
   } else if (screenId === "view-sales-list") {
     renderSalesRegister();
+  } else if (screenId === "view-fast-billing") {
+    initFastBillingScreen();
   }
 }
 
@@ -493,6 +565,17 @@ function handleCreateCompanySubmit() {
     password: newCompPass.value
   };
 
+  if (window.backend) {
+    window.backend.createCompany(JSON.stringify(newComp), (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success) {
+          syncFromBackend();
+        }
+      } catch (e) {}
+    });
+  }
+
   companies.push(newComp);
   saveCompanies();
 
@@ -570,6 +653,14 @@ function handleSaveAccountMaster() {
   };
 
   if (activeCompany) {
+    if (window.backend) {
+      window.backend.saveAccount(activeCompany.id, JSON.stringify(accountData), (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success) showNotification(`Account "${name}" saved to database!`);
+        } catch (e) {}
+      });
+    }
     const key = `alpha_accounts_${activeCompany.code}`;
     let list = [];
     try {
@@ -629,6 +720,14 @@ function handleSaveItemMaster() {
   };
 
   if (activeCompany) {
+    if (window.backend) {
+      window.backend.saveItem(activeCompany.id, JSON.stringify(itemData), (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success) showNotification(`Item "${name}" saved to database!`);
+        } catch (e) {}
+      });
+    }
     const key = `alpha_items_${activeCompany.code}`;
     let list = [];
     try {
@@ -987,6 +1086,32 @@ function handleSaveSalesVoucher() {
     createdAt: new Date().toISOString()
   };
 
+  if (window.backend && activeCompany) {
+    const payload = {
+      party_name: party,
+      sale_type: vchSaleType.value,
+      payment_method: "CASH",
+      series: vchSeries.value,
+      vch_date: vchDate.value,
+      narration: vchNarration.value.trim(),
+      items: items.map((it) => ({
+        name: it.name,
+        qty: it.qty,
+        unit: it.unit,
+        price: it.price,
+        line_total: it.amount
+      }))
+    };
+    window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success) {
+          lastCompletedVoucher = r.data.vch_no;
+        }
+      } catch (e) {}
+    });
+  }
+
   saveSalesVoucherRecord(voucherRecord);
   showNotification(`Sales Bill #${currentNo} saved successfully!`);
 
@@ -1002,6 +1127,38 @@ function handleSaveSalesVoucher() {
 // SALES BILLS REGISTER / LIST
 // =============================================================
 function renderSalesRegister() {
+  salesRegisterTbody.innerHTML = "";
+  
+  if (window.backend && activeCompany) {
+    window.backend.listVouchers(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data) && r.data.length > 0) {
+          salesRegisterCount.textContent = `Total Bills: ${r.data.length}`;
+          salesRegisterTbody.innerHTML = "";
+          r.data.forEach((bill) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td style="font-weight: 800; color: #1e40af;">${escapeHtml(bill.vch_no)}</td>
+              <td>${escapeHtml(bill.vch_date)}</td>
+              <td style="font-weight: 700;">${escapeHtml(bill.party_name)}</td>
+              <td>${escapeHtml(bill.sale_type)}</td>
+              <td>${((bill.grand_total || 0) - (bill.subtotal || 0)).toFixed(2)}</td>
+              <td style="font-weight: 800; color: #047857;">₹ ${(bill.grand_total || 0).toFixed(2)}</td>
+            `;
+            salesRegisterTbody.appendChild(tr);
+          });
+          return;
+        }
+      } catch (e) {}
+      renderLocalSalesRegister();
+    });
+  } else {
+    renderLocalSalesRegister();
+  }
+}
+
+function renderLocalSalesRegister() {
   salesRegisterTbody.innerHTML = "";
   const bills = getSalesVouchers();
 
@@ -1036,6 +1193,470 @@ function renderSalesRegister() {
 btnNewBillFromList.addEventListener("click", () => showScreen("view-sales-voucher"));
 btnCloseSalesList.addEventListener("click", () => showScreen("view-dashboard"));
 btnSalesListClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+// =============================================================
+// FAST BILLING (POS) ENGINE
+// =============================================================
+function initFastBillingScreen() {
+  if (posVchNo) {
+    if (window.backend && activeCompany) {
+      window.backend.getNextVoucherNumber(activeCompany.id, "POS", (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success) posVchNo.textContent = r.data;
+        } catch (e) {}
+      });
+    } else {
+      posVchNo.textContent = getNextVoucherNumber();
+    }
+  }
+  renderPosCart();
+  setTimeout(() => {
+    if (posBarcodeInput) {
+      posBarcodeInput.focus();
+    }
+  }, 100);
+}
+
+function renderPosCart() {
+  if (!posCartTbody) return;
+  posCartTbody.innerHTML = "";
+
+  if (posCart.length === 0) {
+    if (posEmptyCartMsg) posEmptyCartMsg.style.display = "block";
+    updatePosTotals();
+    return;
+  }
+
+  if (posEmptyCartMsg) posEmptyCartMsg.style.display = "none";
+
+  posCart.forEach((item, idx) => {
+    const tr = document.createElement("tr");
+    const lineTotal = item.qty * item.price;
+    const taxAmt = (lineTotal * (item.taxRate || 0)) / 100;
+
+    tr.innerHTML = `
+      <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+      <td style="font-family: monospace; font-weight: 700; color: #1e40af;">${escapeHtml(item.barcode || "-")}</td>
+      <td style="font-weight: 700;">${escapeHtml(item.name)}</td>
+      <td style="text-align: right;">
+        <input type="number" step="0.001" min="0.001" class="pos-cart-qty-input" data-index="${idx}" value="${item.qty}" />
+      </td>
+      <td style="color: #64748b;">${escapeHtml(item.unit || "Pcs.")}</td>
+      <td style="text-align: right; font-weight: 600;">₹ ${item.price.toFixed(2)}</td>
+      <td style="text-align: center; color: #047857; font-weight: 700;">${item.taxRate || 0}%</td>
+      <td style="text-align: right; font-weight: 800; color: #047857;">₹ ${(lineTotal + taxAmt).toFixed(2)}</td>
+      <td style="text-align: center;">
+        <button type="button" class="pos-cart-btn-del" data-index="${idx}" title="Remove Item">&times;</button>
+      </td>
+    `;
+    posCartTbody.appendChild(tr);
+  });
+
+  // Attach Quantity input change handlers
+  posCartTbody.querySelectorAll(".pos-cart-qty-input").forEach((input) => {
+    input.addEventListener("change", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      const val = parseFloat(e.target.value);
+      if (!isNaN(val) && val > 0) {
+        posCart[idx].qty = val;
+        renderPosCart();
+      } else {
+        e.target.value = posCart[idx].qty;
+      }
+    });
+  });
+
+  // Attach Delete item handlers
+  posCartTbody.querySelectorAll(".pos-cart-btn-del").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      posCart.splice(idx, 1);
+      renderPosCart();
+      if (posBarcodeInput) posBarcodeInput.focus();
+    });
+  });
+
+  updatePosTotals();
+}
+
+function updatePosTotals() {
+  let subtotal = 0;
+  let taxTotal = 0;
+  let totalQty = 0;
+
+  posCart.forEach((it) => {
+    const lineVal = it.qty * it.price;
+    const lineTax = (lineVal * (it.taxRate || 0)) / 100;
+    subtotal += lineVal;
+    taxTotal += lineTax;
+    totalQty += it.qty;
+  });
+
+  const rawTotal = subtotal + taxTotal;
+  const rounded = Math.round(rawTotal);
+  const roundDiff = rounded - rawTotal;
+
+  if (posItemCount) posItemCount.textContent = `${posCart.length} items (${totalQty.toFixed(2)} qty)`;
+  if (posSubtotal) posSubtotal.textContent = `₹ ${subtotal.toFixed(2)}`;
+  if (posTaxTotal) posTaxTotal.textContent = `₹ ${taxTotal.toFixed(2)}`;
+  if (posRoundOff) posRoundOff.textContent = (roundDiff >= 0 ? "+" : "") + roundDiff.toFixed(2);
+  if (posPayableAmount) posPayableAmount.textContent = `₹ ${rounded.toFixed(2)}`;
+}
+
+// POS Barcode Scanner Handler
+function handleBarcodeScan(barcodeStr) {
+  const code = (barcodeStr || "").trim();
+  if (!code) return;
+
+  if (window.backend && activeCompany) {
+    window.backend.findByBarcode(activeCompany.id, code, (resp) => {
+      try {
+        const res = JSON.parse(resp);
+        if (res.success && res.data) {
+          addItemToPosCart(res.data);
+        } else {
+          showNotification(`⚠️ Barcode "${code}" not found! Press F1 to search.`);
+        }
+      } catch (e) {
+        searchLocalItemsForBarcode(code);
+      }
+    });
+  } else {
+    searchLocalItemsForBarcode(code);
+  }
+}
+
+function searchLocalItemsForBarcode(code) {
+  const codeUpper = code.toUpperCase();
+  let savedItems = [];
+  if (activeCompany) {
+    savedItems = JSON.parse(localStorage.getItem(`alpha_items_${activeCompany.code}`) || "[]");
+  }
+  const matched = savedItems.find(
+    (it) => (it.alias && it.alias.toUpperCase() === codeUpper) || (it.name && it.name.toUpperCase() === codeUpper)
+  );
+
+  if (matched) {
+    addItemToPosCart({
+      id: matched.name,
+      name: matched.name,
+      alias: matched.alias || code,
+      sales_price: parseFloat(matched.salesPrice) || 0.0,
+      unit: matched.unit || "Pcs.",
+      tax_category: matched.taxCategory || "GST 18%"
+    });
+  } else {
+    showNotification(`⚠️ Item "${code}" not registered. Press F1 to search.`);
+  }
+}
+
+function addItemToPosCart(itemData) {
+  const existingIdx = posCart.findIndex(
+    (it) => (it.id && it.id === itemData.id) || (it.name.toUpperCase() === itemData.name.toUpperCase())
+  );
+
+  let taxRate = 18.0;
+  const taxCat = itemData.tax_category || itemData.taxCategory || "";
+  if (taxCat.includes("28%")) taxRate = 28.0;
+  else if (taxCat.includes("12%")) taxRate = 12.0;
+  else if (taxCat.includes("5%")) taxRate = 5.0;
+  else if (taxCat.includes("0%") || taxCat.includes("Exempt")) taxRate = 0.0;
+
+  if (existingIdx !== -1) {
+    posCart[existingIdx].qty += 1;
+    showNotification(`Added +1 to ${itemData.name} (Qty: ${posCart[existingIdx].qty})`);
+  } else {
+    posCart.push({
+      id: itemData.id || itemData.name,
+      name: itemData.name,
+      barcode: itemData.matched_barcode || itemData.alias || "",
+      qty: 1.0,
+      unit: itemData.unit || "Pcs.",
+      price: parseFloat(itemData.sales_price || itemData.salesPrice) || 0.0,
+      taxRate: taxRate
+    });
+    showNotification(`Added ${itemData.name} to cart.`);
+  }
+
+  renderPosCart();
+  if (posBarcodeInput) {
+    posBarcodeInput.value = "";
+    posBarcodeInput.focus();
+  }
+}
+
+// Quick Payment & Checkout
+function triggerPosCheckout(method) {
+  if (posCart.length === 0) {
+    alert("Cannot checkout: Cart is empty. Please scan or add items first.");
+    if (posBarcodeInput) posBarcodeInput.focus();
+    return;
+  }
+
+  let subtotal = 0;
+  let taxTotal = 0;
+  posCart.forEach((it) => {
+    const lineVal = it.qty * it.price;
+    subtotal += lineVal;
+    taxTotal += (lineVal * (it.taxRate || 0)) / 100;
+  });
+  const grandTotal = Math.round(subtotal + taxTotal);
+
+  if (method === "CASH") {
+    modalCashDueVal.textContent = `₹ ${grandTotal.toFixed(2)}`;
+    posCashTendered.value = grandTotal;
+    modalCashChangeVal.textContent = "₹ 0.00";
+    modalPosCash.classList.add("show");
+    setTimeout(() => {
+      posCashTendered.focus();
+      posCashTendered.select();
+    }, 50);
+  } else if (method === "UPI") {
+    if (confirm(`Confirm UPI payment received of ₹ ${grandTotal.toFixed(2)}?`)) {
+      finalizePosSale("UPI", grandTotal, 0);
+    }
+  } else if (method === "CARD") {
+    if (confirm(`Confirm Card transaction of ₹ ${grandTotal.toFixed(2)} on POS terminal?`)) {
+      finalizePosSale("CARD", grandTotal, 0);
+    }
+  } else {
+    finalizePosSale("SPLIT", grandTotal, 0);
+  }
+}
+
+function finalizePosSale(method, amountPaid, changeDue) {
+  if (posCart.length === 0) return;
+
+  const vchNum = posVchNo.textContent.trim() || getNextVoucherNumber();
+  const now = new Date();
+  const dateStr = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+
+  const itemsPayload = posCart.map((it, idx) => ({
+    id: it.id,
+    sn: idx + 1,
+    name: it.name,
+    qty: it.qty,
+    unit: it.unit,
+    price: it.price,
+    tax_rate: it.taxRate,
+    line_total: it.qty * it.price + ((it.qty * it.price * it.taxRate) / 100)
+  }));
+
+  const payload = {
+    party_name: "CASH",
+    sale_type: "L/GST-18%",
+    payment_method: method,
+    items: itemsPayload,
+    vch_date: dateStr,
+    narration: `POS Checkout (${method})`
+  };
+
+  if (window.backend && activeCompany) {
+    window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
+      try {
+        const res = JSON.parse(resp);
+        if (res.success) {
+          lastCompletedVoucher = res.data.vch_no;
+          showNotification(`Sale #${res.data.vch_no} completed successfully!`);
+          // Display Thermal Receipt
+          showReceiptModal(res.data.voucher_id);
+          posCart = [];
+          renderPosCart();
+          initFastBillingScreen();
+        } else {
+          alert(`Checkout failed: ${res.error}`);
+        }
+      } catch (e) {
+        alert(`Checkout error: ${e}`);
+      }
+    });
+  } else {
+    // Local fallback
+    const voucherRecord = {
+      vchNo: vchNum,
+      series: "POS",
+      date: dateStr,
+      saleType: "L/GST-18%",
+      party: "CASH",
+      matCentre: "Main Store",
+      narration: `POS (${method})`,
+      items: posCart.map((it, i) => ({ sn: i + 1, name: it.name, qty: it.qty, unit: it.unit, price: it.price, amount: it.qty * it.price })),
+      subtotal: parseFloat(posSubtotal.textContent.replace("₹", "")),
+      grandTotal: posPayableAmount.textContent.replace("₹", "").trim(),
+      createdAt: new Date().toISOString()
+    };
+    saveSalesVoucherRecord(voucherRecord);
+    showNotification(`Sale #${vchNum} completed successfully!`);
+    posCart = [];
+    renderPosCart();
+    initFastBillingScreen();
+  }
+}
+
+// Receipt Modal Handler
+function showReceiptModal(vchId) {
+  if (window.backend && activeCompany) {
+    window.backend.getThermalReceipt(activeCompany.id, vchId, 80, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success) {
+          receiptPreviewText.textContent = r.data;
+          modalReceiptPreview.classList.add("show");
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+// Backup & Restore Dialog
+function openBackupModal() {
+  modalBackup.classList.add("show");
+  refreshBackupList();
+}
+
+function refreshBackupList() {
+  if (!backupListTbody) return;
+  backupListTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8;">Loading backups...</td></tr>`;
+
+  if (window.backend) {
+    window.backend.listBackups((resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          if (r.data.length === 0) {
+            backupListTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8;">No backups found yet.</td></tr>`;
+            return;
+          }
+          backupListTbody.innerHTML = "";
+          r.data.forEach((b) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td style="font-weight: 700;">${escapeHtml(b.filename)}</td>
+              <td>${b.size_kb} KB</td>
+              <td>${escapeHtml(b.created_at)}</td>
+              <td>
+                <button type="button" class="btn-action restore-backup-btn" data-path="${escapeHtml(b.filepath)}">Restore</button>
+              </td>
+            `;
+            backupListTbody.appendChild(tr);
+          });
+
+          backupListTbody.querySelectorAll(".restore-backup-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              const path = e.target.dataset.path;
+              if (confirm(`Are you sure you want to restore database from:\n${path}?\nA safety snapshot will be created before restoring.`)) {
+                window.backend.restoreBackup(path, (resJson) => {
+                  const res = JSON.parse(resJson);
+                  if (res.success) {
+                    alert(res.message);
+                    location.reload();
+                  } else {
+                    alert(`Restore failed: ${res.message}`);
+                  }
+                });
+              }
+            });
+          });
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+// Reports Dialog
+function openReportsModal() {
+  modalReports.classList.add("show");
+  loadReportData("daily");
+}
+
+function loadReportData(tabType) {
+  if (!reportContentView || !activeCompany) return;
+  reportContentView.innerHTML = `<div style="padding: 20px; text-align: center; color: #64748b;">Loading report data...</div>`;
+
+  if (window.backend) {
+    const reportKey = tabType === "daily" ? "daily_sales" : tabType === "gst" ? "gst_summary" : tabType === "profit" ? "gross_profit" : "payment_summary";
+    window.backend.getReport(activeCompany.id, reportKey, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success) {
+          renderReportContent(tabType, r.data);
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+function renderReportContent(tabType, data) {
+  if (tabType === "daily") {
+    if (!data || data.length === 0) {
+      reportContentView.innerHTML = `<div style="padding: 20px; text-align: center; color: #64748b;">No sales records found.</div>`;
+      return;
+    }
+    let html = `<table class="report-table"><thead><tr><th>Date</th><th>Bills</th><th>Taxable (₹)</th><th>Tax (₹)</th><th>Total Revenue (₹)</th></tr></thead><tbody>`;
+    data.forEach((row) => {
+      html += `<tr><td>${escapeHtml(row.date)}</td><td>${row.total_bills}</td><td>₹ ${row.total_taxable.toFixed(2)}</td><td>₹ ${row.total_tax.toFixed(2)}</td><td style="font-weight: 800; color: #047857;">₹ ${row.total_revenue.toFixed(2)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    reportContentView.innerHTML = html;
+  } else if (tabType === "gst") {
+    reportContentView.innerHTML = `
+      <div style="padding: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
+        <div>Total Taxable Sales: <strong>₹ ${(data.total_taxable || 0).toFixed(2)}</strong></div>
+        <div>CGST (Central Tax): <strong>₹ ${(data.total_cgst || 0).toFixed(2)}</strong></div>
+        <div>SGST (State Tax): <strong>₹ ${(data.total_sgst || 0).toFixed(2)}</strong></div>
+        <div>IGST (Integrated Tax): <strong>₹ ${(data.total_igst || 0).toFixed(2)}</strong></div>
+        <div style="font-size: 15px; font-weight: 800; color: #1e40af; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
+          Total GST Collected: ₹ ${(data.total_gst || 0).toFixed(2)}
+        </div>
+      </div>
+    `;
+  } else if (tabType === "profit") {
+    reportContentView.innerHTML = `
+      <div style="padding: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
+        <div>Total Sales Revenue: <strong>₹ ${(data.total_sales_revenue || 0).toFixed(2)}</strong></div>
+        <div>Total Estimated Cost (Purchases): <strong>₹ ${(data.total_estimated_cost || 0).toFixed(2)}</strong></div>
+        <div style="font-size: 16px; font-weight: 900; color: #047857; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
+          Estimated Gross Profit: ₹ ${(data.estimated_gross_profit || 0).toFixed(2)} (${data.margin_percentage}% Margin)
+        </div>
+      </div>
+    `;
+  } else if (tabType === "payments") {
+    let html = `<table class="report-table"><thead><tr><th>Payment Method</th><th>Transactions</th><th>Total Collected (₹)</th></tr></thead><tbody>`;
+    (data || []).forEach((row) => {
+      html += `<tr><td style="font-weight: 700;">${escapeHtml(row.method)}</td><td>${row.count}</td><td style="font-weight: 800; color: #047857;">₹ ${row.total_collected.toFixed(2)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    reportContentView.innerHTML = html;
+  }
+}
+
+// Synchronize companies and accounts from Python SQLite backend
+function syncFromBackend() {
+  if (!window.backend) return;
+  window.backend.listCompanies((resp) => {
+    try {
+      const r = JSON.parse(resp);
+      if (r.success && Array.isArray(r.data) && r.data.length > 0) {
+        companies = r.data;
+        filteredCompanies = [...companies];
+        renderCompanyTable();
+        showNotification("Connected to persistent SQLite database.");
+      }
+    } catch (e) {
+      console.error("Backend sync error:", e);
+    }
+  });
+}
+
+// Initialize QWebChannel if running inside PyQt5 WebEngine
+if (typeof QWebChannel !== "undefined" && window.qt && window.qt.webChannelTransport) {
+  new QWebChannel(qt.webChannelTransport, function(channel) {
+    window.backend = channel.objects.backend;
+    console.log("Connected to Qt WebChannel Backend!");
+    syncFromBackend();
+  });
+}
 
 // =============================================================
 // GLOBAL NOTIFICATION TOAST
@@ -1164,6 +1785,257 @@ btnSaveSalesVoucher.addEventListener("click", handleSaveSalesVoucher);
 btnQuitSalesVoucher.addEventListener("click", () => showScreen("view-dashboard"));
 btnSalesCloseTop.addEventListener("click", () => showScreen("view-dashboard"));
 
+// =============================================================
+// FAST BILLING & MODAL EVENT BINDINGS
+// =============================================================
+if (menuFastBilling) menuFastBilling.addEventListener("click", () => showScreen("view-fast-billing"));
+if (btnPosClose) btnPosClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+if (posBarcodeInput) {
+  posBarcodeInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleBarcodeScan(posBarcodeInput.value.trim());
+      posBarcodeInput.value = "";
+    }
+  });
+}
+
+if (btnPosClear) {
+  btnPosClear.addEventListener("click", () => {
+    if (posCart.length > 0 && confirm("Clear current cart?")) {
+      posCart = [];
+      renderPosCart();
+      if (posBarcodeInput) posBarcodeInput.focus();
+    }
+  });
+}
+
+if (btnPosHold) {
+  btnPosHold.addEventListener("click", () => {
+    if (posCart.length === 0) {
+      alert("Cart is empty; nothing to hold.");
+      return;
+    }
+    const billTime = new Date().toLocaleTimeString();
+    heldBills.push({
+      id: Date.now(),
+      time: billTime,
+      items: [...posCart]
+    });
+    posCart = [];
+    if (heldCountEl) heldCountEl.textContent = heldBills.length;
+    renderPosCart();
+    showNotification(`Bill parked at ${billTime}. Total parked: ${heldBills.length}`);
+    if (posBarcodeInput) posBarcodeInput.focus();
+  });
+}
+
+if (btnPosResume) {
+  btnPosResume.addEventListener("click", () => {
+    if (heldBills.length === 0) {
+      alert("No held bills to resume.");
+      return;
+    }
+    const parked = heldBills.pop();
+    if (heldCountEl) heldCountEl.textContent = heldBills.length;
+    posCart = parked.items;
+    renderPosCart();
+    showNotification(`Resumed parked bill from ${parked.time}.`);
+    if (posBarcodeInput) posBarcodeInput.focus();
+  });
+}
+
+if (btnPosSearchItem) {
+  btnPosSearchItem.addEventListener("click", () => {
+    const q = prompt("Enter product name, SKU or barcode to search:");
+    if (q) handleBarcodeScan(q);
+  });
+}
+
+// Payment triggers
+if (btnPosPayCash) btnPosPayCash.addEventListener("click", () => triggerPosCheckout("CASH"));
+if (btnPosPayUpi) btnPosPayUpi.addEventListener("click", () => triggerPosCheckout("UPI"));
+if (btnPosPayCard) btnPosPayCard.addEventListener("click", () => triggerPosCheckout("CARD"));
+if (btnPosPaySplit) btnPosPaySplit.addEventListener("click", () => triggerPosCheckout("SPLIT"));
+if (btnPosCheckoutPrint) btnPosCheckoutPrint.addEventListener("click", () => triggerPosCheckout("CASH"));
+
+// Cash Modal Event Listeners
+if (posCashTendered) {
+  posCashTendered.addEventListener("input", () => {
+    const tendered = parseFloat(posCashTendered.value) || 0;
+    const due = parseFloat(modalCashDueVal.textContent.replace("₹", "").trim()) || 0;
+    const change = Math.max(tendered - due, 0);
+    modalCashChangeVal.textContent = `₹ ${change.toFixed(2)}`;
+  });
+  posCashTendered.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      btnConfirmPosCash.click();
+    }
+  });
+}
+
+if (btnConfirmPosCash) {
+  btnConfirmPosCash.addEventListener("click", () => {
+    const tendered = parseFloat(posCashTendered.value) || 0;
+    const due = parseFloat(modalCashDueVal.textContent.replace("₹", "").trim()) || 0;
+    modalPosCash.classList.remove("show");
+    finalizePosSale("CASH", tendered, Math.max(tendered - due, 0));
+  });
+}
+
+if (btnClosePosCash) {
+  btnClosePosCash.addEventListener("click", () => modalPosCash.classList.remove("show"));
+}
+
+// Thermal Receipt Modal
+if (btnCloseReceiptModal) {
+  btnCloseReceiptModal.addEventListener("click", () => modalReceiptPreview.classList.remove("show"));
+}
+if (btnPrintReceiptAction) {
+  btnPrintReceiptAction.addEventListener("click", () => {
+    window.print();
+    showNotification("Print sent to system printer spooler.");
+  });
+}
+if (btnDownloadPdfInvoice) {
+  btnDownloadPdfInvoice.addEventListener("click", () => {
+    if (window.backend && activeCompany && lastCompletedVoucher) {
+      window.backend.generatePdfInvoice(activeCompany.id, lastCompletedVoucher, (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success) {
+            alert(`A4 Tax Invoice PDF generated successfully at:\n${r.filepath}`);
+          }
+        } catch (e) {}
+      });
+    } else {
+      window.print();
+    }
+  });
+}
+
+// Backup & Restore Dialog
+if (menuBackupRestore) menuBackupRestore.addEventListener("click", openBackupModal);
+if (btnCloseBackupModal) btnCloseBackupModal.addEventListener("click", () => modalBackup.classList.remove("show"));
+
+if (btnTriggerBackup) {
+  btnTriggerBackup.addEventListener("click", () => {
+    if (!window.backend) {
+      alert("Backup feature requires the desktop application runtime.");
+      return;
+    }
+    const ext = backupExternalDrive ? backupExternalDrive.value.trim() : "";
+    btnTriggerBackup.disabled = true;
+    btnTriggerBackup.textContent = "Backing up...";
+    window.backend.performBackup(ext, (resp) => {
+      btnTriggerBackup.disabled = false;
+      btnTriggerBackup.textContent = "⚡ Create Local Backup";
+      try {
+        const r = JSON.parse(resp);
+        if (r.success) {
+          showNotification(r.data.message || "Backup created successfully!");
+          refreshBackupList();
+        } else {
+          alert(`Backup failed: ${r.error}`);
+        }
+      } catch (e) {
+        alert(`Backup error: ${e}`);
+      }
+    });
+  });
+}
+
+// Reports Dialog
+if (menuGstReports) menuGstReports.addEventListener("click", openReportsModal);
+if (btnCloseReportsModal) btnCloseReportsModal.addEventListener("click", () => modalReports.classList.remove("show"));
+
+document.querySelectorAll(".report-tab-btn").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    document.querySelectorAll(".report-tab-btn").forEach((b) => b.classList.remove("primary-btn"));
+    e.target.classList.add("primary-btn");
+    loadReportData(e.target.dataset.tab);
+  });
+});
+
+// Data Migration Dialog
+if (menuDataExportImport) {
+  menuDataExportImport.addEventListener("click", () => {
+    if (migrationStatusMsg) migrationStatusMsg.textContent = "";
+    modalDataMigration.classList.add("show");
+  });
+}
+if (btnCloseMigrationModal) {
+  btnCloseMigrationModal.addEventListener("click", () => modalDataMigration.classList.remove("show"));
+}
+
+if (btnExportJsonAction) {
+  btnExportJsonAction.addEventListener("click", () => {
+    if (!activeCompany) {
+      alert("Please select a company first.");
+      return;
+    }
+    const code = activeCompany.code;
+    const exportData = {
+      alpha_companies: companies,
+      [`alpha_config_${code}`]: getCompanyConfig(code),
+      [`alpha_accounts_${code}`]: JSON.parse(localStorage.getItem(`alpha_accounts_${code}`) || "[]"),
+      [`alpha_items_${code}`]: JSON.parse(localStorage.getItem(`alpha_items_${code}`) || "[]"),
+      [`alpha_vouchers_${code}`]: getSalesVouchers()
+    };
+    const jsonStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+    const dlAnchor = document.createElement("a");
+    dlAnchor.setAttribute("href", jsonStr);
+    dlAnchor.setAttribute("download", `AntiMatrix_${code}_Export.json`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    if (migrationStatusMsg) migrationStatusMsg.textContent = `✓ Exported data for ${activeCompany.name} to JSON file.`;
+  });
+}
+
+if (btnImportJsonAction) {
+  btnImportJsonAction.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const payload = JSON.parse(event.target.result);
+          if (window.backend) {
+            window.backend.importLocalStoragePayload(JSON.stringify(payload), (resp) => {
+              const r = JSON.parse(resp);
+              if (r.success) {
+                alert(`Data imported into SQLite database successfully!\nCompanies: ${r.data.companies_imported}, Items: ${r.data.items_imported}, Accounts: ${r.data.accounts_imported}, Bills: ${r.data.vouchers_imported}`);
+                location.reload();
+              } else {
+                alert(`Import failed: ${r.error}`);
+              }
+            });
+          } else {
+            // Local fallback import
+            if (payload.alpha_companies) localStorage.setItem("alpha_companies", JSON.stringify(payload.alpha_companies));
+            Object.keys(payload).forEach((k) => {
+              if (k.startsWith("alpha_")) localStorage.setItem(k, typeof payload[k] === "string" ? payload[k] : JSON.stringify(payload[k]));
+            });
+            alert("Data imported into browser storage successfully!");
+            location.reload();
+          }
+        } catch (err) {
+          alert(`Invalid JSON file: ${err.message}`);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+}
+
 // Global Keyboard Navigation
 window.addEventListener("keydown", (e) => {
   // Zoom hotkeys: Ctrl/Cmd + Plus/Minus
@@ -1196,6 +2068,26 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeConfigurationModal(); }
     return;
   }
+  if (modalPosCash && modalPosCash.classList.contains("show")) {
+    if (e.key === "Escape") { e.preventDefault(); modalPosCash.classList.remove("show"); }
+    return;
+  }
+  if (modalReceiptPreview && modalReceiptPreview.classList.contains("show")) {
+    if (e.key === "Escape") { e.preventDefault(); modalReceiptPreview.classList.remove("show"); }
+    return;
+  }
+  if (modalBackup && modalBackup.classList.contains("show")) {
+    if (e.key === "Escape") { e.preventDefault(); modalBackup.classList.remove("show"); }
+    return;
+  }
+  if (modalReports && modalReports.classList.contains("show")) {
+    if (e.key === "Escape") { e.preventDefault(); modalReports.classList.remove("show"); }
+    return;
+  }
+  if (modalDataMigration && modalDataMigration.classList.contains("show")) {
+    if (e.key === "Escape") { e.preventDefault(); modalDataMigration.classList.remove("show"); }
+    return;
+  }
 
   // View-specific hotkeys
   if (currentScreen === "view-companies") {
@@ -1217,6 +2109,32 @@ window.addEventListener("keydown", (e) => {
       e.preventDefault();
       recalculateVoucherTotals();
       showNotification("Tax recalculated.");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      showScreen("view-dashboard");
+    }
+  } else if (currentScreen === "view-fast-billing") {
+    if (e.key === "F1") {
+      e.preventDefault();
+      if (btnPosSearchItem) btnPosSearchItem.click();
+    } else if (e.key === "F2") {
+      e.preventDefault();
+      if (btnPosHold) btnPosHold.click();
+    } else if (e.key === "F3") {
+      e.preventDefault();
+      if (btnPosResume) btnPosResume.click();
+    } else if (e.key === "F8") {
+      e.preventDefault();
+      if (btnPosPaySplit) btnPosPaySplit.click();
+    } else if (e.key === "F9") {
+      e.preventDefault();
+      if (btnPosPayCash) btnPosPayCash.click();
+    } else if (e.key === "F10") {
+      e.preventDefault();
+      if (btnPosPayUpi) btnPosPayUpi.click();
+    } else if (e.key === "F12") {
+      e.preventDefault();
+      if (btnPosCheckoutPrint) btnPosCheckoutPrint.click();
     } else if (e.key === "Escape") {
       e.preventDefault();
       showScreen("view-dashboard");

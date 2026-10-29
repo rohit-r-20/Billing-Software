@@ -180,7 +180,7 @@
               <div class="tree-item" id="menu-change-password"><span class="tree-arrow">&rsaquo;</span> Users & Passwords</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Mobile App</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Utilities</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Data Export Import</div>
+              <div class="tree-item highlight" id="menu-data-export-import"><span class="tree-arrow">&rsaquo;</span> Data Export Import (JSON)</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Miscellaneous Data Entry</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Change Financial Year</div>
             </div>
@@ -194,6 +194,7 @@
               <div class="tree-branch">
                 <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Sales</div>
                 <div class="tree-submenu">
+                  <div class="tree-item highlight" id="menu-fast-billing" style="color: #2563eb; font-weight: 800;">⚡ Fast Billing (POS)</div>
                   <div class="tree-item highlight" id="menu-sales-add">- Add (Billing Screen)</div>
                   <div class="tree-item" id="menu-sales-modify">- Modify</div>
                   <div class="tree-item highlight" id="menu-sales-list">- List (View Bills)</div>
@@ -234,14 +235,25 @@
               <div class="tree-divider"></div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Stock Status</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Inventory Books</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> GST Reports</div>
+              <div class="tree-item highlight" id="menu-gst-reports"><span class="tree-arrow">&rsaquo;</span> GST Reports & Daily Summary</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Sales Analysis</div>
               <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Purchase Analysis</div>
             </div>
           </div>
 
-          <div class="menu-item-wrapper"><button class="menu-btn">Printing</button></div>
-          <div class="menu-item-wrapper"><button class="menu-btn">House-Keeping</button></div>
+          <div class="menu-item-wrapper" data-menu="printing">
+            <button class="menu-btn">Printing</button>
+            <div class="dropdown-tree">
+              <div class="tree-item highlight" id="menu-printer-settings"><span class="tree-arrow">&rsaquo;</span> Thermal & Invoice Printer Settings</div>
+            </div>
+          </div>
+
+          <div class="menu-item-wrapper" data-menu="housekeeping">
+            <button class="menu-btn">House-Keeping</button>
+            <div class="dropdown-tree">
+              <div class="tree-item highlight" id="menu-backup-restore"><span class="tree-arrow">&rsaquo;</span> Backup & Restore Database</div>
+            </div>
+          </div>
           
           <!-- Help Menu with Zoom / Font Size controls -->
           <div class="menu-item-wrapper" data-menu="help">
@@ -764,6 +776,137 @@
       </section>
 
       <!-- =========================================================
+           VIEW: FAST BILLING (SUPERMARKET POS)
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-fast-billing">
+        <div class="form-screen-ribbon pos-ribbon">
+          <div class="ribbon-left">
+            <span class="screen-badge-title">⚡ FAST BILLING (POS)</span>
+            <span class="pos-branch-badge">Branch: Main Branch | Reg: 01</span>
+          </div>
+          <div class="ribbon-center">
+            <span class="pos-vch-no-display">Bill No: <strong id="pos-vch-no">POS-001</strong></span>
+          </div>
+          <div class="ribbon-right">
+            <span class="db-status-pill" id="pos-db-status">● SQLite Active</span>
+            <button class="ribbon-btn-close" id="btn-pos-close" title="Close POS">&times;</button>
+          </div>
+        </div>
+
+        <div class="pos-workspace">
+          <!-- Top Barcode & Quick Action Bar -->
+          <div class="pos-scan-bar">
+            <div class="barcode-input-container">
+              <span class="barcode-icon">🔍</span>
+              <input 
+                type="text" 
+                id="pos-barcode-input" 
+                class="pos-barcode-field" 
+                placeholder="[ SCAN BARCODE OR TYPE ITEM NAME / F1 SEARCH ]" 
+                autocomplete="off" 
+              />
+            </div>
+            <button type="button" class="btn-pos-action" id="btn-pos-search-item" title="Manual Search (F1)">Search (F1)</button>
+            <button type="button" class="btn-pos-action" id="btn-pos-hold" title="Hold Sale (F2)">Hold Sale (F2)</button>
+            <button type="button" class="btn-pos-action" id="btn-pos-resume" title="Resume Sale (F3)">Held Bills (<span id="held-count">0</span>)</button>
+            <button type="button" class="btn-pos-action danger" id="btn-pos-clear" title="Clear Cart (Esc)">Clear</button>
+          </div>
+
+          <!-- Main Layout: Left Cart Table, Right Summary & Payments -->
+          <div class="pos-main-grid">
+            <!-- Cart Table -->
+            <div class="pos-cart-container">
+              <table class="pos-cart-table" id="pos-cart-table">
+                <thead>
+                  <tr>
+                    <th style="width: 35px;">#</th>
+                    <th style="width: 120px;">Barcode</th>
+                    <th>Product / Item Description</th>
+                    <th style="width: 75px; text-align: right;">Qty</th>
+                    <th style="width: 50px;">Unit</th>
+                    <th style="width: 80px; text-align: right;">Price (₹)</th>
+                    <th style="width: 60px; text-align: center;">Tax %</th>
+                    <th style="width: 95px; text-align: right;">Total (₹)</th>
+                    <th style="width: 35px; text-align: center;">✕</th>
+                  </tr>
+                </thead>
+                <tbody id="pos-cart-tbody">
+                  <!-- Dynamic Cart Rows -->
+                </tbody>
+              </table>
+              <div id="pos-empty-cart-msg" class="pos-empty-cart">
+                Scan barcode or type item name to begin checkout...
+              </div>
+            </div>
+
+            <!-- Right Summary & Checkout Panel -->
+            <div class="pos-summary-panel">
+              <div class="pos-summary-card">
+                <div class="summary-line">
+                  <span>Total Items:</span>
+                  <strong id="pos-item-count">0 items</strong>
+                </div>
+                <div class="summary-line">
+                  <span>Taxable Subtotal:</span>
+                  <span id="pos-subtotal">₹ 0.00</span>
+                </div>
+                <div class="summary-line">
+                  <span>Total GST:</span>
+                  <span id="pos-tax-total">₹ 0.00</span>
+                </div>
+                <div class="summary-line">
+                  <span>Round Off:</span>
+                  <span id="pos-round-off">₹ 0.00</span>
+                </div>
+                <div class="summary-grand-total">
+                  <span class="grand-label">PAYABLE AMOUNT</span>
+                  <span class="grand-val" id="pos-payable-amount">₹ 0.00</span>
+                </div>
+              </div>
+
+              <!-- Quick Pay Actions -->
+              <div class="pos-payment-actions">
+                <button type="button" class="btn-pay cash-btn" id="btn-pos-pay-cash">
+                  <span class="pay-icon">💵</span>
+                  <span class="pay-text">CASH (F9)</span>
+                </button>
+                <button type="button" class="btn-pay upi-btn" id="btn-pos-pay-upi">
+                  <span class="pay-icon">📱</span>
+                  <span class="pay-text">UPI (F10)</span>
+                </button>
+                <button type="button" class="btn-pay card-btn" id="btn-pos-pay-card">
+                  <span class="pay-icon">💳</span>
+                  <span class="pay-text">CARD</span>
+                </button>
+                <button type="button" class="btn-pay split-btn" id="btn-pos-pay-split">
+                  <span class="pay-icon">⚖️</span>
+                  <span class="pay-text">SPLIT (F8)</span>
+                </button>
+              </div>
+
+              <div class="pos-checkout-btn-box">
+                <button type="button" class="btn-checkout-big" id="btn-pos-checkout-print">
+                  ⚡ CHECKOUT & PRINT (F12)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POS Footer Keyboard Shortcuts -->
+        <div class="form-bottom-shortcuts pos-shortcuts">
+          <span>[ Enter / Scan - Add Item ]</span>
+          <span>[ F1 - Item Search ]</span>
+          <span>[ F2 - Hold Bill ]</span>
+          <span>[ F3 - Resume Bill ]</span>
+          <span>[ F9 - Cash Pay ]</span>
+          <span>[ F10 - UPI Pay ]</span>
+          <span>[ F12 - Complete & Print ]</span>
+          <span>[ Esc - Return to Dashboard ]</span>
+        </div>
+      </section>
+
+      <!-- =========================================================
            VIEW 6: SALES BILLS LIST / REGISTER
       ========================================================== -->
       <section class="screen-view erp-form-screen" id="view-sales-list">
@@ -951,8 +1094,151 @@
       </div>
     </div>
 
+    <!-- =========================================================
+         POPUP MODAL: POS CASH CHECKOUT (Amount Tendered / Change)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-pos-cash" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="width: 380px;">
+        <div class="create-comp-header">
+          <h2>Cash Payment Checkout</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-pos-cash">&times;</button>
+        </div>
+        <div style="padding: 16px;">
+          <div style="background: #ecfdf5; border: 1px solid #059669; padding: 12px; border-radius: 4px; text-align: center; margin-bottom: 14px;">
+            <span style="font-size: 11px; font-weight: 800; color: #047857;">TOTAL DUE</span>
+            <div id="modal-cash-due-val" style="font-size: 24px; font-weight: 900; color: #065f46; font-family: monospace;">₹ 0.00</div>
+          </div>
+          <div class="comp-field-row" style="margin-bottom: 12px;">
+            <label for="pos-cash-tendered" style="font-size: 12px; font-weight: 800;">Cash Tendered (₹)</label>
+            <input type="number" step="1" id="pos-cash-tendered" style="height: 36px; font-size: 18px; font-weight: 800; text-align: right;" placeholder="0" />
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; padding: 8px 0; border-top: 1px dashed #cbd5e1; margin-bottom: 16px;">
+            <span>Change Due:</span>
+            <span id="modal-cash-change-val" style="font-size: 16px; font-weight: 900; color: #2563eb;">₹ 0.00</span>
+          </div>
+          <div class="comp-btn-row">
+            <button type="button" class="btn-action primary-btn" id="btn-confirm-pos-cash" style="height: 38px; width: 100%;">
+              ✓ Confirm Payment & Print (Enter)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: THERMAL RECEIPT PREVIEW
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-receipt-preview" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="width: 440px;">
+        <div class="create-comp-header">
+          <h2>Thermal Receipt Preview</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-receipt-modal">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <div class="thermal-paper-pre" id="receipt-preview-text">
+            Generating receipt...
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 14px;">
+            <button type="button" class="btn-action" id="btn-download-pdf-invoice">📄 Save PDF Invoice</button>
+            <button type="button" class="btn-action primary-btn" id="btn-print-receipt-action">🖨️ Print Receipt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: BACKUP & RESTORE
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-backup" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="width: 580px;">
+        <div class="create-comp-header">
+          <h2>Database Backup & Restore</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-backup-modal">&times;</button>
+        </div>
+        <div style="padding: 16px;">
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; border-radius: 4px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <strong>Create New Backup</strong>
+              <button type="button" class="btn-action primary-btn" id="btn-trigger-backup">⚡ Create Local Backup</button>
+            </div>
+            <div style="font-size: 11px; color: #64748b;">
+              External Drive Mirror (Optional):
+              <input type="text" id="backup-external-drive" placeholder="e.g. /Volumes/USB_DRIVE or E:\Backups" style="width: 100%; height: 26px; margin-top: 4px; font-size: 11px;" />
+            </div>
+          </div>
+
+          <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">Available Local Backups:</div>
+          <div class="report-table-box" style="max-height: 220px;">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Backup File</th>
+                  <th>Size</th>
+                  <th>Created</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="backup-list-tbody">
+                <tr><td colspan="4" style="text-align: center; color: #94a3b8;">Loading backups...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: REPORTS & ANALYTICS
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-reports" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="width: 680px;">
+        <div class="create-comp-header">
+          <h2>Sales, GST & Profit Reports</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-reports-modal">&times;</button>
+        </div>
+        <div style="padding: 16px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button type="button" class="btn-action primary-btn report-tab-btn" data-tab="daily">Daily Sales</button>
+            <button type="button" class="btn-action report-tab-btn" data-tab="gst">GST Summary</button>
+            <button type="button" class="btn-action report-tab-btn" data-tab="payments">Payment Methods</button>
+            <button type="button" class="btn-action report-tab-btn" data-tab="profit">Gross Profit</button>
+          </div>
+          <div id="report-content-view" class="report-table-box" style="min-height: 200px;">
+            <!-- Dynamically populated report table -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: DATA EXPORT / IMPORT (MIGRATION)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-data-migration" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="width: 500px;">
+        <div class="create-comp-header">
+          <h2>Data Migration (Export / Import JSON)</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-migration-modal">&times;</button>
+        </div>
+        <div style="padding: 16px;">
+          <p style="font-size: 12px; color: #475569; margin-bottom: 14px;">
+            Export active company data or import existing browser/JSON records into the persistent SQLite database.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button type="button" class="btn-action primary-btn" id="btn-export-json-action" style="height: 38px;">
+              📥 Export Company Data to JSON
+            </button>
+            <button type="button" class="btn-action" id="btn-import-json-action" style="height: 38px;">
+              📤 Import Data from JSON File
+            </button>
+          </div>
+          <div id="migration-status-msg" style="margin-top: 12px; font-size: 11px; color: #166534; font-weight: 600;"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
+  <script src="qwebchannel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
