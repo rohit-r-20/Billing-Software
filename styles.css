@@ -2674,3 +2674,347 @@ html, body {
   margin-top: 2px;
 }
 
+
+/* =============================================================
+   PRODUCTS CATALOGUE & INVENTORY MANAGEMENT VIEW STYLES
+   ============================================================= */
+.items-list-body {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px;
+  gap: 10px;
+  height: calc(100% - 38px);
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.items-list-filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #ffffff;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.items-search-box {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.items-search-box .search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 14px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.items-search-input {
+  width: 100%;
+  padding: 7px 30px 7px 32px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  outline: none;
+  background: #fdfdfd;
+  transition: all 0.15s ease;
+}
+
+.items-search-input:focus {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.btn-clear-search {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.btn-clear-search:hover {
+  color: #ef4444;
+}
+
+.filter-select {
+  width: 170px;
+  height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.items-master-table th {
+  background: #f1f5f9;
+  font-weight: 700;
+  color: #334155;
+  padding: 7px 10px;
+}
+
+.items-master-table td {
+  padding: 6px 10px;
+  vertical-align: middle;
+  font-size: 12px;
+}
+
+.items-master-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.items-master-table tbody tr:hover {
+  background-color: #f0f7ff !important;
+}
+
+.items-master-table tbody tr.selected-row,
+.items-master-table tbody tr.selected-row td {
+  background-color: #dbeafe !important;
+  color: #1e3a8a !important;
+}
+
+.items-master-table tbody tr.selected-row {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.badge-stock {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+.badge-stock.in-stock {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.badge-stock.low-stock {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.badge-stock.out-of-stock {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge-category {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border-radius: 3px;
+  border: 1px solid #e2e8f0;
+}
+
+.badge-barcode {
+  display: inline-block;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.btn-table-action {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.btn-table-action:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.btn-table-action.primary {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #1d4ed8;
+}
+
+.btn-table-action.primary:hover {
+  background: #1d4ed8;
+}
+
+/* =============================================================
+   FAST BILLING AUTOCOMPLETE DROPDOWN
+   ============================================================= */
+.pos-suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
+  z-index: 1050;
+}
+
+.pos-suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.pos-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.pos-suggestion-item:hover,
+.pos-suggestion-item.active {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.pos-suggestion-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pos-suggestion-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.pos-suggestion-meta {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pos-suggestion-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pos-suggestion-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: #166534;
+}
+
+.pos-suggestion-add-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #dbeafe;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* =============================================================
+   TRADITIONAL BILLING AUTOCOMPLETE POPUP
+   ============================================================= */
+.vch-autocomplete-popup {
+  position: absolute;
+  width: 480px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 2px solid #2563eb;
+  border-radius: 4px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  z-index: 1100;
+}
+
+.vch-suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+}
+
+.vch-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.vch-suggestion-item:hover,
+.vch-suggestion-item.active {
+  background: #dbeafe;
+}
+
+.vch-sugg-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.vch-sugg-code {
+  font-size: 11px;
+  color: #64748b;
+  font-family: var(--font-mono, monospace);
+}
+
+.vch-sugg-price {
+  font-size: 12px;
+  font-weight: 700;
+  color: #166534;
+}
+
+/* =============================================================
+   PRODUCT SEARCH MODAL (F1) STYLES & DIALOG ALIGNMENT
+   ============================================================= */
+.pos-product-search-modal {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.pos-product-search-modal tr.selected-row,
+.pos-product-search-modal tr.selected-row td {
+  background-color: #dbeafe !important;
+  color: #1e3a8a !important;
+}
+
+.pos-product-search-modal tr:hover {
+  background-color: #f0f7ff;
+}
+
+/* General Layout & Resolution Consistency */
+@media screen and (max-width: 1400px) {
+  .master-layout-row {
+    gap: 8px;
+  }
+  .master-panel.left-panel {
+    flex: 1.3;
+  }
+}

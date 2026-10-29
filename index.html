@@ -336,13 +336,13 @@
                   <div class="tree-item">- Account Group</div>
                   <div class="tree-item">- Std. Narration</div>
                   <div class="tree-divider"></div>
-                  <!-- Item Master -->
+                  <!-- Products & Items -->
                   <div class="tree-branch">
-                    <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Item</div>
+                    <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Products &amp; Items</div>
                     <div class="tree-submenu">
-                      <div class="tree-item" id="menu-add-item-master">- Add (Add Item Master)</div>
-                      <div class="tree-item" id="menu-modify-item-master">- Modify</div>
-                      <div class="tree-item" id="menu-list-item-master">- List</div>
+                      <div class="tree-item highlight" id="menu-list-item-master" style="font-weight: 700; color: #1e40af;">- Products List (Catalogue)</div>
+                      <div class="tree-item" id="menu-add-item-master">- Add New Product</div>
+                      <div class="tree-item" id="menu-modify-item-master">- Modify / Edit Product</div>
                     </div>
                   </div>
                   <div class="tree-item">- Item Group</div>
@@ -627,126 +627,137 @@
       </section>
 
       <!-- =========================================================
-           VIEW 4: ADD ITEM MASTER (Image 4)
+           VIEW 4: ADD / EDIT PRODUCT (Item Master)
       ========================================================== -->
       <section class="screen-view erp-form-screen" id="view-add-item-master">
         <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-item-back-list" title="Back to Products Catalogue">&larr; Products List</button>
+          </div>
           <div class="ribbon-center">
-            <span class="screen-badge-title">Add Item Master</span>
+            <span class="screen-badge-title" id="item-master-screen-title">Add / Edit Product</span>
           </div>
           <div class="ribbon-right">
-            <span class="key-hint">List - F5</span>
-            <span class="key-hint">Copy - F12</span>
+            <button type="button" class="btn-classic" id="btn-item-open-list" style="margin-right: 8px;">📋 View Products List (F5)</button>
+            <span class="key-hint">Save - F2</span>
             <button class="ribbon-btn-close" id="btn-item-close-top" title="Close">&times;</button>
           </div>
         </div>
 
         <form class="master-form-body" id="form-item-master" autocomplete="off" onsubmit="return false;">
+          <input type="hidden" id="item-id" value="" />
           <div class="master-layout-row">
             <div class="master-panel left-panel">
               <div class="field-row">
-                <label class="field-label" for="item-name">Name</label>
+                <label class="field-label" for="item-name">Product Name *</label>
                 <div class="field-input-box">
-                  <input type="text" id="item-name" class="input-highlight" required />
+                  <input type="text" id="item-name" class="input-highlight" placeholder="e.g. Milk Bikis 100g" required />
                 </div>
               </div>
-              <div class="field-row"><label class="field-label" for="item-alias">Alias</label><input type="text" id="item-alias" /></div>
-              <div class="field-row"><label class="field-label" for="item-print-name">Print Name</label><input type="text" id="item-print-name" /></div>
+              <div class="field-row"><label class="field-label" for="item-alias">Barcode / SKU Code</label><input type="text" id="item-alias" placeholder="e.g. 8901234567890" /></div>
+              <div class="field-row"><label class="field-label" for="item-print-name">Receipt Print Name</label><input type="text" id="item-print-name" placeholder="Name printed on bill" /></div>
               <div class="field-row">
-                <label class="field-label" for="item-group">Group</label>
+                <label class="field-label" for="item-group">Product Category</label>
                 <select id="item-group" class="select-box">
                   <option value="General">General</option>
+                  <option value="Biscuits">Biscuits &amp; Snacks</option>
+                  <option value="Dairy">Dairy &amp; Milk</option>
+                  <option value="Beverages">Beverages &amp; Drinks</option>
+                  <option value="Grocery">Grocery &amp; Staples</option>
+                  <option value="Vegetables">Vegetables &amp; Fruits</option>
                   <option value="Finished Goods">Finished Goods</option>
                   <option value="Raw Materials">Raw Materials</option>
                 </select>
               </div>
 
               <fieldset class="group-box">
-                <legend class="group-title">Main Unit Details</legend>
+                <legend class="group-title">Unit &amp; Stock Details</legend>
                 <div class="field-row">
-                  <label class="field-label">Unit</label>
+                  <label class="field-label">Unit of Measure</label>
                   <select id="item-unit" class="select-box">
-                    <option value="Pcs.">Pcs.</option>
-                    <option value="Kgs.">Kgs.</option>
-                    <option value="Nos.">Nos.</option>
-                    <option value="Box">Box</option>
-                    <option value="Mtr.">Mtr.</option>
+                    <option value="Pcs.">Pcs. (Pieces)</option>
+                    <option value="Kgs.">Kgs. (Kilograms)</option>
+                    <option value="Nos.">Nos. (Numbers)</option>
+                    <option value="Box">Box / Pack</option>
+                    <option value="Mtr.">Mtr. (Meters)</option>
+                    <option value="Ltr.">Ltr. (Litres)</option>
                   </select>
                 </div>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">Op. Stock (Qty)</label><input type="number" step="0.01" id="item-op-qty" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Op. Stock (Val)</label><input type="number" step="0.01" id="item-op-val" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">Opening Stock (Qty)</label><input type="number" step="0.01" id="item-op-qty" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">Stock Value (₹)</label><input type="number" step="0.01" id="item-op-val" value="0.00" /></div>
                 </div>
               </fieldset>
 
               <div class="field-row">
-                <label class="field-label">Tax Category</label>
+                <label class="field-label">GST Tax Category</label>
                 <select id="item-tax-cat" class="select-box">
-                  <option value="GST 18%">GST 18%</option>
-                  <option value="GST 12%">GST 12%</option>
-                  <option value="GST 5%">GST 5%</option>
-                  <option value="GST 28%">GST 28%</option>
-                  <option value="GST 0%">GST 0% / Exempt</option>
+                  <option value="GST 18%">GST 18% (Standard Retail)</option>
+                  <option value="GST 12%">GST 12% (Food / Essentials)</option>
+                  <option value="GST 5%">GST 5% (Basic Grocery)</option>
+                  <option value="GST 28%">GST 28% (Luxury / Aerated)</option>
+                  <option value="GST 0%">GST 0% / Tax Exempt</option>
                 </select>
               </div>
 
               <div class="field-row with-btn">
                 <label class="field-label">HSN/SAC Code</label>
-                <input type="text" id="item-hsn" placeholder="e.g. 8471" />
+                <input type="text" id="item-hsn" placeholder="e.g. 1905" />
                 <button type="button" class="btn-sub-action">Validate</button>
               </div>
 
               <fieldset class="group-box">
-                <legend class="group-title">Item Price Info</legend>
+                <legend class="group-title">Pricing Information (₹)</legend>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">Sales Price</label><input type="number" step="0.01" id="item-sales-price" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Purc. Price</label><input type="number" step="0.01" id="item-purc-price" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">Selling Price (₹) *</label><input type="number" step="0.01" id="item-sales-price" value="0.00" style="font-weight: 700; color: #166534;" /></div>
+                  <div class="split-col"><label class="field-label">Purchase Cost (₹)</label><input type="number" step="0.01" id="item-purc-price" value="0.00" /></div>
                 </div>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">M.R.P.</label><input type="number" step="0.01" id="item-mrp" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Min. Sales</label><input type="number" step="0.01" id="item-min-sales-price" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">M.R.P. (₹)</label><input type="number" step="0.01" id="item-mrp" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">Min. Selling Price (₹)</label><input type="number" step="0.01" id="item-min-sales-price" value="0.00" /></div>
                 </div>
               </fieldset>
             </div>
 
             <div class="master-panel mid-panel">
               <fieldset class="group-box">
-                <legend class="group-title">Discount & Markup Det.</legend>
+                <legend class="group-title">Discounts &amp; Margin</legend>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">Sale Discount</label><input type="number" step="0.01" id="item-sale-disc" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Purc. Discount</label><input type="number" step="0.01" id="item-purc-disc" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">Sale Discount (%)</label><input type="number" step="0.01" id="item-sale-disc" value="0.00" /></div>
+                  <div class="split-col"><label class="field-label">Purc. Discount (%)</label><input type="number" step="0.01" id="item-purc-disc" value="0.00" /></div>
                 </div>
               </fieldset>
 
               <fieldset class="group-box">
-                <legend class="group-title">Item Description</legend>
-                <textarea id="item-desc" class="textarea-desc" placeholder="Product specification, dimensions..."></textarea>
+                <legend class="group-title">Product Description</legend>
+                <textarea id="item-desc" class="textarea-desc" placeholder="Brand, flavour, weight, specifications..."></textarea>
               </fieldset>
             </div>
 
             <div class="master-panel right-panel">
               <fieldset class="group-box extra-info-box">
-                <legend class="group-title">Extra Info.</legend>
-                <textarea id="item-extra-info" class="textarea-extra" placeholder="Vendor remarks or notes..."></textarea>
+                <legend class="group-title">Barcode &amp; Stock Notes</legend>
+                <textarea id="item-extra-info" class="textarea-extra" placeholder="Supplier notes, shelf rack location, batch notes..."></textarea>
               </fieldset>
             </div>
           </div>
 
           <div class="master-bottom-bar">
             <div class="bar-left-buttons">
-              <button type="button" class="btn-classic">Notes</button>
-              <button type="button" class="btn-classic">Opt. Fields</button>
+              <button type="button" class="btn-classic" id="btn-item-new-clear">+ New Product</button>
+              <button type="button" class="btn-classic" id="btn-item-view-list-bottom">View Products List (F5)</button>
             </div>
             <div class="bar-right-buttons">
-              <button type="button" class="btn-classic primary-action-btn" id="btn-item-save">Save (F2)</button>
-              <button type="button" class="btn-classic" id="btn-item-quit">Quit (Esc)</button>
+              <button type="button" class="btn-classic primary-action-btn" id="btn-item-save">Save Product (F2)</button>
+              <button type="button" class="btn-classic" id="btn-item-quit">Cancel / Close (Esc)</button>
             </div>
           </div>
         </form>
 
         <div class="screen-hotkey-bar">
-          <span>[ Esc - Quit ]</span>
-          <span>[ F2 - Done / Save ]</span>
+          <span>[ Esc - Close ]</span>
+          <span>[ F2 - Save Product ]</span>
+          <span>[ F5 - Products List ]</span>
         </div>
       </section>
 
@@ -828,7 +839,7 @@
             
             <!-- Items Grid Table -->
             <div class="voucher-grid-panel">
-              <div class="vch-table-wrapper">
+              <div class="vch-table-wrapper" style="position: relative;">
                 <table class="vch-grid-table" id="vch-items-table">
                   <thead>
                     <tr>
@@ -844,6 +855,7 @@
                     <!-- 11 rows rendered dynamically -->
                   </tbody>
                 </table>
+                <div id="vch-item-autocomplete-popup" class="vch-autocomplete-popup" style="display: none;"></div>
               </div>
 
               <!-- Goods Total Sub-bar -->
@@ -859,7 +871,10 @@
                 <div class="tax-summary-box">
                   <div class="tax-summary-header">
                     <span>Tax Summary</span>
-                    <button type="button" class="btn-sub-action" id="btn-apply-tax">Apply Tax (F4)</button>
+                    <div style="display: flex; gap: 4px;">
+                      <button type="button" class="btn-sub-action" id="btn-vch-search-products" title="Search Products (F1)">🔍 Search Products (F1)</button>
+                      <button type="button" class="btn-sub-action" id="btn-apply-tax">Apply Tax (F4)</button>
+                    </div>
                   </div>
                   <table class="summary-mini-table">
                     <thead>
@@ -1001,7 +1016,7 @@
         <div class="pos-workspace">
           <!-- Top Barcode & Quick Action Bar -->
           <div class="pos-scan-bar">
-            <div class="barcode-input-container">
+            <div class="barcode-input-container" style="position: relative;">
               <span class="barcode-icon">🔍</span>
               <input 
                 type="text" 
@@ -1010,6 +1025,7 @@
                 placeholder="[ SCAN BARCODE OR TYPE ITEM NAME / F1 SEARCH ]" 
                 autocomplete="off" 
               />
+              <div id="pos-barcode-suggestions" class="pos-suggestions-dropdown" style="display: none;"></div>
             </div>
             <button type="button" class="btn-pos-action" id="btn-pos-search-item" title="Manual Search (F1)">Search (F1)</button>
             <button type="button" class="btn-pos-action pos-mobile-btn" id="btn-pos-mobile-scanner" title="Connect Mobile Phone as Wi-Fi Barcode Scanner">📱 Mobile Scanner</button>
@@ -1183,6 +1199,75 @@
             <div class="bar-right-buttons">
               <button type="button" class="btn-classic primary-action-btn" id="btn-new-bill-from-list">+ New Sales Bill</button>
               <button type="button" class="btn-classic" id="btn-close-sales-list">Close (Esc)</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 7: PRODUCTS & INVENTORY MASTER LIST
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-items-list">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-items-list-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">📦 Products &amp; Inventory Catalogue</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[F1 Search | F5 Refresh | Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-items-list-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body items-list-body">
+          <!-- Top Filter Bar -->
+          <div class="items-list-filter-bar">
+            <div class="items-search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="items-list-search" class="items-search-input" placeholder="Search product by name, barcode, SKU code, or category..." autocomplete="off" />
+              <button type="button" class="btn-clear-search" id="btn-clear-item-search" title="Clear search" style="display: none;">&times;</button>
+            </div>
+            <select id="items-list-group-filter" class="select-box filter-select">
+              <option value="">All Categories</option>
+            </select>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-items-list-add">+ Add New Product</button>
+            <button type="button" class="btn-classic" id="btn-items-list-refresh">🔄 Refresh</button>
+          </div>
+
+          <!-- Product Table Container -->
+          <div class="table-container full-height" style="height: calc(100% - 95px);">
+            <table class="companies-table items-master-table" id="items-master-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 28%;">Product Name</th>
+                  <th style="width: 16%;">Barcode / SKU</th>
+                  <th style="width: 14%;">Category / Group</th>
+                  <th style="width: 11%; text-align: right;">Selling Price (₹)</th>
+                  <th style="width: 7%; text-align: center;">Unit</th>
+                  <th style="width: 9%; text-align: right;">Stock Qty</th>
+                  <th style="width: 9%; text-align: center;">Tax %</th>
+                  <th style="width: 120px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="items-master-tbody">
+                <!-- Dynamically populated from backend -->
+              </tbody>
+            </table>
+            <div id="items-list-empty-msg" class="empty-table-msg" style="display: none;">
+              No products found. Click "+ Add New Product" to create one.
+            </div>
+          </div>
+
+          <!-- Bottom Summary & Action Bar -->
+          <div class="master-bottom-bar">
+            <span id="items-list-count" style="font-size: 12px; font-weight: 700; color: #1e40af;">Total Products: 0</span>
+            <div class="bar-right-buttons">
+              <button type="button" class="btn-classic primary-action-btn" id="btn-items-list-edit-selected" disabled>✏️ Edit Selected Product</button>
+              <button type="button" class="btn-classic" id="btn-items-list-add-bottom">+ Add New Product</button>
+              <button type="button" class="btn-classic" id="btn-items-list-close-bottom">Close (Esc)</button>
             </div>
           </div>
         </div>
@@ -1682,6 +1767,64 @@
 
           <div style="display: flex; justify-content: flex-end; gap: 8px;">
             <button type="button" class="btn-action primary-btn" id="btn-ack-medical-verification">Acknowledge</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: PRODUCT SEARCH & INSTANT SELECTION (F1)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-pos-item-search" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box pos-product-search-modal" style="width: 780px; max-width: 95vw;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">🔍</span>
+            <h2>Select Product from Catalogue (F1)</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-pos-item-search">&times;</button>
+        </div>
+        <div style="padding: 14px 16px;">
+          <div style="margin-bottom: 12px;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input 
+                type="text" 
+                id="pos-modal-search-input" 
+                class="items-search-input" 
+                placeholder="Type product name, barcode, SKU code or category..." 
+                autocomplete="off" 
+                style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px;"
+              />
+              <button type="button" class="btn-classic" id="btn-modal-search-clear">Clear</button>
+            </div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
+              💡 <em>Use ↑ / ↓ arrow keys to highlight, [Enter] or click a product to select, [Esc] to close.</em>
+            </div>
+          </div>
+
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="pos-search-modal-table">
+              <thead>
+                <tr>
+                  <th style="width: 34%;">Product Name</th>
+                  <th style="width: 20%;">Barcode / SKU</th>
+                  <th style="width: 16%;">Category</th>
+                  <th style="width: 14%; text-align: right;">Price (₹)</th>
+                  <th style="width: 16%; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="pos-search-modal-tbody">
+                <!-- Dynamically populated from backend -->
+              </tbody>
+            </table>
+            <div id="pos-search-modal-empty" class="empty-table-msg" style="display: none; padding: 24px; text-align: center; color: #64748b;">
+              No products found matching your search.
+            </div>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 12px; padding: 6px 0 0 0; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+            <span id="pos-modal-search-count" style="font-size: 12px; font-weight: 700; color: #1e40af;">Showing 0 products</span>
+            <button type="button" class="btn-classic" id="btn-cancel-pos-item-search">Close (Esc)</button>
           </div>
         </div>
       </div>

@@ -12,6 +12,16 @@ class CatalogueService:
     def __init__(self, db: Optional[DatabaseManager] = None):
         self.db = db or db_manager
 
+    def _resolve_company_id(self, company_id: str) -> str:
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001)."""
+        if not company_id:
+            return company_id
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (company_id, str(company_id).upper()))
+            c_row = cursor.fetchone()
+            return c_row["id"] if c_row else company_id
+
     def find_by_barcode(self, company_id: str, barcode: str) -> Optional[Dict[str, Any]]:
         """
         Looks up a product by exact barcode in the active company.
@@ -21,12 +31,10 @@ class CatalogueService:
         if not code_str:
             return None
 
+        actual_company_id = self._resolve_company_id(company_id)
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            # Resolve actual company UUID if code was supplied
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (company_id, str(company_id).upper()))
-            c_row = cursor.fetchone()
-            actual_company_id = c_row["id"] if c_row else company_id
 
             cursor.execute("""
                 SELECT i.*, b.barcode as matched_barcode,
@@ -72,8 +80,9 @@ class CatalogueService:
 
         return None
 
-    def search_items(self, company_id: str, query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
-        """Search items by name, alias, HSN, or group."""
+    def search_items(self, company_id: str, query: str = "", limit: int = 100) -> List[Dict[str, Any]]:
+        """Search items by name, alias, HSN, group, or barcode."""
+        actual_company_id = self._resolve_company_id(company_id)
         q = f"%{query.strip().upper()}%"
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -85,74 +94,128 @@ class CatalogueService:
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
                 LEFT JOIN stock_balances sb ON sb.branch_id = br.id AND sb.item_id = i.id
                 LEFT JOIN item_barcodes b ON b.item_id = i.id
-                WHERE i.company_id = ? AND (
+                WHERE i.company_id = ? AND i.is_active = 1 AND (
                     UPPER(i.name) LIKE ? OR 
                     UPPER(i.alias) LIKE ? OR 
                     UPPER(i.hsn) LIKE ? OR
-                    UPPER(i.item_group) LIKE ?
+                    UPPER(i.item_group) LIKE ? OR
+                    EXISTS (
+                        SELECT 1 FROM item_barcodes ib 
+                        WHERE ib.item_id = i.id AND UPPER(ib.barcode) LIKE ?
+                    )
                 )
                 GROUP BY i.id
                 ORDER BY i.name ASC
                 LIMIT ?;
-            """, (company_id, q, q, q, q, limit))
+            """, (actual_company_id, q, q, q, q, q, limit))
             return [dict(r) for r in cursor.fetchall()]
+
+    def get_item_by_id(self, company_id: str, item_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve full item details by item ID."""
+        actual_company_id = self._resolve_company_id(company_id)
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT i.*, 
+                       COALESCE(sb.current_qty, 0.0) as current_stock,
+                       GROUP_CONCAT(b.barcode, ', ') as barcodes
+                FROM items i
+                LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
+                LEFT JOIN stock_balances sb ON sb.branch_id = br.id AND sb.item_id = i.id
+                LEFT JOIN item_barcodes b ON b.item_id = i.id
+                WHERE i.company_id = ? AND i.id = ?
+                GROUP BY i.id
+                LIMIT 1;
+            """, (actual_company_id, item_id))
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def save_item(self, company_id: str, item_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create or update an item master record and its barcode mappings."""
-        name = item_data.get("name", "").strip().upper()
+        name = (item_data.get("name") or "").strip().upper()
         if not name:
             raise ValueError("Item name cannot be empty.")
 
+        actual_company_id = self._resolve_company_id(company_id)
         item_id = item_data.get("id") or str(uuid.uuid4())
-        alias = item_data.get("alias", "").strip()
-        print_name = item_data.get("print_name") or name
-        group = item_data.get("item_group", "General")
-        unit = item_data.get("unit", "Pcs.")
-        op_qty = float(item_data.get("op_stock_qty") or 0.0)
-        op_val = float(item_data.get("op_stock_val") or 0.0)
-        tax_cat = item_data.get("tax_category", "GST 18%")
-        hsn = item_data.get("hsn", "").strip()
-        sales_price = float(item_data.get("sales_price") or 0.0)
-        purc_price = float(item_data.get("purc_price") or 0.0)
+        alias = (item_data.get("alias") or "").strip()
+        print_name = item_data.get("print_name") or item_data.get("printName") or name
+        group = item_data.get("item_group") or item_data.get("group") or "General"
+        unit = item_data.get("unit") or "Pcs."
+        op_qty = float(item_data.get("op_stock_qty") or item_data.get("opStockQty") or 0.0)
+        op_val = float(item_data.get("op_stock_val") or item_data.get("opStockVal") or 0.0)
+        tax_cat = item_data.get("tax_category") or item_data.get("taxCategory") or "GST 18%"
+        hsn = (item_data.get("hsn") or "").strip()
+        sales_price = float(item_data.get("sales_price") or item_data.get("salesPrice") or 0.0)
+        purc_price = float(item_data.get("purc_price") or item_data.get("purcPrice") or 0.0)
         mrp = float(item_data.get("mrp") or 0.0)
-        min_price = float(item_data.get("min_sales_price") or 0.0)
-        desc = item_data.get("description", "").strip()
+        min_price = float(item_data.get("min_sales_price") or item_data.get("minSalesPrice") or 0.0)
+        desc = (item_data.get("description") or "").strip()
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             # Check default branch
-            cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (company_id,))
+            cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (actual_company_id,))
             branch_row = cursor.fetchone()
             branch_id = branch_row["id"] if branch_row else None
 
-            # Upsert item
-            cursor.execute("""
-                INSERT INTO items (
-                    id, company_id, name, alias, print_name, item_group,
-                    unit, op_stock_qty, op_stock_val, tax_category, hsn,
-                    sales_price, purc_price, mrp, min_sales_price, description
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(company_id, name) DO UPDATE SET
-                    alias = excluded.alias,
-                    print_name = excluded.print_name,
-                    item_group = excluded.item_group,
-                    unit = excluded.unit,
-                    tax_category = excluded.tax_category,
-                    hsn = excluded.hsn,
-                    sales_price = excluded.sales_price,
-                    purc_price = excluded.purc_price,
-                    mrp = excluded.mrp,
-                    min_sales_price = excluded.min_sales_price,
-                    description = excluded.description;
-            """, (
-                item_id, company_id, name, alias, print_name, group,
-                unit, op_qty, op_val, tax_cat, hsn,
-                sales_price, purc_price, mrp, min_price, desc
-            ))
+            # Check if item exists by item_id
+            cursor.execute("SELECT id FROM items WHERE company_id = ? AND id = ?;", (actual_company_id, item_id))
+            existing_by_id = cursor.fetchone()
 
-            # Query the actual item_id in case it was an existing record
-            cursor.execute("SELECT id FROM items WHERE company_id = ? AND name = ?;", (company_id, name))
-            actual_id = cursor.fetchone()["id"]
+            if existing_by_id:
+                # Update existing record
+                cursor.execute("""
+                    UPDATE items SET
+                        name = ?,
+                        alias = ?,
+                        print_name = ?,
+                        item_group = ?,
+                        unit = ?,
+                        tax_category = ?,
+                        hsn = ?,
+                        sales_price = ?,
+                        purc_price = ?,
+                        mrp = ?,
+                        min_sales_price = ?,
+                        description = ?
+                    WHERE company_id = ? AND id = ?;
+                """, (
+                    name, alias, print_name, group,
+                    unit, tax_cat, hsn,
+                    sales_price, purc_price, mrp, min_price, desc,
+                    actual_company_id, item_id
+                ))
+                actual_id = item_id
+            else:
+                # Upsert item by company_id and name
+                cursor.execute("""
+                    INSERT INTO items (
+                        id, company_id, name, alias, print_name, item_group,
+                        unit, op_stock_qty, op_stock_val, tax_category, hsn,
+                        sales_price, purc_price, mrp, min_sales_price, description
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(company_id, name) DO UPDATE SET
+                        alias = excluded.alias,
+                        print_name = excluded.print_name,
+                        item_group = excluded.item_group,
+                        unit = excluded.unit,
+                        tax_category = excluded.tax_category,
+                        hsn = excluded.hsn,
+                        sales_price = excluded.sales_price,
+                        purc_price = excluded.purc_price,
+                        mrp = excluded.mrp,
+                        min_sales_price = excluded.min_sales_price,
+                        description = excluded.description;
+                """, (
+                    item_id, actual_company_id, name, alias, print_name, group,
+                    unit, op_qty, op_val, tax_cat, hsn,
+                    sales_price, purc_price, mrp, min_price, desc
+                ))
+
+                # Query actual ID
+                cursor.execute("SELECT id FROM items WHERE company_id = ? AND name = ?;", (actual_company_id, name))
+                actual_id = cursor.fetchone()["id"]
 
             # Manage primary barcode if supplied in alias or barcodes field
             barcodes = item_data.get("barcodes") or ([alias] if alias else [])
@@ -166,21 +229,29 @@ class CatalogueService:
                         INSERT INTO item_barcodes (id, item_id, company_id, barcode, is_primary)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(company_id, barcode) DO UPDATE SET item_id = excluded.item_id;
-                    """, (str(uuid.uuid4()), actual_id, company_id, b_str, 1 if idx == 0 else 0))
+                    """, (str(uuid.uuid4()), actual_id, actual_company_id, b_str, 1 if idx == 0 else 0))
 
             # Ensure stock balance entry exists
             if branch_id:
                 cursor.execute("""
                     INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                     VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(branch_id, item_id) DO NOTHING;
-                """, (str(uuid.uuid4()), company_id, branch_id, actual_id, op_qty))
+                    ON CONFLICT(branch_id, item_id) DO UPDATE SET
+                        current_qty = CASE WHEN current_qty = 0 THEN ? ELSE current_qty END;
+                """, (str(uuid.uuid4()), actual_company_id, branch_id, actual_id, op_qty, op_qty))
 
             conn.commit()
 
-        logger.info(f"Item {name} saved for company {company_id}.")
-        return {"id": actual_id, "name": name, "sales_price": sales_price, "unit": unit}
+        logger.info(f"Item {name} (ID: {actual_id}) saved for company {actual_company_id}.")
+        return {
+            "id": actual_id,
+            "name": name,
+            "alias": alias,
+            "sales_price": sales_price,
+            "unit": unit,
+            "tax_category": tax_cat,
+            "item_group": group
+        }
 
 
 catalogue_service = CatalogueService()
-

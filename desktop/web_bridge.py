@@ -125,7 +125,25 @@ class BackendBridge(QObject):
     def searchItems(self, company_id: str, query: str) -> str:
         try:
             items = catalogue_service.search_items(company_id, query)
+            # Serialize datetime objects to ISO strings
+            for it in items:
+                for k, v in it.items():
+                    if hasattr(v, "isoformat"):
+                        it[k] = v.isoformat()
             return json.dumps({"success": True, "data": items})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getItemById(self, company_id: str, item_id: str) -> str:
+        try:
+            item = catalogue_service.get_item_by_id(company_id, item_id)
+            if item:
+                for k, v in item.items():
+                    if hasattr(v, "isoformat"):
+                        item[k] = v.isoformat()
+                return json.dumps({"success": True, "data": item})
+            return json.dumps({"success": False, "error": f"Item not found: {item_id}"})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -134,6 +152,9 @@ class BackendBridge(QObject):
         try:
             item = catalogue_service.find_by_barcode(company_id, barcode)
             if item:
+                for k, v in item.items():
+                    if hasattr(v, "isoformat"):
+                        item[k] = v.isoformat()
                 return json.dumps({"success": True, "data": item})
             return json.dumps({"success": False, "error": f"Unknown barcode: {barcode}"})
         except Exception as e:
