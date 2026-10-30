@@ -12,15 +12,30 @@ class CatalogueService:
     def __init__(self, db: Optional[DatabaseManager] = None):
         self.db = db or db_manager
 
-    def _resolve_company_id(self, company_id: str) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001)."""
-        if not company_id:
-            return company_id
+    def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company."""
+        cid = str(company_id or "").strip()
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (company_id, str(company_id).upper()))
-            c_row = cursor.fetchone()
-            return c_row["id"] if c_row else company_id
+            if cid:
+                cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+                c_row = cursor.fetchone()
+                if c_row:
+                    return c_row["id"]
+            # Fallback to default/first company
+            cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
+            c_default = cursor.fetchone()
+            return c_default["id"] if c_default else cid
+
+    def _compute_is_verified(self, res: Dict[str, Any]) -> int:
+        """Determines if product is verified and safe for checkout."""
+        desc = (res.get("description") or "").upper()
+        name = (res.get("name") or "").upper()
+        price = float(res.get("sales_price") or 0.0)
+        barcodes = str(res.get("matched_barcode") or res.get("alias") or res.get("barcodes") or "").upper()
+        if "UNVERIFIED" in desc or "UNVERIFIED" in name or price <= 0 or "8909263004690" in barcodes:
+            return 0
+        return 1
 
     def find_by_barcode(self, company_id: str, barcode: str) -> Optional[Dict[str, Any]]:
         """
@@ -49,12 +64,7 @@ class CatalogueService:
             row = cursor.fetchone()
             if row:
                 res = dict(row)
-                desc = (res.get("description") or "").upper()
-                name = (res.get("name") or "").upper()
-                if "UNVERIFIED" in desc or "UNVERIFIED" in name or float(res.get("sales_price") or 0) <= 0:
-                    res["is_verified"] = 0
-                else:
-                    res["is_verified"] = 1
+                res["is_verified"] = self._compute_is_verified(res)
                 return res
 
             # Fallback: Check if barcode matches item alias or name directly
@@ -70,12 +80,7 @@ class CatalogueService:
             row2 = cursor.fetchone()
             if row2:
                 res2 = dict(row2)
-                desc2 = (res2.get("description") or "").upper()
-                name2 = (res2.get("name") or "").upper()
-                if "UNVERIFIED" in desc2 or "UNVERIFIED" in name2 or float(res2.get("sales_price") or 0) <= 0:
-                    res2["is_verified"] = 0
-                else:
-                    res2["is_verified"] = 1
+                res2["is_verified"] = self._compute_is_verified(res2)
                 return res2
 
         return None
@@ -108,7 +113,12 @@ class CatalogueService:
                 ORDER BY i.name ASC
                 LIMIT ?;
             """, (actual_company_id, q, q, q, q, q, limit))
-            return [dict(r) for r in cursor.fetchall()]
+            items = []
+            for r in cursor.fetchall():
+                it = dict(r)
+                it["is_verified"] = self._compute_is_verified(it)
+                items.append(it)
+            return items
 
     def get_item_by_id(self, company_id: str, item_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve full item details by item ID."""
@@ -128,7 +138,11 @@ class CatalogueService:
                 LIMIT 1;
             """, (actual_company_id, item_id))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if row:
+                res = dict(row)
+                res["is_verified"] = self._compute_is_verified(res)
+                return res
+            return None
 
     def save_item(self, company_id: str, item_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create or update an item master record and its barcode mappings."""

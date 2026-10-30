@@ -2054,34 +2054,40 @@ function updatePosTotals() {
 }
 
 // POS Barcode Scanner Handler
-function handleBarcodeScan(barcodeStr) {
+function handleBarcodeScan(barcodeStr, isSimulated = false) {
   const code = (barcodeStr || "").trim();
   if (!code) return;
 
-  if (window.backend && activeCompany) {
-    window.backend.findByBarcode(activeCompany.id, code, (resp) => {
+  const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+
+  if (window.backend && window.backend.findByBarcode) {
+    window.backend.findByBarcode(compId, code, (resp) => {
       try {
         const res = JSON.parse(resp);
         if (res.success && res.data) {
           addItemToPosCart(res.data);
-          showPosFeedback(`✓ Scanned: ${res.data.name}`, "success");
+          const scanType = isSimulated ? "Simulated scan" : "Scan received";
+          const priceStr = parseFloat(res.data.sales_price || 0).toFixed(2);
+          showPosFeedback(`${isSimulated ? '🧪 Simulated: ' : '✓ Scanned: '}${res.data.name}`, "success");
+          appendMobileScannerLog(`${scanType}: ${code} -> Added ${res.data.name} (₹${priceStr})`);
           if (res.data.is_verified === 0 || code === "8909263004690" || parseFloat(res.data.sales_price || 0) <= 0) {
             showMedicalVerificationModal(res.data);
           }
         } else {
           showPosFeedback(`⚠️ Barcode "${code}" not found. Press F1 to search product.`, "error");
           showNotification(`Barcode "${code}" not registered.`);
+          appendMobileScannerLog(`Unknown barcode: ${code}`);
         }
       } catch (e) {
-        searchLocalItemsForBarcode(code);
+        searchLocalItemsForBarcode(code, isSimulated);
       }
     });
   } else {
-    searchLocalItemsForBarcode(code);
+    searchLocalItemsForBarcode(code, isSimulated);
   }
 }
 
-function searchLocalItemsForBarcode(code) {
+function searchLocalItemsForBarcode(code, isSimulated = false) {
   const codeUpper = code.toUpperCase();
   let savedItems = [];
   if (activeCompany) {
@@ -2104,11 +2110,13 @@ function searchLocalItemsForBarcode(code) {
       matched_barcode: code
     };
     addItemToPosCart(itemData);
+    appendMobileScannerLog(`${isSimulated ? 'Simulated scan' : 'Scan received'}: ${code} -> Added ${itemData.name} (₹${itemData.sales_price.toFixed(2)})`);
     if (isUnverified) {
       showMedicalVerificationModal(itemData);
     }
   } else {
     showNotification(`⚠️ Item "${code}" not registered. Press F1 to search.`);
+    appendMobileScannerLog(`Unknown barcode: ${code}`);
   }
 }
 
@@ -2438,37 +2446,31 @@ if (typeof QWebChannel !== "undefined" && window.qt && window.qt.webChannelTrans
     if (window.backend.mobile_scan_signal) {
       window.backend.mobile_scan_signal.connect(function(barcode, deviceName) {
         console.log("Mobile scan signal received:", barcode, deviceName);
-        appendMobileScannerLog(`Scan received: ${barcode} (${deviceName || 'Mobile Phone'})`);
         showPosFeedback(`📱 Mobile Scan: ${barcode}`, "success");
-        handleBarcodeScan(barcode);
+        handleBarcodeScan(barcode, false);
       });
     }
 
     if (window.backend.mobile_status_signal) {
       window.backend.mobile_status_signal.connect(function(status, details) {
         console.log("Mobile scanner status update:", status, details);
-        appendMobileScannerLog(`Status: ${status} [${details}]`);
-        const statusText = document.getElementById("mobile-scanner-status-text");
-        const statusPill = document.getElementById("mobile-scanner-pill");
         if (status === "CONNECTED") {
-          if (statusText) {
-            statusText.textContent = `● Connected: ${details}`;
-            statusText.style.color = "#16a34a";
-          }
-          if (statusPill) {
-            statusPill.textContent = "PHONE CONNECTED";
-            statusPill.className = "mobile-status-pill connected";
-          }
+          updateMobileScannerStatusUI("CONNECTED", details, true, details, "Active");
+          appendMobileScannerLog(`Phone connected: ${details}`);
           showNotification(`📱 Mobile scanner connected: ${details}`);
-        } else if (status === "DISCONNECTED") {
-          if (statusText) {
-            statusText.textContent = `● Ready / Waiting for Phone Connection`;
-            statusText.style.color = "#0284c7";
-          }
-          if (statusPill) {
-            statusPill.textContent = "LAN READY";
-            statusPill.className = "mobile-status-pill waiting";
-          }
+        } else if (status === "DISCONNECTED" || status === "HEARTBEAT_TIMEOUT") {
+          updateMobileScannerStatusUI("DISCONNECTED", details, false, "", "");
+          appendMobileScannerLog(`Phone disconnected: ${details}`);
+          showNotification(`📱 Mobile scanner disconnected`);
+        } else if (status === "ERROR") {
+          updateMobileScannerStatusUI("ERROR", details, false, "", "");
+          appendMobileScannerLog(`Scanner error: ${details}`);
+        } else if (status === "PAIRING") {
+          appendMobileScannerLog(`Pairing in progress: ${details}`);
+        } else {
+          // SERVER_WAITING
+          updateMobileScannerStatusUI("WAITING", details, false, "", "");
+          appendMobileScannerLog(`Service active: ${details}`);
         }
       });
     }
@@ -2783,8 +2785,7 @@ if (btnPosBarNewSale) {
 }
 if (btnPosBarSearch) {
   btnPosBarSearch.addEventListener("click", () => {
-    const q = prompt("Enter product name, SKU or barcode to search:");
-    if (q) handleBarcodeScan(q);
+    openProductSearchModal("POS");
   });
 }
 if (btnPosBarHold) {
@@ -2832,15 +2833,7 @@ if (btnPosBarReprint) {
   });
 }
 
-if (posBarcodeInput) {
-  posBarcodeInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleBarcodeScan(posBarcodeInput.value.trim());
-      posBarcodeInput.value = "";
-    }
-  });
-}
+
 
 if (btnPosClear) {
   btnPosClear.addEventListener("click", () => {
@@ -3034,23 +3027,35 @@ function setupPosBarcodeAutocomplete() {
   });
 
   posBarcodeInput.addEventListener("keydown", (e) => {
-    if (posBarcodeSuggestions.style.display === "none" || currentPosSuggestions.length === 0) {
-      return;
-    }
+    const isSuggestionsVisible = posBarcodeSuggestions.style.display !== "none" && currentPosSuggestions.length > 0;
 
     if (e.key === "ArrowDown") {
-      e.preventDefault();
-      activePosSuggestionIndex = (activePosSuggestionIndex + 1) % currentPosSuggestions.length;
-      highlightPosSuggestion(activePosSuggestionIndex);
+      if (isSuggestionsVisible) {
+        e.preventDefault();
+        activePosSuggestionIndex = (activePosSuggestionIndex + 1) % currentPosSuggestions.length;
+        highlightPosSuggestion(activePosSuggestionIndex);
+      }
     } else if (e.key === "ArrowUp") {
+      if (isSuggestionsVisible) {
+        e.preventDefault();
+        activePosSuggestionIndex = (activePosSuggestionIndex - 1 + currentPosSuggestions.length) % currentPosSuggestions.length;
+        highlightPosSuggestion(activePosSuggestionIndex);
+      }
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      activePosSuggestionIndex = (activePosSuggestionIndex - 1 + currentPosSuggestions.length) % currentPosSuggestions.length;
-      highlightPosSuggestion(activePosSuggestionIndex);
-    } else if (e.key === "Enter" && activePosSuggestionIndex >= 0) {
-      e.preventDefault();
-      e.stopPropagation();
-      const selected = currentPosSuggestions[activePosSuggestionIndex];
-      selectPosSuggestionItem(selected);
+      if (isSuggestionsVisible && activePosSuggestionIndex >= 0) {
+        const selected = currentPosSuggestions[activePosSuggestionIndex];
+        selectPosSuggestionItem(selected);
+      } else {
+        const val = posBarcodeInput.value.trim();
+        posBarcodeSuggestions.style.display = "none";
+        currentPosSuggestions = [];
+        activePosSuggestionIndex = -1;
+        if (val) {
+          handleBarcodeScan(val, false);
+          posBarcodeInput.value = "";
+        }
+      }
     } else if (e.key === "Escape") {
       posBarcodeSuggestions.style.display = "none";
       currentPosSuggestions = [];
@@ -3428,36 +3433,102 @@ function closeMobileScannerModal() {
   if (modalMobileScanner) modalMobileScanner.style.display = "none";
 }
 
+function updateMobileScannerStatusUI(status, details, isConnected, deviceName, lastHeartbeat) {
+  const statusText = document.getElementById("mobile-scanner-status-text");
+  const statusPill = document.getElementById("mobile-scanner-pill");
+  const toolbarBadge = document.getElementById("pos-scanner-status-indicator");
+  const heartbeatEl = document.getElementById("mobile-scanner-heartbeat-text");
+
+  if (isConnected) {
+    if (statusPill) {
+      statusPill.textContent = "PHONE CONNECTED";
+      statusPill.className = "mobile-status-pill connected";
+    }
+    if (statusText) {
+      statusText.textContent = `● Connected: ${deviceName || "Mobile device"}`;
+      statusText.style.color = "#15803d";
+    }
+    if (toolbarBadge) {
+      toolbarBadge.textContent = "🟢 Connected";
+      toolbarBadge.className = "pos-scanner-badge connected";
+      toolbarBadge.title = `Phone Connected: ${deviceName || "Mobile device"}`;
+    }
+    if (heartbeatEl) {
+      heartbeatEl.textContent = `Last Heartbeat: ${lastHeartbeat || "Active"}`;
+      heartbeatEl.style.display = "block";
+    }
+  } else if (status === "ERROR") {
+    if (statusPill) {
+      statusPill.textContent = "ERROR";
+      statusPill.className = "mobile-status-pill error";
+    }
+    if (statusText) {
+      statusText.textContent = `● ${details || "Connection Error"}`;
+      statusText.style.color = "#dc2626";
+    }
+    if (toolbarBadge) {
+      toolbarBadge.textContent = "🔴 Error";
+      toolbarBadge.className = "pos-scanner-badge error";
+      toolbarBadge.title = details || "Connection Error";
+    }
+    if (heartbeatEl) heartbeatEl.style.display = "none";
+  } else if (status === "DISCONNECTED") {
+    if (statusPill) {
+      statusPill.textContent = "DISCONNECTED";
+      statusPill.className = "mobile-status-pill disconnected";
+    }
+    if (statusText) {
+      statusText.textContent = "● Phone disconnected. Scan QR code to reconnect.";
+      statusText.style.color = "#b45309";
+    }
+    if (toolbarBadge) {
+      toolbarBadge.textContent = "⚪ Disconnected";
+      toolbarBadge.className = "pos-scanner-badge waiting";
+      toolbarBadge.title = "Phone disconnected";
+    }
+    if (heartbeatEl) heartbeatEl.style.display = "none";
+  } else {
+    // Waiting for Phone
+    if (statusPill) {
+      statusPill.textContent = "WAITING FOR PHONE";
+      statusPill.className = "mobile-status-pill waiting";
+    }
+    if (statusText) {
+      statusText.textContent = `● ${details || "Service Running — Waiting for Phone"}`;
+      statusText.style.color = "#475569";
+    }
+    if (toolbarBadge) {
+      toolbarBadge.textContent = "⚪ Ready";
+      toolbarBadge.className = "pos-scanner-badge waiting";
+      toolbarBadge.title = "Scanner Ready — Waiting for Phone";
+    }
+    if (heartbeatEl) heartbeatEl.style.display = "none";
+  }
+}
+
 function renderMobileScannerInfo(info) {
   const urlInput = document.getElementById("mobile-scanner-url-input");
   const qrBox = document.getElementById("mobile-scanner-qr-svg");
-  const statusText = document.getElementById("mobile-scanner-status-text");
-  const statusPill = document.getElementById("mobile-scanner-pill");
   const linkCa = document.getElementById("link-download-ca");
   const linkSetup = document.getElementById("link-open-setup-guide");
 
   if (urlInput) urlInput.value = info.url || "";
   if (linkCa && info.ca_url) linkCa.href = info.ca_url;
   if (linkSetup && info.setup_url) linkSetup.href = info.setup_url;
-  
-  if (statusText) {
-    if (info.connected_device) {
-      statusText.textContent = `● Connected: ${info.connected_device}`;
-      statusText.style.color = "#16a34a";
-    } else {
-      const proto = info.protocol ? info.protocol.toUpperCase() : "HTTPS";
-      statusText.textContent = `● Ready / Listening on ${info.lan_ip || "LAN"}:${info.port || 8990} (${proto})`;
-      statusText.style.color = "#0284c7";
-    }
-  }
 
-  if (statusPill) {
-    if (info.connected_device) {
-      statusPill.textContent = "PHONE CONNECTED";
-      statusPill.className = "mobile-status-pill connected";
+  const isConn = info.client_connected === true;
+  const dev = info.connected_device || "";
+  const st = isConn ? "CONNECTED" : (info.status === "Connection Error" ? "ERROR" : (info.status === "Disconnected" ? "DISCONNECTED" : "WAITING"));
+  const detailStr = isConn ? `Connected: ${dev}` : `Service running on https://${info.lan_ip || "LAN"}:${info.port || 8990} — Scan QR code`;
+  updateMobileScannerStatusUI(st, detailStr, isConn, dev, info.last_heartbeat);
+
+  const logEl = document.getElementById("mobile-scanner-log");
+  if (logEl && logEl.children.length === 0) {
+    appendMobileScannerLog(`Service started on https://${info.lan_ip || "LAN"}:${info.port || 8990}`);
+    if (isConn) {
+      appendMobileScannerLog(`Phone connected: ${dev}`);
     } else {
-      statusPill.textContent = "LAN READY (HTTPS)";
-      statusPill.className = "mobile-status-pill waiting";
+      appendMobileScannerLog("Waiting for phone connection...");
     }
   }
 
@@ -3482,7 +3553,8 @@ function renderMobileScannerInfo(info) {
 function appendMobileScannerLog(msg) {
   const logEl = document.getElementById("mobile-scanner-log");
   if (!logEl) return;
-  const time = new Date().toLocaleTimeString();
+  const now = new Date();
+  const time = now.toTimeString().split(" ")[0]; // HH:MM:SS format
   const line = document.createElement("div");
   line.textContent = `[${time}] ${msg}`;
   logEl.appendChild(line);
@@ -3529,7 +3601,7 @@ if (btnRevokeScannerToken) {
           const res = JSON.parse(resp);
           if (res.success && res.data) {
             renderMobileScannerInfo(res.data);
-            appendMobileScannerLog("Token revoked and regenerated.");
+            appendMobileScannerLog("Pairing token revoked and regenerated.");
             showNotification("Pairing token regenerated. Please scan new QR code.");
           }
         } catch (e) {
@@ -3567,15 +3639,38 @@ if (btnClearScannerLog) {
     if (logEl) logEl.innerHTML = "";
   });
 }
+
+// Demo Product Buttons in Mobile Scanner Modal
 document.querySelectorAll(".btn-demo-test").forEach((btn) => {
   btn.addEventListener("click", (e) => {
     const code = e.currentTarget.getAttribute("data-barcode");
     if (code) {
-      appendMobileScannerLog(`Simulated modal scan: ${code}`);
-      handleBarcodeScan(code);
+      handleBarcodeScan(code, true);
     }
   });
 });
+
+const btnScannerModalTestScan = document.getElementById("btn-scanner-modal-test-scan");
+const inputScannerModalManualBarcode = document.getElementById("scanner-modal-manual-barcode");
+if (btnScannerModalTestScan && inputScannerModalManualBarcode) {
+  btnScannerModalTestScan.addEventListener("click", () => {
+    const code = inputScannerModalManualBarcode.value.trim();
+    if (code) {
+      handleBarcodeScan(code, true);
+      inputScannerModalManualBarcode.value = "";
+    }
+  });
+  inputScannerModalManualBarcode.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const code = inputScannerModalManualBarcode.value.trim();
+      if (code) {
+        handleBarcodeScan(code, true);
+        inputScannerModalManualBarcode.value = "";
+      }
+    }
+  });
+}
 
 if (btnPosSimulateScan) {
   btnPosSimulateScan.addEventListener("click", openSimulateScanModal);
@@ -3591,7 +3686,7 @@ if (formSimulateScan) {
     e.preventDefault();
     const code = simBarcodeInput.value.trim();
     if (code) {
-      handleBarcodeScan(code);
+      handleBarcodeScan(code, true);
       closeSimulateScanModal();
     }
   });
@@ -3600,7 +3695,7 @@ document.querySelectorAll(".btn-sim-quick").forEach((btn) => {
   btn.addEventListener("click", (e) => {
     const code = e.currentTarget.getAttribute("data-code");
     if (code) {
-      handleBarcodeScan(code);
+      handleBarcodeScan(code, true);
       closeSimulateScanModal();
     }
   });

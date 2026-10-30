@@ -22,6 +22,14 @@ from services.cert_service import cert_service
 from core.logging_config import logger
 
 
+# Explicit Truthful Connection States
+STATE_SERVER_WAITING = "Service Running — Waiting for Phone"
+STATE_PAIRING = "Pairing in Progress"
+STATE_CONNECTED = "Phone Connected"
+STATE_DISCONNECTED = "Disconnected"
+STATE_ERROR = "Connection Error"
+
+
 def get_local_lan_ip() -> str:
     """Discovers the computer's primary LAN IP address on the Wi-Fi/Ethernet network."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -132,9 +140,36 @@ class ScannerHTTPHandler(BaseHTTPRequestHandler):
                 "status": svc.status,
                 "is_https": True,
                 "port": svc.port,
-                "connected_device": svc.connected_device,
+                "client_connected": svc.client_connected,
+                "connected_device": svc.connected_device if svc.client_connected else "",
+                "last_heartbeat": svc.get_last_heartbeat_str(),
                 "last_scan": svc.last_scan
             })
+            return
+
+        # 4b. Heartbeat GET endpoint
+        if path == "/api/heartbeat":
+            svc = self.server_instance
+            if not svc:
+                self.send_json_response(500, {"error": "Server not initialized"})
+                return
+            if not svc.current_token or token != svc.current_token:
+                self.send_json_response(401, {"error": "Unauthorized: Invalid token"})
+                return
+            svc.handle_heartbeat(self.client_address[0])
+            self.send_json_response(200, {
+                "success": True,
+                "status": svc.status,
+                "client_connected": svc.client_connected
+            })
+            return
+
+        # 4c. Disconnect GET endpoint (e.g. for Beacon or image ping)
+        if path == "/api/disconnect":
+            svc = self.server_instance
+            if svc and svc.current_token and token == svc.current_token:
+                svc.handle_device_disconnected()
+            self.send_json_response(200, {"success": True, "message": "Disconnected"})
             return
 
         # 5. Serve Mobile Scanner HTML Webpage
@@ -206,6 +241,16 @@ class ScannerHTTPHandler(BaseHTTPRequestHandler):
         token = payload.get("token") or self.headers.get("X-Scanner-Token")
         if not svc.current_token or token != svc.current_token:
             self.send_json_response(401, {"error": "Unauthorized: Invalid or expired pairing token"})
+            return
+
+        # Handle Heartbeat
+        if path == "/api/heartbeat":
+            svc.handle_heartbeat(self.client_address[0])
+            self.send_json_response(200, {
+                "success": True,
+                "status": svc.status,
+                "client_connected": svc.client_connected
+            })
             return
 
         # Handle Pairing Handshake
@@ -324,14 +369,21 @@ class MobileScannerService:
         self.server_thread: Optional[threading.Thread] = None
         self.http_server: Optional[HTTPServer] = None
         self.http_server_thread: Optional[threading.Thread] = None
+        self._watchdog_thread: Optional[threading.Thread] = None
+        self._watchdog_running: bool = False
+        self._lock = threading.Lock()
 
         self.lan_ip: str = "127.0.0.1"
         self.port: int = 8990
         self.http_port: int = 8989
         self.current_token: str = ""
-        self.status: str = "Disconnected"
+        self.status: str = STATE_DISCONNECTED
+        self.client_connected: bool = False
         self.connected_device: str = ""
         self.connected_ip: str = ""
+        self.last_heartbeat_time: float = 0.0
+        self.heartbeat_timeout_seconds: float = 10.0  # Phone heartbeats every 3s, times out after 10s
+
         self.active_company_id: str = "COMP0001"
         self.scan_callback: Optional[Callable[[str, str], None]] = scan_callback
         self.status_callback: Optional[Callable[[str, str], None]] = status_callback
@@ -343,6 +395,60 @@ class MobileScannerService:
         # Auto-register process exit hook
         atexit.register(self.stop_server)
 
+    def _clean_device_name(self, raw_device: str) -> str:
+        """
+        Ensures device identification follows strict truthful rules:
+        Never display generic 'Android Device' unless verified model details exist.
+        Otherwise return 'Mobile device'.
+        """
+        raw = (raw_device or "").strip()
+        if not raw or raw in ["Android Device", "Mobile Scanner", "Mobile Camera Device"]:
+            return "Mobile device"
+
+        import re
+        # Check if Android user agent with specific phone model (e.g. SM-G998B, Pixel 7)
+        m = re.search(r"Android[^;]+;\s*([^;/\)]+)\s*(?:Build/|\))", raw)
+        if m:
+            model = m.group(1).strip()
+            if model and model.upper() not in ["K", "ANDROID"]:
+                return f"{model} (Mobile device)"
+
+        if "iPhone" in raw or "iPad" in raw:
+            return "iPhone (Mobile device)"
+
+        return raw if len(raw) <= 30 else "Mobile device"
+
+    def get_last_heartbeat_str(self) -> str:
+        if self.last_heartbeat_time > 0 and self.client_connected:
+            return time.strftime("%H:%M:%S", time.localtime(self.last_heartbeat_time))
+        return "None"
+
+    def _start_watchdog(self):
+        self._watchdog_running = True
+        if self._watchdog_thread and self._watchdog_thread.is_alive():
+            return
+        self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self._watchdog_thread.start()
+
+    def _watchdog_loop(self):
+        while self._watchdog_running and self.is_running:
+            time.sleep(0.5)
+            with self._lock:
+                if self.client_connected:
+                    elapsed = time.time() - self.last_heartbeat_time
+                    if elapsed > self.heartbeat_timeout_seconds:
+                        logger.info(f"Mobile scanner heartbeat expired ({elapsed:.1f}s > {self.heartbeat_timeout_seconds}s). Marking Disconnected.")
+                        self.client_connected = False
+                        self.status = STATE_SERVER_WAITING
+                        prev_dev = self.connected_device or "Mobile device"
+                        self.connected_device = ""
+                        self.connected_ip = ""
+                        if self.status_callback:
+                            try:
+                                self.status_callback("HEARTBEAT_TIMEOUT", f"Connection lost from {prev_dev} (Heartbeat timed out)")
+                            except Exception as e:
+                                logger.error(f"Error in status_callback on timeout: {e}")
+
     def start_server(self, company_id: str = "COMP0001", port: int = 8990) -> Dict[str, Any]:
         """Starts the local HTTPS scanner server and companion HTTP helper on LAN interfaces."""
         if self.is_running and self.server:
@@ -352,9 +458,11 @@ class MobileScannerService:
         self.active_company_id = company_id
         self.lan_ip = get_local_lan_ip()
         self.current_token = secrets.token_urlsafe(12)
-        self.status = "Waiting for Pairing"
+        self.status = STATE_SERVER_WAITING
+        self.client_connected = False
         self.connected_device = ""
         self.connected_ip = ""
+        self.last_heartbeat_time = 0.0
 
         # 1. Ensure TLS certificates exist with current LAN IP in SAN
         try:
@@ -363,7 +471,7 @@ class MobileScannerService:
             server_key = certs["server_key"]
         except Exception as e:
             logger.error(f"Failed to generate TLS certificates: {e}")
-            self.status = "Error"
+            self.status = STATE_ERROR
             return {"error": f"TLS Certificate Error: {e}"}
 
         # 2. Bind primary HTTPS Server (wrapped with TLS)
@@ -385,7 +493,7 @@ class MobileScannerService:
                 continue
 
         if not self.server:
-            self.status = "Error"
+            self.status = STATE_ERROR
             logger.error(f"Failed to bind Mobile Scanner HTTPS server on ports {port}-{port+9}")
             return {"error": "Failed to bind to local network HTTPS port"}
 
@@ -414,18 +522,22 @@ class MobileScannerService:
             self.http_server_thread = threading.Thread(target=self.http_server.serve_forever, daemon=True)
             self.http_server_thread.start()
 
+        # Start connection watchdog
+        self._start_watchdog()
+
         logger.info(f"Mobile Wi-Fi Scanner HTTPS server started at https://{self.lan_ip}:{self.port}/scanner?token={self.current_token}")
         logger.info(f"Companion HTTP server active at http://{self.lan_ip}:{self.http_port}/ (CA cert: /ca.crt)")
 
         if self.status_callback:
-            self.status_callback("WAITING_PAIRING", f"Listening on https://{self.lan_ip}:{self.port}")
+            self.status_callback("WAITING_PHONE", STATE_SERVER_WAITING)
 
         return self.get_info()
 
     def stop_server(self) -> Dict[str, Any]:
         """Stops the running HTTPS scanner and companion HTTP servers cleanly."""
+        self._watchdog_running = False
         if not self.is_running and not self.server and not self.http_server:
-            return {"success": True, "status": "Disconnected"}
+            return {"success": True, "status": STATE_DISCONNECTED}
 
         if self.server:
             try:
@@ -446,9 +558,11 @@ class MobileScannerService:
         self.http_server = None
         self.http_server_thread = None
         self.is_running = False
-        self.status = "Disconnected"
+        self.status = STATE_DISCONNECTED
+        self.client_connected = False
         self.connected_device = ""
         self.connected_ip = ""
+        self.last_heartbeat_time = 0.0
 
         try:
             logger.info("Mobile Wi-Fi Scanner service stopped.")
@@ -459,37 +573,65 @@ class MobileScannerService:
                 self.status_callback("DISCONNECTED", "Scanner server stopped")
             except Exception:
                 pass
-        return {"success": True, "status": "Disconnected"}
+        return {"success": True, "status": STATE_DISCONNECTED}
 
     def revoke_token(self) -> Dict[str, Any]:
-        """Revokes the current pairing token and generates a fresh one."""
-        self.current_token = secrets.token_urlsafe(12)
-        self.status = "Waiting for Pairing"
-        self.connected_device = ""
-        self.connected_ip = ""
+        """Revokes the current pairing token, resets connection, and generates a fresh one."""
+        with self._lock:
+            self.current_token = secrets.token_urlsafe(12)
+            self.status = STATE_SERVER_WAITING if self.is_running else STATE_DISCONNECTED
+            self.client_connected = False
+            self.connected_device = ""
+            self.connected_ip = ""
+            self.last_heartbeat_time = 0.0
+
         logger.info(f"Revoked pairing token. New token: {self.current_token}")
         if self.status_callback:
-            self.status_callback("WAITING_PAIRING", "Token regenerated. Please pair new device.")
+            self.status_callback("DISCONNECTED", "Token regenerated. Waiting for phone connection.")
         return self.get_info()
 
     def handle_device_paired(self, device_info: str, client_ip: str):
         """Called when a smartphone connects and handshakes successfully."""
-        self.connected_device = device_info
-        self.connected_ip = client_ip
-        self.status = "Connected"
-        logger.info(f"Smartphone connected: {device_info} ({client_ip})")
+        with self._lock:
+            self.connected_device = self._clean_device_name(device_info)
+            self.connected_ip = client_ip
+            self.client_connected = True
+            self.last_heartbeat_time = time.time()
+            self.status = STATE_CONNECTED
+
+        logger.info(f"Smartphone connected: {self.connected_device} ({client_ip})")
         if self.status_callback:
-            self.status_callback("CONNECTED", f"{device_info} ({client_ip})")
+            self.status_callback("CONNECTED", f"{self.connected_device} ({client_ip})")
+
+    def handle_heartbeat(self, client_ip: str = ""):
+        """Handles heartbeat ping from authenticated smartphone client."""
+        with self._lock:
+            now = time.time()
+            self.last_heartbeat_time = now
+            if not self.client_connected:
+                # Phone was marked disconnected or reconnected
+                self.client_connected = True
+                self.status = STATE_CONNECTED
+                if not self.connected_device:
+                    self.connected_device = "Mobile device"
+                if client_ip:
+                    self.connected_ip = client_ip
+                logger.info(f"Smartphone reconnected: {self.connected_device} ({self.connected_ip})")
+                if self.status_callback:
+                    self.status_callback("CONNECTED", f"{self.connected_device} ({self.connected_ip})")
 
     def handle_device_disconnected(self):
-        """Called when phone disconnects."""
-        prev = self.connected_device
-        self.connected_device = ""
-        self.connected_ip = ""
-        self.status = "Waiting for Pairing"
+        """Called when phone disconnects cleanly."""
+        with self._lock:
+            prev = self.connected_device or "Mobile device"
+            self.connected_device = ""
+            self.connected_ip = ""
+            self.client_connected = False
+            self.status = STATE_SERVER_WAITING if self.is_running else STATE_DISCONNECTED
+
         logger.info(f"Smartphone disconnected: {prev}")
         if self.status_callback:
-            self.status_callback("WAITING_PAIRING", f"Disconnected from {prev}")
+            self.status_callback("DISCONNECTED", f"Disconnected from {prev}")
 
     def handle_barcode_received(self, barcode: str, device_info: str) -> Dict[str, Any]:
         """
@@ -534,6 +676,7 @@ class MobileScannerService:
         return {
             "success": True,
             "barcode": barcode,
+            "device": device_info,
             "found": item is not None,
             "item": {
                 "name": item["name"] if item else None,
@@ -545,7 +688,8 @@ class MobileScannerService:
     def simulate_scan(self, company_id: str, barcode: str) -> Dict[str, Any]:
         """Simulates a scan directly on desktop, exercising the exact same product lookup and event flow."""
         self.active_company_id = company_id
-        return self.handle_barcode_received(barcode.strip().upper(), "Desktop Simulator")
+        # Explicitly labeled as Simulated Scan; does not modify phone connection status
+        return self.handle_barcode_received(barcode.strip().upper(), "Simulated Scan")
 
     def get_info(self) -> Dict[str, Any]:
         """Returns full HTTPS network URL, QR payload, and status for desktop UI."""
@@ -562,8 +706,10 @@ class MobileScannerService:
             "ca_url": f"http://{self.lan_ip}:{self.http_port}/ca.crt",
             "setup_url": f"https://{self.lan_ip}:{self.port}/setup?token={self.current_token}",
             "status": self.status,
-            "connected_device": self.connected_device,
-            "connected_ip": self.connected_ip,
+            "client_connected": self.client_connected,
+            "connected_device": self.connected_device if self.client_connected else "",
+            "connected_ip": self.connected_ip if self.client_connected else "",
+            "last_heartbeat": self.get_last_heartbeat_str(),
             "last_scan": self.last_scan
         }
 
@@ -1227,15 +1373,12 @@ class MobileScannerService:
     // Device Handshake on Page Load
     async function sendPairHandshake() {{
       const userAgent = navigator.userAgent;
-      let devName = "Mobile Device";
-      if (/iPhone|iPad/i.test(userAgent)) devName = "Apple iOS Device";
-      else if (/Android/i.test(userAgent)) devName = "Android Device";
 
       try {{
         const resp = await fetch("/api/pair", {{
           method: "POST",
           headers: {{ "Content-Type": "application/json" }},
-          body: JSON.stringify({{ token: TOKEN, device: devName }})
+          body: JSON.stringify({{ token: TOKEN, device: userAgent }})
         }});
         if (resp.ok) {{
           statusPill.className = "status-pill";
@@ -1248,13 +1391,13 @@ class MobileScannerService:
     }}
     sendPairHandshake();
 
-    // Heartbeat to detect POS connection state
+    // Regular Heartbeat to detect POS connection state and maintain active session
     setInterval(async () => {{
       try {{
-        const resp = await fetch(`/api/status?token=${{TOKEN}}`);
+        const resp = await fetch(`/api/heartbeat?token=${{TOKEN}}`);
         if (resp.ok) {{
           const data = await resp.json();
-          if (data.active) {{
+          if (data.client_connected || data.success) {{
             statusPill.className = "status-pill";
             statusText.textContent = "Linked to POS";
           }} else {{
@@ -1269,7 +1412,19 @@ class MobileScannerService:
         statusPill.className = "status-pill disconnected";
         statusText.textContent = "POS Offline";
       }}
-    }}, 8000);
+    }}, 3000);
+
+    // Clean disconnect on mobile browser tab close / navigation
+    window.addEventListener("pagehide", () => {{
+      try {{
+        navigator.sendBeacon(`/api/disconnect?token=${{TOKEN}}`);
+      }} catch (e) {{}}
+    }});
+    window.addEventListener("beforeunload", () => {{
+      try {{
+        navigator.sendBeacon(`/api/disconnect?token=${{TOKEN}}`);
+      }} catch (e) {{}}
+    }});
 
     // Barcode Delivery to Desktop POS with Client-Side Debouncing
     async function transmitBarcode(barcode) {{
