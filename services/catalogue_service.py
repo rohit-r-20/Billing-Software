@@ -104,6 +104,7 @@ class CatalogueService:
                     UPPER(i.alias) LIKE ? OR 
                     UPPER(i.hsn) LIKE ? OR
                     UPPER(i.item_group) LIKE ? OR
+                    UPPER(COALESCE(i.description, '')) LIKE ? OR
                     EXISTS (
                         SELECT 1 FROM item_barcodes ib 
                         WHERE ib.item_id = i.id AND UPPER(ib.barcode) LIKE ?
@@ -112,7 +113,7 @@ class CatalogueService:
                 GROUP BY i.id
                 ORDER BY i.name ASC
                 LIMIT ?;
-            """, (actual_company_id, q, q, q, q, q, limit))
+            """, (actual_company_id, q, q, q, q, q, q, limit))
             items = []
             for r in cursor.fetchall():
                 it = dict(r)

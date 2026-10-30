@@ -3562,9 +3562,31 @@ function appendMobileScannerLog(msg) {
 }
 
 function showMedicalVerificationModal(itemData) {
-  if (modalMedVerification) {
-    modalMedVerification.style.display = "flex";
+  if (!modalMedVerification) return;
+  const nameEl = document.getElementById("med-verify-product-name");
+  const codeEl = document.getElementById("med-verify-barcode");
+  const priceEl = document.getElementById("med-verify-price");
+  const taxEl = document.getElementById("med-verify-tax");
+  const titleEl = document.getElementById("med-verify-banner-title");
+  const textEl = document.getElementById("med-verify-banner-text");
+
+  const bcode = (itemData && (itemData.matched_barcode || itemData.barcode || itemData.alias)) || "Unknown";
+  const name = (itemData && itemData.name) || "Unknown Product";
+
+  if (nameEl) nameEl.textContent = name;
+  if (codeEl) codeEl.textContent = bcode;
+  if (priceEl) priceEl.textContent = `Not Configured (₹ ${parseFloat((itemData && (itemData.sales_price || itemData.price)) || 0).toFixed(2)})`;
+  if (taxEl) taxEl.textContent = (itemData && (itemData.tax_category || itemData.taxCategory)) || "Unconfigured (Verification Required)";
+
+  if (bcode === "8909263004690") {
+    if (titleEl) titleEl.textContent = "DEMO / UNVERIFIED MEDICAL RECORD DETECTED";
+    if (textEl) textEl.innerHTML = `Barcode <strong>${bcode}</strong> is registered as a demo placeholder for <em>${escapeHtml(name)}</em>. Commercial sale is strictly blocked until packaging is verified.`;
+  } else {
+    if (titleEl) titleEl.textContent = "UNCONFIGURED PRICING & TAX DETECTED";
+    if (textEl) textEl.innerHTML = `Product <strong>${escapeHtml(name)}</strong> (Barcode: <strong>${bcode}</strong>) has unconfigured price, MRP, or tax. Added to cart for inspection, but checkout is blocked until configured in Item Master.`;
   }
+
+  modalMedVerification.style.display = "flex";
 }
 function closeMedicalVerificationModal() {
   if (modalMedVerification) {

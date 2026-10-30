@@ -1645,6 +1645,9 @@
               <button type="button" class="btn-demo-test danger" data-barcode="8909263004690" style="background: #fffbeb; border: 1px solid #fde68a; color: #b45309; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
                 ⚠️ Levosalbutamol [Unverified] (₹0.00)
               </button>
+              <button type="button" class="btn-demo-test" data-barcode="8901207033728" style="background: #f5f3ff; border: 1px solid #ddd6fe; color: #6d28d9; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
+                🌸 Odonil Lavender (8901207033728)
+              </button>
             </div>
             <div style="display: flex; gap: 6px;">
               <input type="text" id="scanner-modal-manual-barcode" placeholder="Or enter barcode to test (e.g. 890_TEST_001)" style="flex: 1; font-size: 11px; padding: 5px 8px; font-family: monospace; border: 1px solid #cbd5e1; border-radius: 4px;" />
@@ -1728,6 +1731,13 @@
                 </div>
                 <span style="font-weight: 700; color: #dc2626; font-size: 11px;">⚠️ Unconfigured (₹0)</span>
               </button>
+              <button type="button" class="btn-action btn-sim-quick" data-code="8901207033728" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; text-align: left; border-left: 3px solid #8b5cf6;">
+                <div>
+                  <strong style="color: #6b21a8;">Odonil Room Spray – Lavender Mist</strong> (Home Care / 220 ml)
+                  <div style="font-size: 11px; font-family: monospace; color: #64748b;">Barcode: 8901207033728 (EAN-13)</div>
+                </div>
+                <span style="font-weight: 700; color: #dc2626; font-size: 11px;">⚠️ Unconfigured (₹0)</span>
+              </button>
             </div>
           </div>
 
@@ -1739,7 +1749,7 @@
     </div>
 
     <!-- =========================================================
-         POPUP MODAL: MEDICAL PRODUCT VERIFICATION WARNING
+         POPUP MODAL: PRODUCT VERIFICATION WARNING
     ========================================================== -->
     <div class="modal-overlay" id="modal-medical-verification" role="dialog" aria-modal="true" style="display: none;">
       <div class="create-comp-dialog-box" style="width: 500px; max-width: 95vw; border-top: 4px solid #f59e0b;">
@@ -1752,20 +1762,19 @@
         </div>
         <div style="padding: 16px;">
           <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 12px; margin-bottom: 14px;">
-            <strong style="color: #92400e; font-size: 13px; display: block; margin-bottom: 4px;">DEMO / UNVERIFIED MEDICAL RECORD DETECTED</strong>
-            <p style="font-size: 12px; color: #78350f; margin: 0; line-height: 1.45;">
-              Barcode <strong>8909263004690</strong> is registered as a demo placeholder for <em>Levosalbutamol sulfate</em>.
-              Commercial sale and checkout are strictly blocked until the packaging is inspected and verified.
+            <strong id="med-verify-banner-title" style="color: #92400e; font-size: 13px; display: block; margin-bottom: 4px;">UNCONFIGURED PRICING DETECTED</strong>
+            <p id="med-verify-banner-text" style="font-size: 12px; color: #78350f; margin: 0; line-height: 1.45;">
+              This item has unconfigured pricing or pending verification. Commercial sale and checkout are strictly blocked until price, MRP, and tax are configured in Item Master.
             </p>
           </div>
 
           <table style="width: 100%; font-size: 12px; margin-bottom: 14px; border-collapse: collapse;">
             <tbody>
-              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Product Name:</td><td style="padding: 6px; font-weight: 700;">Levosalbutamol sulfate</td></tr>
-              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Barcode:</td><td style="padding: 6px; font-family: monospace;">8909263004690</td></tr>
-              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Current Price:</td><td style="padding: 6px; color: #dc2626; font-weight: 700;">Not Configured (₹ 0.00)</td></tr>
-              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">GST Tax Category:</td><td style="padding: 6px; color: #dc2626; font-weight: 700;">Unconfigured (Verification Required)</td></tr>
-              <tr><td style="padding: 6px; color: #64748b; font-weight: 600;">Verification Requirement:</td><td style="padding: 6px; color: #b45309;">Verify actual strength, dosage form, manufacturer, pack size, MRP, selling price &amp; GST rate before billing.</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Product Name:</td><td id="med-verify-product-name" style="padding: 6px; font-weight: 700;">-</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Barcode:</td><td id="med-verify-barcode" style="padding: 6px; font-family: monospace;">-</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">Current Price:</td><td id="med-verify-price" style="padding: 6px; color: #dc2626; font-weight: 700;">Not Configured (₹ 0.00)</td></tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 6px; color: #64748b; font-weight: 600;">GST Tax Category:</td><td id="med-verify-tax" style="padding: 6px; color: #dc2626; font-weight: 700;">Unconfigured (Verification Required)</td></tr>
+              <tr><td style="padding: 6px; color: #64748b; font-weight: 600;">Verification Requirement:</td><td id="med-verify-note" style="padding: 6px; color: #b45309;">Verify actual strength, dosage form, manufacturer, pack size, MRP, selling price &amp; GST rate before billing.</td></tr>
             </tbody>
           </table>
 
