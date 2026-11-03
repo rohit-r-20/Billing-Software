@@ -54,7 +54,7 @@
 
               <!-- Inline Alert / Error Notice -->
               <div class="login-alert-banner" id="login-alert" style="display: none;" role="alert">
-                <span class="alert-icon">⚠️</span>
+                <span class="alert-icon" style="font-weight: 800; color: #d97706;">!</span>
                 <span class="alert-text" id="login-alert-text">Invalid User ID or Password.</span>
               </div>
 
@@ -63,7 +63,7 @@
                 <div class="login-input-group">
                   <label for="login-company-select">Company / Business Store</label>
                   <div class="input-with-icon-wrap">
-                    <span class="field-icon">🏢</span>
+                    <span class="field-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">CO</span>
                     <select id="login-company-select" class="login-select-field">
                       <option value="COMP0001">ANTI MATRIX (COMP0001)</option>
                     </select>
@@ -74,7 +74,7 @@
                 <div class="login-input-group">
                   <label for="login-user-input">User ID / Username</label>
                   <div class="input-with-icon-wrap">
-                    <span class="field-icon">👤</span>
+                    <span class="field-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">USR</span>
                     <input 
                       type="text" 
                       id="login-user-input" 
@@ -91,7 +91,7 @@
                 <div class="login-input-group">
                   <label for="login-pwd-input">Password</label>
                   <div class="input-with-icon-wrap">
-                    <span class="field-icon">🔒</span>
+                    <span class="field-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">PWD</span>
                     <input 
                       type="password" 
                       id="login-pwd-input" 
@@ -101,7 +101,7 @@
                       autocomplete="current-password"
                     />
                     <button type="button" class="btn-toggle-pwd" id="btn-toggle-pwd" title="Show or hide password" aria-label="Show or hide password">
-                      <span id="pwd-toggle-icon">👁️</span>
+                      <span id="pwd-toggle-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Show</span>
                     </button>
                   </div>
                 </div>
@@ -115,7 +115,7 @@
                 <!-- Company Management Link -->
                 <div class="login-card-links">
                   <button type="button" class="btn-link-action" id="btn-goto-companies">
-                    <span>📋 Switch / Manage Companies</span>
+                    <span>Switch / Manage Companies</span>
                   </button>
                 </div>
               </form>
@@ -220,8 +220,8 @@
           </div>
 
           <div class="mode-header-actions">
-            <button type="button" class="btn-mode-nav" id="btn-mode-settings" title="Configure company options">⚙ Settings</button>
-            <button type="button" class="btn-mode-nav logout-btn" id="btn-mode-logout" title="End session and return to Login">🚪 Logout</button>
+            <button type="button" class="btn-mode-nav" id="btn-mode-settings" title="Configure company options">Settings</button>
+            <button type="button" class="btn-mode-nav logout-btn" id="btn-mode-logout" title="End session and return to Login">Logout</button>
           </div>
         </header>
 
@@ -306,12 +306,12 @@
           <div class="menu-item-wrapper" data-menu="company">
             <button class="menu-btn">Company</button>
             <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-switch-mode"><span class="tree-arrow">&rsaquo;</span> Switch Billing Mode</div>
+              <div class="tree-item highlight" id="menu-switch-mode"><span class="tree-label">Switch Billing Mode</span></div>
               <div class="tree-divider"></div>
-              <div class="tree-item" id="menu-close-company"><span class="tree-arrow">&rsaquo;</span> Close Company</div>
-              <div class="tree-item" id="menu-edit-company"><span class="tree-arrow">&rsaquo;</span> Edit Company</div>
+              <div class="tree-item" id="menu-close-company"><span class="tree-label">Close Company</span></div>
+              <div class="tree-item" id="menu-edit-company"><span class="tree-label">Edit Company</span></div>
               <div class="tree-divider"></div>
-              <div class="tree-item" id="menu-new-company"><span class="tree-arrow">&rsaquo;</span> Create New Company</div>
+              <div class="tree-item" id="menu-new-company"><span class="tree-label">Create New Company</span></div>
             </div>
           </div>
 
@@ -322,65 +322,73 @@
               
               <!-- Masters Flyout -->
               <div class="tree-branch">
-                <div class="tree-branch-header"><span class="tree-arrow">&rsaquo;</span> Masters</div>
+                <div class="tree-branch-header"><span class="tree-label">Masters</span><span class="tree-arrow">&rsaquo;</span></div>
                 <div class="tree-submenu">
                   <!-- Account Master -->
                   <div class="tree-branch">
-                    <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Account</div>
+                    <div class="tree-branch-header highlight"><span class="tree-label">Account</span><span class="tree-arrow">&rsaquo;</span></div>
                     <div class="tree-submenu">
-                      <div class="tree-item" id="menu-add-account-master">- Add (Add Account Master)</div>
-                      <div class="tree-item" id="menu-modify-account-master">- Modify</div>
-                      <div class="tree-item" id="menu-list-account-master">- List</div>
+                      <div class="tree-item" id="menu-add-account-master"><span class="tree-label">Add (Add Account Master)</span></div>
+                      <div class="tree-item" id="menu-modify-account-master"><span class="tree-label">Modify</span></div>
+                      <div class="tree-item" id="menu-list-account-master"><span class="tree-label">List</span></div>
                     </div>
                   </div>
-                  <div class="tree-item">- Account Group</div>
-                  <div class="tree-item">- Std. Narration</div>
+                  <!-- Supplier Master -->
+                  <div class="tree-branch">
+                    <div class="tree-branch-header highlight" style="font-weight: 700; color: #0f766e;"><span class="tree-label">Supplier Master</span><span class="tree-arrow">&rsaquo;</span></div>
+                    <div class="tree-submenu">
+                      <div class="tree-item highlight" id="menu-list-supplier-master" style="font-weight: 700; color: #0f766e;"><span class="tree-label">Suppliers &amp; Ledgers</span></div>
+                      <div class="tree-item" id="menu-add-supplier-master"><span class="tree-label">Add New Supplier</span></div>
+                    </div>
+                  </div>
+                  <div class="tree-item"><span class="tree-label">Account Group</span></div>
+                  <div class="tree-item"><span class="tree-label">Std. Narration</span></div>
                   <div class="tree-divider"></div>
                   <!-- Products & Items -->
                   <div class="tree-branch">
-                    <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Products &amp; Items</div>
+                    <div class="tree-branch-header highlight"><span class="tree-label">Products &amp; Items</span><span class="tree-arrow">&rsaquo;</span></div>
                     <div class="tree-submenu">
-                      <div class="tree-item highlight" id="menu-list-item-master" style="font-weight: 700; color: #1e40af;">- Products List (Catalogue)</div>
-                      <div class="tree-item" id="menu-add-item-master">- Add New Product</div>
-                      <div class="tree-item" id="menu-modify-item-master">- Modify / Edit Product</div>
+                      <div class="tree-item highlight" id="menu-list-item-master" style="font-weight: 700; color: #1e40af;"><span class="tree-label">Products List (Catalogue)</span></div>
+                      <div class="tree-item" id="menu-add-item-master"><span class="tree-label">Add New Product</span></div>
+                      <div class="tree-item" id="menu-modify-item-master"><span class="tree-label">Modify / Edit Product</span></div>
                     </div>
                   </div>
-                  <div class="tree-item">- Item Group</div>
-                  <div class="tree-item">- Material Centre</div>
-                  <div class="tree-item">- Unit</div>
-                  <div class="tree-item">- Bill Sundry</div>
-                  <div class="tree-item">- Sale Type</div>
-                  <div class="tree-item">- Tax Category</div>
+                  <div class="tree-item"><span class="tree-label">Item Group</span></div>
+                  <div class="tree-item"><span class="tree-label">Material Centre</span></div>
+                  <div class="tree-item"><span class="tree-label">Unit</span></div>
+                  <div class="tree-item"><span class="tree-label">Bill Sundry</span></div>
+                  <div class="tree-item"><span class="tree-label">Sale Type</span></div>
+                  <div class="tree-item"><span class="tree-label">Tax Category</span></div>
                 </div>
               </div>
 
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Bulk Updation</div>
+              <div class="tree-item"><span class="tree-label">Bulk Updation</span></div>
 
               <!-- Configuration Flyout (matching Screenshot 2) -->
               <div class="tree-branch">
-                <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Configuration</div>
+                <div class="tree-branch-header highlight"><span class="tree-label">Configuration</span><span class="tree-arrow">&rsaquo;</span></div>
                 <div class="tree-submenu">
-                  <div class="tree-item highlight" id="menu-config-features"><span class="tree-arrow">&rsaquo;</span> Features / Options</div>
-                  <div class="tree-item highlight" id="menu-config-voucher-series"><span class="tree-arrow">&rsaquo;</span> Voucher Series Configuration</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Masters Configuration</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Hardware Configuration</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Backup Configuration</div>
+                  <div class="tree-item highlight" id="menu-config-features"><span class="tree-label">Features / Options</span></div>
+                  <div class="tree-item highlight" id="menu-config-voucher-series"><span class="tree-label">Voucher Series Configuration</span></div>
+                  <div class="tree-item"><span class="tree-label">Masters Configuration</span></div>
+                  <div class="tree-item"><span class="tree-label">Hardware Configuration</span></div>
+                  <div class="tree-item"><span class="tree-label">Backup Configuration</span></div>
                   <div class="tree-divider"></div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Invoice / Document Printing</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Accounting Voucher Printing</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Columnar Reports</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Warning Alarms</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Maximum Entries in Voucher</div>
-                  <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> List of Holidays</div>
+                  <div class="tree-item"><span class="tree-label">Invoice / Document Printing</span></div>
+                  <div class="tree-item"><span class="tree-label">Accounting Voucher Printing</span></div>
+                  <div class="tree-item"><span class="tree-label">Columnar Reports</span></div>
+                  <div class="tree-item"><span class="tree-label">Warning Alarms</span></div>
+                  <div class="tree-item"><span class="tree-label">Maximum Entries in Voucher</span></div>
+                  <div class="tree-item"><span class="tree-label">List of Holidays</span></div>
                 </div>
               </div>
 
-              <div class="tree-item" id="menu-change-password"><span class="tree-arrow">&rsaquo;</span> Users & Passwords</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Mobile App</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Utilities</div>
-              <div class="tree-item highlight" id="menu-data-export-import"><span class="tree-arrow">&rsaquo;</span> Data Export Import (JSON)</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Miscellaneous Data Entry</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Change Financial Year</div>
+              <div class="tree-item" id="menu-change-password"><span class="tree-label">Users &amp; Passwords</span></div>
+              <div class="tree-item"><span class="tree-label">Mobile App</span></div>
+              <div class="tree-item"><span class="tree-label">Utilities</span></div>
+              <div class="tree-item highlight" id="menu-data-export-import"><span class="tree-label">Data Export Import (JSON)</span></div>
+              <div class="tree-item"><span class="tree-label">Miscellaneous Data Entry</span></div>
+              <div class="tree-item"><span class="tree-label">Change Financial Year</span></div>
             </div>
           </div>
 
@@ -390,34 +398,35 @@
             <div class="dropdown-tree">
               <!-- Sales -->
               <div class="tree-branch">
-                <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Sales</div>
+                <div class="tree-branch-header highlight"><span class="tree-label">Sales</span><span class="tree-arrow">&rsaquo;</span></div>
                 <div class="tree-submenu">
-                  <div class="tree-item highlight" id="menu-fast-billing" style="color: #2563eb; font-weight: 800;">⚡ Fast Billing (POS)</div>
-                  <div class="tree-item highlight" id="menu-sales-add">- Add (Billing Screen)</div>
-                  <div class="tree-item" id="menu-sales-modify">- Modify</div>
-                  <div class="tree-item highlight" id="menu-sales-list">- List (View Bills)</div>
+                  <div class="tree-item highlight" id="menu-fast-billing" style="color: #2563eb; font-weight: 800;"><span class="tree-label">Fast Billing (POS)</span></div>
+                  <div class="tree-item highlight" id="menu-sales-add"><span class="tree-label">Add (Billing Screen)</span></div>
+                  <div class="tree-item" id="menu-sales-modify"><span class="tree-label">Modify</span></div>
+                  <div class="tree-item highlight" id="menu-sales-list"><span class="tree-label">List (View Bills)</span></div>
                 </div>
               </div>
 
               <!-- Purchase -->
               <div class="tree-branch">
-                <div class="tree-branch-header highlight"><span class="tree-arrow">&rsaquo;</span> Purchase</div>
+                <div class="tree-branch-header highlight"><span class="tree-label">Purchase</span><span class="tree-arrow">&rsaquo;</span></div>
                 <div class="tree-submenu">
-                  <div class="tree-item" id="menu-purchase-add">- Add</div>
-                  <div class="tree-item" id="menu-purchase-modify">- Modify</div>
-                  <div class="tree-item" id="menu-purchase-list">- List</div>
+                  <div class="tree-item" id="menu-purchase-add"><span class="tree-label">Add</span></div>
+                  <div class="tree-item" id="menu-purchase-modify"><span class="tree-label">Modify</span></div>
+                  <div class="tree-item" id="menu-purchase-list"><span class="tree-label">List</span></div>
                 </div>
               </div>
 
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Sales Return (Cr. Note)</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Purchase Return (Dr. Note)</div>
+              <div class="tree-item highlight" id="menu-sales-return"><span class="tree-label">Sales Return (Cr. Note)</span></div>
+              <div class="tree-item highlight" id="menu-purchase-return"><span class="tree-label">Purchase Return (Dr. Note)</span></div>
               <div class="tree-divider"></div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Payment</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Receipt</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Journal</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Contra</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Stock Transfer</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> GST Misc. Utilities</div>
+              <div class="tree-item"><span class="tree-label">Payment</span></div>
+              <div class="tree-item"><span class="tree-label">Receipt</span></div>
+              <div class="tree-item"><span class="tree-label">Journal</span></div>
+              <div class="tree-item"><span class="tree-label">Contra</span></div>
+              <div class="tree-item highlight" id="menu-stock-transfer"><span class="tree-label">Stock Transfer</span></div>
+              <div class="tree-item highlight" id="menu-stock-adjustment"><span class="tree-label">Stock Adjustment (Damage / Expiry)</span></div>
+              <div class="tree-item"><span class="tree-label">GST Misc. Utilities</span></div>
             </div>
           </div>
 
@@ -425,31 +434,32 @@
           <div class="menu-item-wrapper" data-menu="display">
             <button class="menu-btn">Display</button>
             <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-display-bills"><span class="tree-arrow">&rsaquo;</span> Final Results / Sales Register</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Trial Balance</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Account Books</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Account Summary</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Outstanding Analysis</div>
+              <div class="tree-item highlight" id="menu-display-bills"><span class="tree-label">Final Results / Sales Register</span></div>
+              <div class="tree-item highlight" id="menu-display-purchase-register"><span class="tree-label">Purchase Register</span></div>
+              <div class="tree-item highlight" id="menu-display-trial-balance"><span class="tree-label">Trial Balance (Double-Entry)</span></div>
+              <div class="tree-item highlight" id="menu-display-daybook"><span class="tree-label">Day Book</span></div>
+              <div class="tree-item"><span class="tree-label">Account Summary</span></div>
+              <div class="tree-item"><span class="tree-label">Outstanding Analysis</span></div>
               <div class="tree-divider"></div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Stock Status</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Inventory Books</div>
-              <div class="tree-item highlight" id="menu-gst-reports"><span class="tree-arrow">&rsaquo;</span> GST Reports & Daily Summary</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Sales Analysis</div>
-              <div class="tree-item"><span class="tree-arrow">&rsaquo;</span> Purchase Analysis</div>
+              <div class="tree-item highlight" id="menu-display-stock" style="font-weight: 700; color: #15803d;"><span class="tree-label">Stock Status &amp; Valuation (WAC)</span></div>
+              <div class="tree-item"><span class="tree-label">Inventory Books</span></div>
+              <div class="tree-item highlight" id="menu-gst-reports"><span class="tree-label">GST Reports &amp; Daily Summary</span></div>
+              <div class="tree-item"><span class="tree-label">Sales Analysis</span></div>
+              <div class="tree-item"><span class="tree-label">Purchase Analysis</span></div>
             </div>
           </div>
 
           <div class="menu-item-wrapper" data-menu="printing">
             <button class="menu-btn">Printing</button>
             <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-printer-settings"><span class="tree-arrow">&rsaquo;</span> Thermal & Invoice Printer Settings</div>
+              <div class="tree-item highlight" id="menu-printer-settings"><span class="tree-label">Thermal &amp; Invoice Printer Settings</span></div>
             </div>
           </div>
 
           <div class="menu-item-wrapper" data-menu="housekeeping">
             <button class="menu-btn">House-Keeping</button>
             <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-backup-restore"><span class="tree-arrow">&rsaquo;</span> Backup & Restore Database</div>
+              <div class="tree-item highlight" id="menu-backup-restore"><span class="tree-label">Backup &amp; Restore Database</span></div>
             </div>
           </div>
           
@@ -457,41 +467,288 @@
           <div class="menu-item-wrapper" data-menu="help">
             <button class="menu-btn highlight">Help</button>
             <div class="dropdown-tree">
-              <div class="tree-submenu-header">Size & Zoom Controls</div>
+              <div class="tree-submenu-header">Size &amp; Zoom Controls</div>
               <div class="tree-item zoom-action" id="menu-zoom-in">
-                <span><strong>+</strong> Zoom In (Increase Size)</span>
+                <span class="tree-label"><strong>+</strong> Zoom In (Increase Size)</span>
               </div>
               <div class="tree-item zoom-action" id="menu-zoom-out">
-                <span><strong>-</strong> Zoom Out (Decrease Size)</span>
+                <span class="tree-label"><strong>-</strong> Zoom Out (Decrease Size)</span>
               </div>
               <div class="tree-item zoom-action" id="menu-zoom-reset">
-                <span>&bull; Reset Size (100%)</span>
+                <span class="tree-label">&bull; Reset Size (100%)</span>
               </div>
               <div class="tree-divider"></div>
-              <div class="tree-item" id="menu-help-shortcuts"><span class="tree-arrow">&rsaquo;</span> Keyboard Shortcuts Guide</div>
-              <div class="tree-item" id="menu-help-about"><span class="tree-arrow">&rsaquo;</span> About Alpha Billing</div>
+              <div class="tree-item" id="menu-help-shortcuts"><span class="tree-label">Keyboard Shortcuts Guide</span></div>
+              <div class="tree-item" id="menu-help-about"><span class="tree-label">About Alpha Billing</span></div>
             </div>
           </div>
 
           <div class="menu-item-wrapper"><button class="menu-btn">Favourites</button></div>
           <div class="menu-item-wrapper"><button class="menu-btn">Add-On</button></div>
-          <div class="menu-item-wrapper" style="margin-left: auto; display: flex; align-items: center; padding-right: 6px;">
-            <button type="button" class="btn-switch-mode-pill" id="bar-switch-mode" title="Switch Billing Mode (Esc)">⚡ Switch Billing Mode</button>
+          <div class="menu-item-wrapper" style="margin-left: auto; display: flex; align-items: center; padding-right: 6px; flex-shrink: 0;">
+            <button type="button" class="btn-low-stock-pill" id="bar-low-stock-alert" style="display: none; background: #fef2f2; border: 1px solid #f87171; color: #b91c1c; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; cursor: pointer; margin-right: 6px;" title="Low Stock Products Alert">
+              Low Stock: <span id="bar-low-stock-count">0</span> items
+            </button>
+            <button type="button" class="btn-switch-mode-pill" id="bar-switch-mode" title="Switch Billing Mode (Esc)">Switch Mode (Esc)</button>
           </div>
         </nav>
 
         <!-- Main Dashboard Canvas -->
-        <div class="dashboard-canvas">
-          <!-- Center Watermark for Active Company -->
-          <div class="company-watermark-center" id="dashboard-center-watermark">
-            ANTI MATRIX (F.Y. 2026-27)
-          </div>
+        <!-- Main Operational Dashboard Shell -->
+        <div class="dash-shell">
+          <!-- Left Sidebar Navigation -->
+          <aside class="dash-sidebar" id="dash-sidebar">
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Overview</div>
+              <button type="button" class="dash-nav-item active" id="btn-nav-overview">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                <span>Dashboard</span>
+              </button>
+            </div>
 
-          <div class="dashboard-breadcrumb" id="dashboard-breadcrumb">
-            Transactions &rarr; Sales &rarr; Add (Vch 001)
-          </div>
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Sales Operations</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-pos">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                <span>Fast Billing (POS)</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-sales-add">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                <span>New Sales Voucher</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-sales-list">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span>Sales Invoices List</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-sales-return">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                <span>Sales Return (Cr. Note)</span>
+              </button>
+            </div>
+
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Purchases & Payables</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-purchase-add">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Add Purchase Entry</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-purchase-list">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <span>Purchase Register</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-purchase-return">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+                <span>Purchase Return (Dr. Note)</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-suppliers">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>Supplier Accounts</span>
+              </button>
+            </div>
+
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Inventory & Stock</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-stock">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                <span>Stock Status (WAC)</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-transfer">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                <span>Stock Transfer</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-adjustments">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Stock Adjustments</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-low-stock">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Low Stock Alerts</span>
+              </button>
+            </div>
+
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Customers</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-customers">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>Account Master</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-customer-categories">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Customer Categories</span>
+              </button>
+            </div>
+
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Products</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-add-product">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Add New Product</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-products">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>Product Catalogue</span>
+              </button>
+            </div>
+
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Reports & Accounts</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-daybook">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                <span>Day Book</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-trial-balance">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span>Trial Balance</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-gst">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                <span>GST Reports</span>
+              </button>
+            </div>
+
+            <div class="dash-nav-section">
+              <div class="dash-nav-header">Settings & Admin</div>
+              <button type="button" class="dash-nav-item" id="btn-nav-config">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                <span>Configuration</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-switch-mode">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                <span>Switch Billing Mode</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-backup">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span>Backup & Restore</span>
+              </button>
+              <button type="button" class="dash-nav-item" id="btn-nav-printer">
+                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                <span>Printer Settings</span>
+              </button>
+            </div>
+          </aside>
+
+          <!-- Main Operational Workspace -->
+          <main class="dash-main" id="dash-main">
+            <!-- Page Header Container -->
+            <div class="page-header-container">
+              <div>
+                <div class="page-breadcrumb">Alpha ERP &gt; Operational Overview</div>
+                <h1 class="page-title">Operational Overview</h1>
+                <p class="page-subtitle">Real-time retail metrics, active transactions, and quick enterprise actions</p>
+              </div>
+              <div class="page-action-bar">
+                <span class="status-badge success">Live Synchronized</span>
+                <span class="status-badge info" id="dash-active-fy">F.Y. 2026-27</span>
+                <button type="button" class="btn-classic" id="dash-btn-refresh-overview" title="Refresh Live Metrics">Refresh Metrics</button>
+              </div>
+            </div>
+
+            <!-- Metric Strip (4 cards) -->
+            <div class="metric-strip">
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Today's Sales</span>
+                  <span class="status-badge success">Revenue</span>
+                </div>
+                <div class="metric-value" id="dash-today-sales">&#8377;0.00</div>
+                <div class="metric-subtitle" id="dash-sales-count">0 invoices generated today</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Today's Purchases</span>
+                  <span class="status-badge info">Inward</span>
+                </div>
+                <div class="metric-value" id="dash-today-purchases">&#8377;0.00</div>
+                <div class="metric-subtitle" id="dash-purchases-count">0 purchase bills posted</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Low Stock Alerts</span>
+                  <span class="status-badge warning" id="dash-low-stock-badge">Attention</span>
+                </div>
+                <div class="metric-value" id="dash-low-stock">0 items</div>
+                <div class="metric-subtitle" id="dash-low-stock-sub">All products above minimum threshold</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Held Bills / Cart</span>
+                  <span class="status-badge info">POS</span>
+                </div>
+                <div class="metric-value" id="dash-held-bills">0 bills</div>
+                <div class="metric-subtitle">Active transactions in POS register</div>
+              </div>
+            </div>
+
+            <!-- Primary Action Bar -->
+            <div class="dash-action-bar" style="margin-bottom: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-classic primary-action-btn" id="dash-btn-pos" style="padding: 7px 16px; font-weight: 700;">Fast Billing (POS)</button>
+              <button type="button" class="btn-classic" id="dash-btn-sales-add" style="padding: 7px 14px; font-weight: 600;">+ New Sales Voucher</button>
+              <button type="button" class="btn-classic" id="dash-btn-purchase-add" style="padding: 7px 14px; font-weight: 600;">+ Inward Purchase</button>
+              <button type="button" class="btn-classic" id="dash-btn-product-add" style="padding: 7px 14px; font-weight: 600;">+ Add Product</button>
+              <button type="button" class="btn-classic" id="dash-btn-stock-view" style="padding: 7px 14px; font-weight: 600;">Stock Valuation</button>
+              <button type="button" class="btn-classic" id="dash-btn-daybook" style="padding: 7px 14px; font-weight: 600;">Day Book</button>
+            </div>
+
+            <!-- Dashboard Tables Grid (Recent Sales & Recent Purchases) -->
+            <div class="dashboard-tables-grid">
+              <!-- Recent Sales Invoices -->
+              <div class="dash-card">
+                <div class="dash-card-header">
+                  <div class="dash-card-title">Recent Sales Invoices</div>
+                  <button type="button" class="btn-classic" id="dash-btn-view-all-sales" style="font-size: 11px; padding: 2px 8px;">View All &rarr;</button>
+                </div>
+                <div class="dash-card-body" style="padding: 0; max-height: 250px; overflow-y: auto;">
+                  <table class="data-table" id="dash-recent-sales-table" style="margin: 0; width: 100%;">
+                    <thead>
+                      <tr>
+                        <th>Invoice #</th>
+                        <th>Date</th>
+                        <th>Customer</th>
+                        <th style="text-align: right;">Total (&#8377;)</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-recent-sales-tbody">
+                      <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">No sales invoices posted yet today.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Recent Inward Purchases -->
+              <div class="dash-card">
+                <div class="dash-card-header">
+                  <div class="dash-card-title">Recent Inward Purchases</div>
+                  <button type="button" class="btn-classic" id="dash-btn-view-all-purchases" style="font-size: 11px; padding: 2px 8px;">View All &rarr;</button>
+                </div>
+                <div class="dash-card-body" style="padding: 0; max-height: 250px; overflow-y: auto;">
+                  <table class="data-table" id="dash-recent-purchases-table" style="margin: 0; width: 100%;">
+                    <thead>
+                      <tr>
+                        <th>Bill #</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th style="text-align: right;">Total (&#8377;)</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-recent-purchases-tbody">
+                      <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">No inward purchases recorded yet today.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden compatibility elements for existing script references -->
+            <div class="company-watermark-center" id="dashboard-center-watermark" style="display: none;">
+              ANTI MATRIX (F.Y. 2026-27)
+            </div>
+            <div class="dashboard-breadcrumb" id="dashboard-breadcrumb" style="display: none;">
+              Transactions &rarr; Sales &rarr; Add (Vch 001)
+            </div>
+          </main>
         </div>
-
         <!-- Bottom ERP Status Strip -->
         <footer class="erp-statusbar" id="erp-statusbar">
           <div class="status-left">
@@ -577,6 +834,14 @@
                     <option value="Composition">Composition</option>
                   </select>
                 </div>
+                <div class="field-row">
+                  <label class="field-label" for="acc-customer-category">Customer Category</label>
+                  <select id="acc-customer-category" class="select-box">
+                    <option value="Direct Customer">Direct Customer (Standard Retail - 0%)</option>
+                    <option value="Commercial">Commercial (B2B Bulk - 5%)</option>
+                    <option value="Sub-Commercial">Sub-Commercial (Wholesale / Regular - 2.5%)</option>
+                  </select>
+                </div>
                 <div class="field-row with-btn">
                   <label class="field-label" for="acc-gstin">GSTIN / UIN</label>
                   <input type="text" id="acc-gstin" class="input-uppercase" placeholder="33AAAAA0000A1Z5" />
@@ -638,7 +903,7 @@
             <span class="screen-badge-title" id="item-master-screen-title">Add / Edit Product</span>
           </div>
           <div class="ribbon-right">
-            <button type="button" class="btn-classic" id="btn-item-open-list" style="margin-right: 8px;">📋 View Products List (F5)</button>
+            <button type="button" class="btn-classic" id="btn-item-open-list" style="margin-right: 8px;">View Products List (F5)</button>
             <span class="key-hint">Save - F2</span>
             <button class="ribbon-btn-close" id="btn-item-close-top" title="Close">&times;</button>
           </div>
@@ -686,6 +951,18 @@
                 <div class="field-row-split">
                   <div class="split-col"><label class="field-label">Opening Stock (Qty)</label><input type="number" step="0.01" id="item-op-qty" value="0.00" /></div>
                   <div class="split-col"><label class="field-label">Stock Value (₹)</label><input type="number" step="0.01" id="item-op-val" value="0.00" /></div>
+                </div>
+                <div class="field-row-split" style="margin-top: 6px; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
+                  <div class="split-col">
+                    <label class="field-label" for="item-min-stock-level" title="Alerts if stock < threshold">Min. Stock Alert Level</label>
+                    <input type="number" step="0.01" min="0" id="item-min-stock-level" placeholder="Optional (e.g. 10.0)" />
+                  </div>
+                  <div class="split-col">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #1e293b; cursor: pointer; margin-left: 10px;">
+                      <input type="checkbox" id="item-alert-enabled" checked style="width: 14px; height: 14px; margin: 0;" />
+                      Enable Low-Stock Alert
+                    </label>
+                  </div>
                 </div>
               </fieldset>
 
@@ -813,8 +1090,9 @@
             <div class="vch-meta-row">
               <div class="meta-item flex-2">
                 <span class="meta-label">Party</span>
-                <div class="party-picker-box">
+                <div class="party-picker-box" style="display: flex; align-items: center; gap: 8px;">
                   <input type="text" id="vch-party-input" placeholder="Select or type Customer / Party Name" list="party-datalist" autocomplete="off" />
+                  <span id="vch-party-category-badge" class="vch-party-category-badge" style="display: none; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap;"></span>
                   <datalist id="party-datalist">
                     <!-- Populated from Account Masters -->
                   </datalist>
@@ -872,7 +1150,7 @@
                   <div class="tax-summary-header">
                     <span>Tax Summary</span>
                     <div style="display: flex; gap: 4px;">
-                      <button type="button" class="btn-sub-action" id="btn-vch-search-products" title="Search Products (F1)">🔍 Search Products (F1)</button>
+                      <button type="button" class="btn-sub-action" id="btn-vch-search-products" title="Search Products (F1)">Search Products (F1)</button>
                       <button type="button" class="btn-sub-action" id="btn-apply-tax">Apply Tax (F4)</button>
                     </div>
                   </div>
@@ -997,14 +1275,24 @@
       <section class="screen-view erp-form-screen" id="view-fast-billing">
         <div class="form-screen-ribbon pos-ribbon">
           <div class="ribbon-left">
-            <button type="button" class="btn-ribbon-back" id="btn-pos-back-mode" title="Back to Billing Mode Selection">&larr; Switch Mode</button>
-            <span class="screen-badge-title">⚡ FAST BILLING (POS)</span>
+            <button type="button" class="btn-ribbon-back" id="btn-pos-back-mode" title="Back to Billing Mode Selection (Esc)">&larr; Mode</button>
+            <span class="screen-badge-title">FAST BILLING (POS)</span>
             <span class="pos-company-badge" id="pos-header-company">ANTI MATRIX</span>
-            <span class="pos-branch-badge" id="pos-header-branch">Branch: Main Branch | Reg: 01</span>
+            <span class="pos-branch-badge" id="pos-header-branch">Branch: Main | Reg: 01</span>
+            <button type="button" class="btn-pos-erp-pill" id="btn-pos-quick-stock" title="View Stock Summary & Inventory Valuation">Stock Summary</button>
+            <button type="button" class="btn-pos-erp-pill" id="btn-pos-quick-purchase" title="Add Purchase Inward Voucher">Inward Purchase</button>
+            <button type="button" class="btn-pos-erp-pill warning" id="btn-pos-low-stock-pill" style="display: none;" title="Low-Stock Alerts">Low Stock (<span id="pos-low-stock-count">0</span>)</button>
           </div>
           <div class="ribbon-center">
             <span class="pos-cashier-badge">Cashier: <strong id="pos-header-cashier">A</strong></span>
             <span class="pos-vch-no-display">Bill No: <strong id="pos-vch-no">POS-001</strong></span>
+            <div class="pos-customer-selector-wrap" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;">
+              <span style="font-size: 11px; font-weight: 600; color: #475569;">Customer:</span>
+              <select id="pos-customer-select" class="pos-customer-select" style="padding: 2px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; max-width: 140px;">
+                <option value="" data-category="Direct Customer">Cash / Walk-In</option>
+              </select>
+              <span id="pos-customer-category-badge" class="pos-category-badge direct">Direct (0%)</span>
+            </div>
           </div>
           <div class="ribbon-right">
             <span class="db-status-pill" id="pos-db-status">● SQLite Active</span>
@@ -1017,7 +1305,7 @@
           <!-- Top Barcode & Quick Action Bar -->
           <div class="pos-scan-bar">
             <div class="barcode-input-container" style="position: relative;">
-              <span class="barcode-icon">🔍</span>
+              <span class="barcode-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">SCAN</span>
               <input 
                 type="text" 
                 id="pos-barcode-input" 
@@ -1028,8 +1316,8 @@
               <div id="pos-barcode-suggestions" class="pos-suggestions-dropdown" style="display: none;"></div>
             </div>
             <button type="button" class="btn-pos-action" id="btn-pos-search-item" title="Manual Search (F1)">Search (F1)</button>
-            <button type="button" class="btn-pos-action pos-mobile-btn" id="btn-pos-mobile-scanner" title="Connect Mobile Phone as Wi-Fi Barcode Scanner">📱 Mobile Scanner <span id="pos-scanner-status-indicator" class="pos-scanner-badge waiting" title="Scanner Ready — Waiting for Phone">⚪ Ready</span></button>
-            <button type="button" class="btn-pos-action pos-simulate-btn" id="btn-pos-simulate-scan" title="Simulate Barcode Scan for Testing">🧪 Simulate Scan</button>
+            <button type="button" class="btn-pos-action pos-mobile-btn" id="btn-pos-mobile-scanner" title="Connect Mobile Phone as Wi-Fi Barcode Scanner">Mobile Scanner <span id="pos-scanner-status-indicator" class="pos-scanner-badge waiting" title="Scanner Ready — Waiting for Phone">Ready</span></button>
+            <button type="button" class="btn-pos-action pos-simulate-btn" id="btn-pos-simulate-scan" title="Simulate Barcode Scan for Testing">Simulate Scan</button>
             <button type="button" class="btn-pos-action" id="btn-pos-hold" title="Hold Sale (F2)">Hold Sale (F2)</button>
             <button type="button" class="btn-pos-action" id="btn-pos-resume" title="Resume Sale (F3)">Held Bills (<span id="held-count">0</span>)</button>
             <button type="button" class="btn-pos-action danger" id="btn-pos-clear" title="Clear Cart (Esc)">Clear</button>
@@ -1038,28 +1326,63 @@
 
           <!-- Main Layout: Left Cart Table, Right Summary & Payments -->
           <div class="pos-main-grid">
-            <!-- Cart Table -->
-            <div class="pos-cart-container">
-              <table class="pos-cart-table" id="pos-cart-table">
-                <thead>
-                  <tr>
-                    <th style="width: 35px;">#</th>
-                    <th style="width: 120px;">Barcode</th>
-                    <th>Product / Item Description</th>
-                    <th style="width: 75px; text-align: right;">Qty</th>
-                    <th style="width: 50px;">Unit</th>
-                    <th style="width: 80px; text-align: right;">Price (₹)</th>
-                    <th style="width: 60px; text-align: center;">Tax %</th>
-                    <th style="width: 95px; text-align: right;">Total (₹)</th>
-                    <th style="width: 35px; text-align: center;">✕</th>
-                  </tr>
-                </thead>
-                <tbody id="pos-cart-tbody">
-                  <!-- Dynamic Cart Rows -->
-                </tbody>
-              </table>
-              <div id="pos-empty-cart-msg" class="pos-empty-cart">
-                Scan barcode or type item name to begin checkout...
+            <!-- Cart Table Container -->
+            <div class="pos-cart-container" id="pos-cart-container">
+              <div class="pos-cart-table-wrapper" id="pos-cart-table-wrapper">
+                <table class="pos-cart-table" id="pos-cart-table">
+                  <thead>
+                    <tr>
+                      <th class="col-pos-num" title="Item Number">#</th>
+                      <th class="col-pos-barcode" title="Barcode">Barcode</th>
+                      <th class="col-pos-desc" title="Product / Item Description">Product / Item Description</th>
+                      <th class="col-pos-qty" title="Quantity">Qty</th>
+                      <th class="col-pos-unit" title="Unit of Measurement">Unit</th>
+                      <th class="col-pos-price" title="Unit Price in Rupees">Price (₹)</th>
+                      <th class="col-pos-discount" title="Line Item Discount Percentage">Discount (%)</th>
+                      <th class="col-pos-tax" title="Applicable GST Tax Percentage">Tax %</th>
+                      <th class="col-pos-total" title="Line Item Total including Tax">Total (₹)</th>
+                      <th class="col-pos-action" title="Remove Item from Cart">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pos-cart-tbody">
+                    <!-- Dynamic Cart Rows -->
+                  </tbody>
+                </table>
+                <div id="pos-empty-cart-msg" class="pos-empty-cart">
+                  Scan barcode or type item name to begin checkout...
+                </div>
+              </div>
+
+              <!-- Product List Toolbar with Text Size Controls & Daily Discount Toggle -->
+              <div class="pos-cart-toolbar" id="pos-cart-toolbar">
+                <div class="pos-text-size-control">
+                  <span class="pos-text-size-label">
+                    <span class="pos-text-size-icon">Font:</span> Text Size:
+                  </span>
+                  <div class="pos-text-size-btn-group" role="group" aria-label="Product List Text Size">
+                    <button type="button" class="btn-text-size-step" id="btn-pos-font-dec" title="Decrease font size (−)" aria-label="Decrease text size">−</button>
+                    <button type="button" class="btn-text-size-opt" data-size="small" id="btn-pos-font-small" title="Small text size">Small</button>
+                    <button type="button" class="btn-text-size-opt active" data-size="normal" id="btn-pos-font-normal" title="Normal text size (Default)">Normal</button>
+                    <button type="button" class="btn-text-size-opt" data-size="large" id="btn-pos-font-large" title="Large text size">Large</button>
+                    <button type="button" class="btn-text-size-step" id="btn-pos-font-inc" title="Increase font size (+)" aria-label="Increase text size">+</button>
+                  </div>
+                </div>
+
+                <!-- Daily Discount Toggle Setting -->
+                <div class="pos-daily-discount-control" id="pos-daily-discount-control">
+                  <span class="pos-daily-discount-label">
+                    <span class="pos-discount-icon">Discount:</span> Apply Discount to All Bills Today:
+                  </span>
+                  <label class="pos-toggle-switch" title="Toggle automatic discount for all new bills today">
+                    <input type="checkbox" id="pos-daily-discount-toggle" />
+                    <span class="pos-toggle-slider"></span>
+                  </label>
+                  <span id="pos-daily-discount-badge" class="pos-discount-badge off" title="Click to configure discount percentage">OFF</span>
+                </div>
+
+                <div class="pos-cart-footer-stats">
+                  <span id="pos-cart-table-count" class="pos-table-count-badge">0 items in list</span>
+                </div>
               </div>
             </div>
 
@@ -1071,11 +1394,19 @@
                   <strong id="pos-item-count">0 items</strong>
                 </div>
                 <div class="summary-line">
+                  <span>Gross Subtotal:</span>
+                  <span id="pos-gross-subtotal">₹ 0.00</span>
+                </div>
+                <div class="summary-line" id="pos-discount-summary-line">
+                  <span>Total Discount:</span>
+                  <span id="pos-discount-total" style="color: #047857; font-weight: 700;">- ₹ 0.00</span>
+                </div>
+                <div class="summary-line">
                   <span>Taxable Subtotal:</span>
                   <span id="pos-subtotal">₹ 0.00</span>
                 </div>
                 <div class="summary-line">
-                  <span>Total GST:</span>
+                  <span>GST:</span>
                   <span id="pos-tax-total">₹ 0.00</span>
                 </div>
                 <div class="summary-line">
@@ -1092,7 +1423,7 @@
               <div class="pos-tender-box">
                 <div class="pos-tender-row">
                   <label for="pos-tender-received">Amount Received (₹):</label>
-                  <input type="number" id="pos-tender-received" class="pos-tender-input" placeholder="0.00" step="1" min="0" />
+                  <input type="number" id="pos-tender-received" class="pos-tender-input" placeholder="0.00" step="0.01" min="0" />
                 </div>
                 <div class="pos-quick-tender-chips">
                   <button type="button" class="btn-tender-chip" id="chip-tender-exact">Exact</button>
@@ -1103,33 +1434,37 @@
                 </div>
                 <div class="pos-change-due-row">
                   <span>Change Due:</span>
-                  <strong id="pos-change-due-val">₹ 0.00</strong>
+                  <strong id="pos-change-due-val" class="pos-change-val">₹ 0.00</strong>
+                </div>
+                <div class="pos-balance-due-row" id="pos-balance-due-row">
+                  <span>Balance Due:</span>
+                  <strong id="pos-balance-due-val" class="pos-balance-val">₹ 0.00</strong>
                 </div>
               </div>
 
               <!-- Quick Pay Actions -->
               <div class="pos-payment-actions">
                 <button type="button" class="btn-pay cash-btn" id="btn-pos-pay-cash">
-                  <span class="pay-icon">💵</span>
+                  <span class="pay-icon" style="font-size: 10px; font-weight: 800;">CASH</span>
                   <span class="pay-text">CASH (F9)</span>
                 </button>
                 <button type="button" class="btn-pay upi-btn" id="btn-pos-pay-upi">
-                  <span class="pay-icon">📱</span>
+                  <span class="pay-icon" style="font-size: 10px; font-weight: 800;">UPI</span>
                   <span class="pay-text">UPI (F10)</span>
                 </button>
                 <button type="button" class="btn-pay card-btn" id="btn-pos-pay-card">
-                  <span class="pay-icon">💳</span>
+                  <span class="pay-icon" style="font-size: 10px; font-weight: 800;">CARD</span>
                   <span class="pay-text">CARD</span>
                 </button>
                 <button type="button" class="btn-pay split-btn" id="btn-pos-pay-split">
-                  <span class="pay-icon">⚖️</span>
+                  <span class="pay-icon" style="font-size: 10px; font-weight: 800;">SPLIT</span>
                   <span class="pay-text">SPLIT (F8)</span>
                 </button>
               </div>
 
               <div class="pos-checkout-btn-box">
                 <button type="button" class="btn-checkout-big" id="btn-pos-checkout-print">
-                  ⚡ CHECKOUT & PRINT (F12)
+                  CHECKOUT &amp; PRINT (F12)
                 </button>
               </div>
             </div>
@@ -1213,7 +1548,7 @@
             <button type="button" class="btn-ribbon-back" id="btn-items-list-back" title="Back to Dashboard">&larr; Dashboard</button>
           </div>
           <div class="ribbon-center">
-            <span class="screen-badge-title">📦 Products &amp; Inventory Catalogue</span>
+            <span class="screen-badge-title">Products &amp; Inventory Catalogue</span>
           </div>
           <div class="ribbon-right">
             <span class="key-hint">[F1 Search | F5 Refresh | Esc Close]</span>
@@ -1225,7 +1560,7 @@
           <!-- Top Filter Bar -->
           <div class="items-list-filter-bar">
             <div class="items-search-box">
-              <span class="search-icon">🔍</span>
+              <span class="search-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
               <input type="text" id="items-list-search" class="items-search-input" placeholder="Search product by name, barcode, SKU code, or category..." autocomplete="off" />
               <button type="button" class="btn-clear-search" id="btn-clear-item-search" title="Clear search" style="display: none;">&times;</button>
             </div>
@@ -1233,7 +1568,7 @@
               <option value="">All Categories</option>
             </select>
             <button type="button" class="btn-classic primary-action-btn" id="btn-items-list-add">+ Add New Product</button>
-            <button type="button" class="btn-classic" id="btn-items-list-refresh">🔄 Refresh</button>
+            <button type="button" class="btn-classic" id="btn-items-list-refresh">Refresh</button>
           </div>
 
           <!-- Product Table Container -->
@@ -1265,9 +1600,636 @@
           <div class="master-bottom-bar">
             <span id="items-list-count" style="font-size: 12px; font-weight: 700; color: #1e40af;">Total Products: 0</span>
             <div class="bar-right-buttons">
-              <button type="button" class="btn-classic primary-action-btn" id="btn-items-list-edit-selected" disabled>✏️ Edit Selected Product</button>
+              <button type="button" class="btn-classic primary-action-btn" id="btn-items-list-edit-selected" disabled>Edit Selected Product</button>
               <button type="button" class="btn-classic" id="btn-items-list-add-bottom">+ Add New Product</button>
               <button type="button" class="btn-classic" id="btn-items-list-close-bottom">Close (Esc)</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 8: PURCHASE VOUCHER ENTRY (PUR)
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-purchase-entry">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-pur-back-dash" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">Add Purchase Voucher (Inward Goods)</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[F1 Search | F5 Register | Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-pur-close-top" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body purchase-voucher-body">
+          <!-- Purchase Header Details -->
+          <div class="voucher-top-bar" style="background: #e2e8f0; border: 1px solid #94a3b8; border-radius: 4px; padding: 10px; margin-bottom: 8px;">
+            <div class="vch-meta-row" style="display: flex; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">
+              <div class="meta-item">
+                <span class="meta-label">Series:</span>
+                <input type="text" id="pur-series" value="Main" class="input-meta-compact" style="width: 80px;" readonly />
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Date:</span>
+                <input type="date" id="pur-date" class="input-meta-compact" />
+              </div>
+              <div class="meta-item vch-number-highlight">
+                <span class="meta-label">Internal Vch No:</span>
+                <input type="text" id="pur-vch-no" class="input-vch-no" value="PUR-000001" style="font-weight: 800; color: #1e3a8a; width: 120px;" readonly />
+              </div>
+              <div class="meta-item" style="flex: 1; min-width: 180px;">
+                <span class="meta-label" style="font-weight: 700; color: #b91c1c;">Supplier Bill / Inv No: *</span>
+                <input type="text" id="pur-supplier-inv-no" placeholder="e.g. INV-9842 or GST/045" style="border: 2px solid #b91c1c; padding: 4px 8px; font-weight: 600; width: 100%; border-radius: 3px;" />
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Supplier Bill Date:</span>
+                <input type="date" id="pur-supplier-inv-date" class="input-meta-compact" />
+              </div>
+            </div>
+
+            <div class="vch-meta-row" style="display: flex; gap: 12px; margin-bottom: 8px; align-items: center; flex-wrap: wrap;">
+              <div class="meta-item" style="flex: 2; min-width: 280px; display: flex; align-items: center; gap: 6px;">
+                <span class="meta-label" style="width: 90px; font-weight: 700;">Supplier: *</span>
+                <select id="pur-supplier-select" class="select-box" style="flex: 1; height: 32px; font-weight: 600;">
+                  <option value="">-- Select Supplier (or Add New) --</option>
+                </select>
+                <button type="button" class="btn-classic primary-action-btn" id="btn-pur-quick-add-supplier" title="Add New Supplier Master" style="height: 32px; padding: 0 10px;">+ New</button>
+              </div>
+              <div class="meta-item" style="flex: 1; min-width: 180px;">
+                <span class="meta-label">Material Centre / Godown:</span>
+                <select id="pur-godown-select" class="select-box" style="width: 100%; height: 32px;">
+                  <option value="GODOWN-MAIN">Main Store</option>
+                  <option value="GODOWN-01">Godown 1 (Bulk Storage)</option>
+                </select>
+              </div>
+              <div class="meta-item" style="min-width: 140px;">
+                <span class="meta-label">Payment Mode:</span>
+                <select id="pur-payment-mode" class="select-box" style="width: 100%; height: 32px;">
+                  <option value="CREDIT">Credit (Accounts Payable)</option>
+                  <option value="CASH">Cash</option>
+                  <option value="BANK">Bank Transfer / NEFT</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="vch-meta-row" style="display: flex; gap: 12px; align-items: center;">
+              <div class="meta-item flex-full" style="display: flex; align-items: center; gap: 8px;">
+                <span class="meta-label" style="width: 90px;">Narration:</span>
+                <input type="text" id="pur-narration" placeholder="Enter purchase voucher remarks or lorry receipt / dispatch details..." style="flex: 1; padding: 4px 8px; height: 30px;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Purchase Inward Toolbar (Barcode scanning & OCR document upload) -->
+          <div class="pur-action-toolbar" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 4px; margin-bottom: 8px;">
+            <div style="display: flex; gap: 10px; align-items: center; flex: 1;">
+              <div style="position: relative; flex: 1; max-width: 450px;">
+                <span style="position: absolute; left: 10px; top: 7px; color: #64748b; font-size: 11px; font-weight: 700;">Find:</span>
+                <input type="text" id="pur-barcode-input" placeholder="Scan barcode or type SKU to instantly add to purchase grid..." style="width: 100%; padding: 6px 10px 6px 30px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px; font-size: 13px;" />
+              </div>
+              <button type="button" class="btn-classic" id="btn-pur-search-item" style="padding: 6px 14px; font-weight: 700;">Search Product (F1)</button>
+              <button type="button" class="btn-classic primary-action-btn" id="btn-pur-add-row" style="padding: 6px 14px;">+ Add Empty Row</button>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button type="button" class="btn-classic" id="btn-pur-open-ocr" style="background: #e0f2fe; border-color: #0284c7; color: #0369a1; font-weight: 700; padding: 6px 14px;">
+                Upload / Scan Invoice (OCR)
+              </button>
+            </div>
+          </div>
+
+          <!-- Purchase Grid Table -->
+          <div class="voucher-grid-panel" style="flex: 1; min-height: 250px; background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;">
+            <div class="vch-table-wrapper" style="flex: 1; overflow-y: auto;">
+              <table class="vch-grid-table purchase-items-table" id="pur-items-table" style="width: 100%;">
+                <thead>
+                  <tr style="background: #1e3a8a; color: #ffffff;">
+                    <th style="width: 35px; text-align: center;">#</th>
+                    <th style="width: 120px;">Barcode</th>
+                    <th style="min-width: 220px;">Item Description</th>
+                    <th style="width: 90px;">Batch / Exp</th>
+                    <th style="width: 70px; text-align: right;">Qty</th>
+                    <th style="width: 65px; text-align: right;">Free Qty</th>
+                    <th style="width: 60px; text-align: center;">Unit</th>
+                    <th style="width: 90px; text-align: right;">Cost Rate (₹)</th>
+                    <th style="width: 65px; text-align: right;">Disc %</th>
+                    <th style="width: 90px; text-align: right;">Taxable (₹)</th>
+                    <th style="width: 70px; text-align: center;">GST %</th>
+                    <th style="width: 95px; text-align: right;">Total (₹)</th>
+                    <th style="width: 45px; text-align: center;">Del</th>
+                  </tr>
+                </thead>
+                <tbody id="pur-items-tbody">
+                  <!-- Dynamic purchase rows -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Purchase Bottom Calculation & Bill Sundries Strip -->
+            <div class="pur-calculation-strip" style="background: #f1f5f9; border-top: 1px solid #cbd5e1; padding: 10px 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
+              <!-- Left: Landed Cost & Expense Apportionment -->
+              <div style="flex: 1; max-width: 400px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px;">
+                <div style="font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 6px; text-transform: uppercase;">Landed Cost &amp; Expenses (Auto-Apportioned into WAC)</div>
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                  <span style="font-size: 12px; width: 140px;">Freight &amp; Cartage (₹):</span>
+                  <input type="number" id="pur-freight-exp" value="0.00" min="0" step="0.01" style="width: 100px; padding: 3px 6px; text-align: right;" />
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <span style="font-size: 12px; width: 140px;">Handling &amp; Other (₹):</span>
+                  <input type="number" id="pur-handling-exp" value="0.00" min="0" step="0.01" style="width: 100px; padding: 3px 6px; text-align: right;" />
+                </div>
+              </div>
+
+              <!-- Right: Tax & Net Amount Breakdown -->
+              <div style="min-width: 320px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px;">
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px;">
+                  <span style="color: #64748b;">Subtotal (Goods):</span>
+                  <strong id="pur-subtotal-val">₹ 0.00</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px;">
+                  <span style="color: #64748b;">CGST:</span>
+                  <span id="pur-cgst-val">₹ 0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px;">
+                  <span style="color: #64748b;">SGST:</span>
+                  <span id="pur-sgst-val">₹ 0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px;">
+                  <span style="color: #64748b;">IGST:</span>
+                  <span id="pur-igst-val">₹ 0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px;">
+                  <span style="color: #64748b;">Round Off (+/-):</span>
+                  <span id="pur-round-val">₹ 0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 6px 0 2px 0; font-size: 15px; border-top: 2px solid #0f172a; margin-top: 4px; color: #0f172a;">
+                  <strong>GRAND TOTAL:</strong>
+                  <strong id="pur-grand-total" style="color: #1e3a8a;">₹ 0.00</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Purchase Bottom Actions Strip -->
+          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span id="pur-items-count-label" style="font-size: 12px; font-weight: 700; color: #1e40af;">Items: 0 | Total Qty: 0</span>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-classic" id="btn-pur-reset">Reset / Clear</button>
+              <button type="button" class="btn-classic" id="btn-pur-register-nav">View Purchase Register (F5)</button>
+              <button type="button" class="btn-classic primary-action-btn" id="btn-pur-save-post" style="background: #15803d; border-color: #166534; font-size: 13px; font-weight: 800; padding: 6px 20px;">
+                Post Purchase Voucher
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 9: PURCHASE REGISTER / LIST
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-purchase-list">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-pur-list-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">Purchase Register (Inward Vouchers)</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[F5 Refresh | Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-pur-list-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body">
+          <div class="items-list-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+            <div class="items-search-box" style="flex: 1;">
+              <span class="search-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
+              <input type="text" id="pur-list-search" class="items-search-input" placeholder="Search by Voucher No, Supplier Bill No, or Supplier Name..." autocomplete="off" />
+            </div>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-pur-list-add-new">+ Add Purchase</button>
+            <button type="button" class="btn-classic" id="btn-pur-list-refresh">Refresh</button>
+          </div>
+
+          <div class="table-container full-height" style="height: calc(100% - 95px); background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+            <table class="companies-table" id="pur-register-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 100px;">Date</th>
+                  <th style="width: 120px;">Voucher No</th>
+                  <th style="width: 130px;">Supplier Bill No</th>
+                  <th style="min-width: 220px;">Supplier Name</th>
+                  <th style="width: 80px; text-align: center;">Items</th>
+                  <th style="width: 110px; text-align: right;">Tax Amt (₹)</th>
+                  <th style="width: 120px; text-align: right;">Net Amount (₹)</th>
+                  <th style="width: 90px; text-align: center;">Status</th>
+                  <th style="width: 120px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pur-register-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+            <div id="pur-register-empty" class="empty-table-msg" style="display: none; padding: 24px; text-align: center; color: #64748b;">
+              No purchase vouchers found. Click "+ Add Purchase" to record inward inventory.
+            </div>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span id="pur-register-count-label" style="font-size: 12px; font-weight: 700; color: #1e40af;">Total Vouchers: 0</span>
+            <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
+              Total Purchase Value: <span id="pur-register-total-val" style="color: #1e3a8a;">₹ 0.00</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 10: SUPPLIER MASTER
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-supplier-master">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-supplier-master-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">Supplier Master &amp; Accounts Payable</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-supplier-master-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body">
+          <div class="items-list-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+            <div class="items-search-box" style="flex: 1;">
+              <span class="search-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
+              <input type="text" id="supplier-master-search" class="items-search-input" placeholder="Search supplier by name, code, GSTIN, phone, or city..." autocomplete="off" />
+            </div>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-supplier-add-new">+ Add New Supplier</button>
+            <button type="button" class="btn-classic" id="btn-supplier-master-refresh">Refresh</button>
+          </div>
+
+          <div class="table-container full-height" style="height: calc(100% - 95px); background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+            <table class="companies-table" id="supplier-master-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 90px;">Code</th>
+                  <th style="min-width: 200px;">Supplier Name</th>
+                  <th style="width: 150px;">GSTIN</th>
+                  <th style="width: 110px;">Phone</th>
+                  <th style="width: 120px;">City / State</th>
+                  <th style="width: 110px; text-align: right;">Credit Limit (₹)</th>
+                  <th style="width: 120px; text-align: right;">Outstanding (₹)</th>
+                  <th style="width: 140px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="supplier-master-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+            <div id="supplier-master-empty" class="empty-table-msg" style="display: none; padding: 24px; text-align: center; color: #64748b;">
+              No suppliers registered yet. Click "+ Add New Supplier" to create one.
+            </div>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span id="supplier-master-count-label" style="font-size: 12px; font-weight: 700; color: #0f766e;">Total Suppliers: 0</span>
+            <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
+              Total Outstanding Payable: <span id="supplier-master-total-outstanding" style="color: #b91c1c;">₹ 0.00</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 11: CENTRALIZED STOCK SUMMARY & VALUATION
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-stock-summary">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-stock-summary-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">Stock Summary &amp; Inventory Valuation (WAC)</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[F1 Search | F5 Refresh | Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-stock-summary-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body">
+          <div class="items-list-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+            <div class="items-search-box" style="flex: 1; min-width: 250px;">
+              <span class="search-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
+              <input type="text" id="stock-summary-search" class="items-search-input" placeholder="Search inventory by product name, barcode, or category..." autocomplete="off" />
+            </div>
+            <select id="stock-summary-filter-status" class="select-box filter-select" style="min-width: 140px;">
+              <option value="">All Stock Status</option>
+              <option value="OPTIMAL">In Stock (Optimal)</option>
+              <option value="LOW_STOCK">Low Stock Alert (&le; 10)</option>
+              <option value="OUT_OF_STOCK">Out of Stock (= 0)</option>
+              <option value="NEGATIVE">Negative Stock (&lt; 0)</option>
+            </select>
+            <button type="button" class="btn-classic" id="btn-stock-summary-refresh">Refresh</button>
+            <button type="button" class="btn-classic" id="btn-stock-summary-adjust" style="font-weight: 700;">Stock Adjustments</button>
+          </div>
+
+          <div class="table-container full-height" style="height: calc(100% - 95px); background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+            <table class="companies-table stock-summary-table" id="stock-summary-table">
+              <thead>
+                <tr style="background: #0f172a; color: #ffffff;">
+                  <th style="width: 35px; text-align: center;">#</th>
+                  <th style="width: 120px;">Barcode / SKU</th>
+                  <th style="min-width: 200px;">Product Name</th>
+                  <th style="width: 110px;">Category</th>
+                  <th style="width: 55px; text-align: center;">Unit</th>
+                  <th style="width: 80px; text-align: right;">Opening</th>
+                  <th style="width: 80px; text-align: right; color: #86efac;">Inward (+)</th>
+                  <th style="width: 80px; text-align: right; color: #fca5a5;">Outward (-)</th>
+                  <th style="width: 90px; text-align: right; font-weight: 800;">Closing Balance</th>
+                  <th style="width: 95px; text-align: right;">WAC Rate (₹)</th>
+                  <th style="width: 110px; text-align: right;">Stock Value (₹)</th>
+                  <th style="width: 100px; text-align: center;">Status</th>
+                  <th style="width: 80px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="stock-summary-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+            <div id="stock-summary-empty" class="empty-table-msg" style="display: none; padding: 24px; text-align: center; color: #64748b;">
+              No products in catalogue. Add products or post purchase invoices.
+            </div>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div style="display: flex; gap: 16px; font-size: 12px; font-weight: 700;">
+              <span id="stock-summary-total-skus" style="color: #1e40af;">Total SKUs: 0</span>
+              <span id="stock-summary-total-qty" style="color: #15803d;">Total Stock Qty: 0</span>
+              <span id="stock-summary-low-count" style="color: #b91c1c;">Low Stock Alert: 0</span>
+            </div>
+            <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
+              Total Inventory Valuation (WAC): <span id="stock-summary-total-valuation" style="color: #15803d; font-size: 15px;">₹ 0.00</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 12: STOCK ADJUSTMENTS & GODOWN TRANSFERS
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-stock-adjustments">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-stock-adj-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">Stock Adjustments &amp; Material Centre Transfers</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-stock-adj-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body" style="padding: 16px; max-width: 900px; margin: 0 auto; width: 100%;">
+          <!-- Tabs Header -->
+          <div style="display: flex; gap: 4px; border-bottom: 2px solid #cbd5e1; margin-bottom: 16px;">
+            <button type="button" class="erp-tab-btn active" id="tab-btn-stock-adj">Damage / Expiry / Count Adjustment</button>
+            <button type="button" class="erp-tab-btn" id="tab-btn-stock-transfer">Inter-Godown Stock Transfer</button>
+          </div>
+
+          <!-- Tab 1: Adjustment -->
+          <div id="tab-pane-stock-adj" class="erp-tab-pane active">
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 20px;">
+              <h3 style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                Record Physical Stock Variance / Write-Off
+              </h3>
+              
+              <div class="comp-field-row-split" style="margin-bottom: 12px;">
+                <div class="split-item">
+                  <label for="adj-date" style="font-weight: 600;">Adjustment Date: *</label>
+                  <input type="date" id="adj-date" class="input-meta-compact" />
+                </div>
+                <div class="split-item">
+                  <label for="adj-type" style="font-weight: 600;">Adjustment Type: *</label>
+                  <select id="adj-type" class="select-box" style="height: 32px; font-weight: 600;">
+                    <option value="DAMAGE">Damage Write-off (Outward -)</option>
+                    <option value="EXPIRY">Expired Stock Disposal (Outward -)</option>
+                    <option value="PHYSICAL_COUNT">Physical Count Variance</option>
+                    <option value="INCREASE">Stock Increase / Found (Inward +)</option>
+                    <option value="DECREASE">Stock Decrease / Shortage (Outward -)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="comp-field-row-split" style="margin-bottom: 12px;">
+                <div class="split-item" style="flex: 2;">
+                  <label for="adj-item-select" style="font-weight: 600;">Select Product: *</label>
+                  <select id="adj-item-select" class="select-box" style="height: 32px; font-weight: 600;">
+                    <option value="">-- Choose Catalogue Product --</option>
+                  </select>
+                </div>
+                <div class="split-item">
+                  <label for="adj-godown" style="font-weight: 600;">Godown / Location:</label>
+                  <select id="adj-godown" class="select-box" style="height: 32px;">
+                    <option value="GODOWN-MAIN">Main Store</option>
+                    <option value="GODOWN-01">Godown 1 (Bulk Storage)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="comp-field-row-split" style="margin-bottom: 12px; background: #f8fafc; padding: 12px; border-radius: 4px; border: 1px solid #e2e8f0;">
+                <div class="split-item">
+                  <label style="font-size: 11px; color: #64748b;">Current Stock Balance:</label>
+                  <div id="adj-current-stock-disp" style="font-size: 16px; font-weight: 800; color: #1e3a8a;">0</div>
+                </div>
+                <div class="split-item">
+                  <label for="adj-qty" style="font-weight: 700; color: #b91c1c;">Adjustment Quantity: *</label>
+                  <input type="number" id="adj-qty" min="0.001" step="any" placeholder="e.g. 5" style="border: 2px solid #b91c1c; font-size: 15px; font-weight: 700; padding: 4px 8px;" />
+                </div>
+                <div class="split-item">
+                  <label style="font-size: 11px; color: #64748b;">Resulting Stock Balance:</label>
+                  <div id="adj-new-stock-disp" style="font-size: 16px; font-weight: 800; color: #15803d;">0</div>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 16px;">
+                <label for="adj-reason" style="font-weight: 600; display: block; margin-bottom: 4px;">Reason / Audit Remarks: *</label>
+                <input type="text" id="adj-reason" placeholder="e.g. Broken in transit, expired batch inspection, physical inventory check" style="width: 100%; padding: 6px 10px;" />
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn-classic" id="btn-adj-reset">Reset</button>
+                <button type="button" class="btn-classic primary-action-btn" id="btn-adj-submit" style="background: #d97706; border-color: #b45309; padding: 6px 20px; font-weight: 800;">
+                  Record Stock Adjustment
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Godown Transfer -->
+          <div id="tab-pane-stock-transfer" class="erp-tab-pane" style="display: none;">
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 20px;">
+              <h3 style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                Inter-Godown / Material Centre Transfer Voucher
+              </h3>
+
+              <div class="comp-field-row-split" style="margin-bottom: 12px;">
+                <div class="split-item">
+                  <label for="trn-date" style="font-weight: 600;">Transfer Date: *</label>
+                  <input type="date" id="trn-date" class="input-meta-compact" />
+                </div>
+                <div class="split-item">
+                  <label for="trn-from-godown" style="font-weight: 600;">Source Godown (From): *</label>
+                  <select id="trn-from-godown" class="select-box" style="height: 32px; font-weight: 600;">
+                    <option value="GODOWN-MAIN">Main Store</option>
+                    <option value="GODOWN-01">Godown 1 (Bulk Storage)</option>
+                  </select>
+                </div>
+                <div class="split-item">
+                  <label for="trn-to-godown" style="font-weight: 600;">Destination Godown (To): *</label>
+                  <select id="trn-to-godown" class="select-box" style="height: 32px; font-weight: 600;">
+                    <option value="GODOWN-01">Godown 1 (Bulk Storage)</option>
+                    <option value="GODOWN-MAIN">Main Store</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="comp-field-row-split" style="margin-bottom: 12px;">
+                <div class="split-item" style="flex: 2;">
+                  <label for="trn-item-select" style="font-weight: 600;">Select Product: *</label>
+                  <select id="trn-item-select" class="select-box" style="height: 32px; font-weight: 600;">
+                    <option value="">-- Choose Catalogue Product --</option>
+                  </select>
+                </div>
+                <div class="split-item">
+                  <label for="trn-qty" style="font-weight: 700; color: #2563eb;">Transfer Quantity: *</label>
+                  <input type="number" id="trn-qty" min="0.001" step="any" placeholder="e.g. 10" style="border: 2px solid #2563eb; font-size: 15px; font-weight: 700; padding: 4px 8px;" />
+                </div>
+              </div>
+
+              <div style="margin-bottom: 16px;">
+                <label for="trn-notes" style="font-weight: 600; display: block; margin-bottom: 4px;">Transfer Notes / Dispatch Ref:</label>
+                <input type="text" id="trn-notes" placeholder="e.g. Restock shop counter from bulk warehouse" style="width: 100%; padding: 6px 10px;" />
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn-classic" id="btn-trn-reset">Reset</button>
+                <button type="button" class="btn-classic primary-action-btn" id="btn-trn-submit" style="background: #2563eb; border-color: #1d4ed8; padding: 6px 20px; font-weight: 800;">
+                  Execute Stock Transfer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 13: DAY BOOK & TRIAL BALANCE (ACCOUNTING INTEGRATION)
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-day-book">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-daybook-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">Day Book &amp; Double-Entry Trial Balance</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[F5 Refresh | Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-daybook-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body">
+          <!-- Tabs Header -->
+          <div style="display: flex; gap: 4px; border-bottom: 2px solid #cbd5e1; margin-bottom: 8px;">
+            <button type="button" class="erp-tab-btn active" id="tab-btn-daybook">Financial Day Book (All Vouchers)</button>
+            <button type="button" class="erp-tab-btn" id="tab-btn-trial-balance">Trial Balance (Balanced Ledger)</button>
+          </div>
+
+          <!-- Tab 1: Day Book -->
+          <div id="tab-pane-daybook" class="erp-tab-pane active" style="flex: 1; display: flex; flex-direction: column;">
+            <div class="items-list-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+              <label for="daybook-date-input" style="font-weight: 600; font-size: 12px;">Business Date:</label>
+              <input type="date" id="daybook-date-input" class="input-meta-compact" />
+              <button type="button" class="btn-classic" id="btn-daybook-refresh">Refresh Day Book</button>
+            </div>
+
+            <div class="table-container full-height" style="flex: 1; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+              <table class="companies-table" id="daybook-table">
+                <thead>
+                  <tr style="background: #334155; color: #ffffff;">
+                    <th style="width: 45px; text-align: center;">#</th>
+                    <th style="width: 90px;">Time</th>
+                    <th style="width: 110px;">Voucher No</th>
+                    <th style="width: 130px;">Type</th>
+                    <th style="min-width: 220px;">Particulars / Narration</th>
+                    <th style="width: 140px; text-align: right;">Debit Amount (₹)</th>
+                    <th style="width: 140px; text-align: right;">Credit Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="daybook-tbody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+              <div id="daybook-empty" class="empty-table-msg" style="display: none; padding: 24px; text-align: center; color: #64748b;">
+                No transactions recorded for this business date.
+              </div>
+            </div>
+
+            <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <span id="daybook-count-label" style="font-size: 12px; font-weight: 700; color: #334155;">Entries: 0</span>
+              <div style="display: flex; gap: 20px; font-size: 13px; font-weight: 700;">
+                <span>Total Debits: <strong id="daybook-total-debit" style="color: #1e3a8a;">₹ 0.00</strong></span>
+                <span>Total Credits: <strong id="daybook-total-credit" style="color: #15803d;">₹ 0.00</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Trial Balance -->
+          <div id="tab-pane-trial-balance" class="erp-tab-pane" style="display: none; flex: 1; flex-direction: column;">
+            <div class="items-list-filter-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 12px; color: #64748b;">Real-time double-entry ledger balance audit (All active nominal, personal &amp; real accounts)</span>
+              <button type="button" class="btn-classic" id="btn-trial-balance-refresh">Refresh Trial Balance</button>
+            </div>
+
+            <div class="table-container full-height" style="flex: 1; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+              <table class="companies-table" id="trial-balance-table">
+                <thead>
+                  <tr style="background: #0f172a; color: #ffffff;">
+                    <th style="width: 45px; text-align: center;">#</th>
+                    <th style="min-width: 250px;">Account Head / Ledger</th>
+                    <th style="width: 160px;">Account Type</th>
+                    <th style="width: 150px; text-align: right;">Debit (₹)</th>
+                    <th style="width: 150px; text-align: right;">Credit (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="trial-balance-tbody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+
+            <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <div id="trial-balance-status-badge" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #15803d;">
+                <span>[BALANCED]</span> <span>Trial Balance is Balanced</span>
+              </div>
+              <div style="display: flex; gap: 20px; font-size: 14px; font-weight: 800;">
+                <span>Total Debit: <strong id="tb-total-debit" style="color: #1e3a8a;">₹ 0.00</strong></span>
+                <span>Total Credit: <strong id="tb-total-credit" style="color: #15803d;">₹ 0.00</strong></span>
+                <span>Difference: <strong id="tb-difference" style="color: #475569;">₹ 0.00</strong></span>
+              </div>
             </div>
           </div>
         </div>
@@ -1329,6 +2291,36 @@
                   <option value="Y">Yes (To Nearest Rupee)</option>
                   <option value="N">No</option>
                 </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="group-box" style="margin-top: 8px;">
+            <legend class="group-title">Customer Pricing &amp; Category Discounts</legend>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">
+              Default discount rates automatically applied when billing customers in each category.
+            </div>
+            <div class="comp-field-row-split">
+              <div class="split-item">
+                <label for="cfg-disc-commercial">Commercial Discount (%)</label>
+                <input type="number" step="0.1" min="0" max="100" id="cfg-disc-commercial" value="5.0" />
+                <span class="sub-label">B2B / bulk buyers (default 5%)</span>
+              </div>
+              <div class="split-item">
+                <label for="cfg-disc-sub-commercial">Sub-Commercial Discount (%)</label>
+                <input type="number" step="0.1" min="0" max="100" id="cfg-disc-sub-commercial" value="2.5" />
+                <span class="sub-label">Wholesale / regular buyers (default 2.5%)</span>
+              </div>
+            </div>
+            <div class="comp-field-row-split" style="margin-top: 6px;">
+              <div class="split-item">
+                <label for="cfg-disc-direct">Direct Customer Discount (%)</label>
+                <input type="number" step="0.1" min="0" max="100" id="cfg-disc-direct" value="0.0" />
+                <span class="sub-label">Standard retail / walk-in (default 0%)</span>
+              </div>
+              <div class="split-item">
+                <label>Validation Rule</label>
+                <input type="text" value="0.00% to 100.00% allowed" readonly style="background: #e2e8f0; font-size: 11px;" />
               </div>
             </div>
           </fieldset>
@@ -1444,7 +2436,7 @@
           </div>
           <div class="comp-btn-row">
             <button type="button" class="btn-action primary-btn" id="btn-confirm-pos-cash" style="height: 38px; width: 100%;">
-              ✓ Confirm Payment & Print (Enter)
+              Confirm Payment &amp; Print (Enter)
             </button>
           </div>
         </div>
@@ -1465,8 +2457,8 @@
             Generating receipt...
           </div>
           <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 14px;">
-            <button type="button" class="btn-action" id="btn-download-pdf-invoice">📄 Save PDF Invoice</button>
-            <button type="button" class="btn-action primary-btn" id="btn-print-receipt-action">🖨️ Print Receipt</button>
+            <button type="button" class="btn-action" id="btn-download-pdf-invoice">Save PDF Invoice</button>
+            <button type="button" class="btn-action primary-btn" id="btn-print-receipt-action">Print Receipt</button>
           </div>
         </div>
       </div>
@@ -1485,7 +2477,7 @@
           <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; border-radius: 4px; margin-bottom: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <strong>Create New Backup</strong>
-              <button type="button" class="btn-action primary-btn" id="btn-trigger-backup">⚡ Create Local Backup</button>
+              <button type="button" class="btn-action primary-btn" id="btn-trigger-backup">Create Local Backup</button>
             </div>
             <div style="font-size: 11px; color: #64748b;">
               External Drive Mirror (Optional):
@@ -1551,10 +2543,10 @@
           </p>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <button type="button" class="btn-action primary-btn" id="btn-export-json-action" style="height: 38px;">
-              📥 Export Company Data to JSON
+              Export Company Data to JSON
             </button>
             <button type="button" class="btn-action" id="btn-import-json-action" style="height: 38px;">
-              📤 Import Data from JSON File
+              Import Data from JSON File
             </button>
           </div>
           <div id="migration-status-msg" style="margin-top: 12px; font-size: 11px; color: #166534; font-weight: 600;"></div>
@@ -1569,7 +2561,7 @@
       <div class="create-comp-dialog-box modal-scanner-box" style="width: 620px; max-width: 95vw;">
         <div class="create-comp-header" style="background: #1e293b; color: #ffffff;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">📱</span>
+            <span style="font-size: 11px; font-weight: 800; color: #1e40af;">MOBILE</span>
             <h2>Mobile Barcode Scanner (Wi-Fi)</h2>
           </div>
           <button type="button" class="dialog-close-btn" id="btn-close-mobile-scanner">&times;</button>
@@ -1614,7 +2606,7 @@
               <div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <label style="font-size: 11px; font-weight: 700; color: #475569;">Direct Pairing URL (HTTPS):</label>
-                  <span id="badge-scanner-https" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 4px;">🔒 TLS HTTPS</span>
+                  <span id="badge-scanner-https" style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 4px;">TLS HTTPS</span>
                 </div>
                 <div style="display: flex; gap: 6px;">
                   <input type="text" id="mobile-scanner-url-input" readonly style="flex: 1; font-family: monospace; font-size: 11px; padding: 6px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; color: #0f172a;" value="Loading URL..." />
@@ -1622,8 +2614,8 @@
                   <button type="button" class="btn-action" id="btn-open-scanner-browser" title="Open in local browser tab for testing" style="padding: 0 10px; font-size: 11px; white-space: nowrap;">Open Tab</button>
                 </div>
                 <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
-                  <a href="#" id="link-download-ca" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">📜 Download Root CA (ca.crt)</a>
-                  <a href="#" id="link-open-setup-guide" target="_blank" style="color: #475569; text-decoration: underline;">📱 Android Setup Guide</a>
+                  <a href="#" id="link-download-ca" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">Download Root CA (ca.crt)</a>
+                  <a href="#" id="link-open-setup-guide" target="_blank" style="color: #475569; text-decoration: underline;">Android Setup Guide</a>
                 </div>
               </div>
             </div>
@@ -1632,26 +2624,26 @@
           <!-- Section 2: Test Scanning (Instant Simulation without physical scanner) -->
           <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 11px; font-weight: 700; color: #1e293b;">🧪 Test Barcode Scanning:</span>
+              <span style="font-size: 11px; font-weight: 700; color: #1e293b;">Test Barcode Scanning:</span>
               <span style="font-size: 10px; color: #64748b;">Clicking a demo product simulates a scan without a physical scanner</span>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
               <button type="button" class="btn-demo-test" data-barcode="890_TEST_001" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
-                🍪 Milk Bikis (₹10.00)
+                Milk Bikis (₹10.00)
               </button>
               <button type="button" class="btn-demo-test" data-barcode="890_TEST_002" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
-                🍪 Hide &amp; Seek (₹20.00)
+                Hide &amp; Seek (₹20.00)
               </button>
               <button type="button" class="btn-demo-test danger" data-barcode="8909263004690" style="background: #fffbeb; border: 1px solid #fde68a; color: #b45309; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
-                ⚠️ Levosalbutamol [Unverified] (₹0.00)
+                Levosalbutamol [Unverified] (₹0.00)
               </button>
               <button type="button" class="btn-demo-test" data-barcode="8901207033728" style="background: #f5f3ff; border: 1px solid #ddd6fe; color: #6d28d9; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;">
-                🌸 Odonil Lavender (8901207033728)
+                Odonil Lavender (8901207033728)
               </button>
             </div>
             <div style="display: flex; gap: 6px;">
               <input type="text" id="scanner-modal-manual-barcode" placeholder="Or enter barcode to test (e.g. 890_TEST_001)" style="flex: 1; font-size: 11px; padding: 5px 8px; font-family: monospace; border: 1px solid #cbd5e1; border-radius: 4px;" />
-              <button type="button" class="btn-action primary-btn" id="btn-scanner-modal-test-scan" style="font-size: 11px; padding: 0 12px; font-weight: 700;">Simulate Scan ⏎</button>
+              <button type="button" class="btn-action primary-btn" id="btn-scanner-modal-test-scan" style="font-size: 11px; padding: 0 12px; font-weight: 700;">Simulate Scan Enter</button>
             </div>
           </div>
 
@@ -1668,7 +2660,7 @@
           <!-- Footer Actions -->
           <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 12px;">
             <button type="button" class="btn-action danger" id="btn-revoke-scanner-token" style="font-size: 11px; padding: 6px 12px;">
-              🔒 Revoke / Regenerate Pairing Token
+              Revoke / Regenerate Pairing Token
             </button>
             <div style="display: flex; gap: 8px;">
               <button type="button" class="btn-action primary-btn" id="btn-dismiss-mobile-scanner" style="font-size: 11px; padding: 6px 18px; font-weight: 700;">
@@ -1687,7 +2679,7 @@
       <div class="create-comp-dialog-box" style="width: 480px; max-width: 95vw;">
         <div class="create-comp-header" style="background: #1e293b;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">🧪</span>
+            <span style="font-size: 11px; font-weight: 800; color: #1e40af;">SCANNER</span>
             <h2>Simulate Barcode Scan (Test Mode)</h2>
           </div>
           <button type="button" class="dialog-close-btn" id="btn-close-simulate-scan">&times;</button>
@@ -1702,7 +2694,7 @@
               <label for="sim-barcode-input" style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Enter or Select Barcode:</label>
               <div style="display: flex; gap: 8px;">
                 <input type="text" id="sim-barcode-input" placeholder="e.g. 890_TEST_001" style="flex: 1; padding: 8px 10px; font-size: 13px; font-family: monospace; border: 1px solid #cbd5e1; border-radius: 4px;" autofocus />
-                <button type="submit" class="btn-action primary-btn" id="btn-submit-simulate-scan" style="padding: 0 16px; font-weight: 700;">Scan ⏎</button>
+                <button type="submit" class="btn-action primary-btn" id="btn-submit-simulate-scan" style="padding: 0 16px; font-weight: 700;">Scan Enter</button>
               </div>
             </div>
           </form>
@@ -1729,14 +2721,14 @@
                   <strong style="color: #b45309;">Levosalbutamol sulfate</strong> (DEMO / Medical)
                   <div style="font-size: 11px; font-family: monospace; color: #64748b;">Barcode: 8909263004690</div>
                 </div>
-                <span style="font-weight: 700; color: #dc2626; font-size: 11px;">⚠️ Unconfigured (₹0)</span>
+                <span style="font-weight: 700; color: #dc2626; font-size: 11px;">[Unconfigured: ₹0]</span>
               </button>
               <button type="button" class="btn-action btn-sim-quick" data-code="8901207033728" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; text-align: left; border-left: 3px solid #8b5cf6;">
                 <div>
                   <strong style="color: #6b21a8;">Odonil Room Spray – Lavender Mist</strong> (Home Care / 220 ml)
                   <div style="font-size: 11px; font-family: monospace; color: #64748b;">Barcode: 8901207033728 (EAN-13)</div>
                 </div>
-                <span style="font-weight: 700; color: #dc2626; font-size: 11px;">⚠️ Unconfigured (₹0)</span>
+                <span style="font-weight: 700; color: #dc2626; font-size: 11px;">[Unconfigured: ₹0]</span>
               </button>
             </div>
           </div>
@@ -1755,7 +2747,7 @@
       <div class="create-comp-dialog-box" style="width: 500px; max-width: 95vw; border-top: 4px solid #f59e0b;">
         <div class="create-comp-header" style="background: #fffbeb; color: #92400e;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 20px;">⚠️</span>
+            <span style="font-size: 12px; font-weight: 800; color: #b91c1c;">ALERT</span>
             <h2 style="color: #92400e;">Product Verification Required</h2>
           </div>
           <button type="button" class="dialog-close-btn" id="btn-close-medical-verification" style="color: #92400e;">&times;</button>
@@ -1792,7 +2784,7 @@
       <div class="create-comp-dialog-box pos-product-search-modal" style="width: 780px; max-width: 95vw;">
         <div class="create-comp-header">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 16px;">🔍</span>
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
             <h2>Select Product from Catalogue (F1)</h2>
           </div>
           <button type="button" class="dialog-close-btn" id="btn-close-pos-item-search">&times;</button>
@@ -1811,7 +2803,7 @@
               <button type="button" class="btn-classic" id="btn-modal-search-clear">Clear</button>
             </div>
             <div style="font-size: 11px; color: #64748b; margin-top: 5px;">
-              💡 <em>Use ↑ / ↓ arrow keys to highlight, [Enter] or click a product to select, [Esc] to close.</em>
+              <em>Use Up / Down arrow keys to highlight, [Enter] or click a product to select, [Esc] to close.</em>
             </div>
           </div>
 
@@ -1838,6 +2830,477 @@
           <div class="master-bottom-bar" style="margin-top: 12px; padding: 6px 0 0 0; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
             <span id="pos-modal-search-count" style="font-size: 12px; font-weight: 700; color: #1e40af;">Showing 0 products</span>
             <button type="button" class="btn-classic" id="btn-cancel-pos-item-search">Close (Esc)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: ADD / EDIT SUPPLIER MASTER
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-supplier-form" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 620px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #0f766e;">
+          <h2 id="modal-supplier-title">Add New Supplier Master</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-supplier-modal">&times;</button>
+        </div>
+        <form class="create-comp-form" id="form-supplier-master" onsubmit="return false;" style="padding: 14px;">
+          <input type="hidden" id="sup-form-id" value="" />
+          <div class="comp-field-row-split" style="margin-bottom: 8px;">
+            <div class="split-item" style="flex: 1;">
+              <label for="sup-form-code">Supplier Code</label>
+              <input type="text" id="sup-form-code" placeholder="Auto (e.g. SUP-001)" />
+            </div>
+            <div class="split-item" style="flex: 2;">
+              <label for="sup-form-name">Supplier / Trade Name: *</label>
+              <input type="text" id="sup-form-name" placeholder="Full Business Name" required style="border: 2px solid #0f766e; font-weight: 700;" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 8px;">
+            <div class="split-item">
+              <label for="sup-form-gstin">GSTIN (15 Digits)</label>
+              <input type="text" id="sup-form-gstin" placeholder="e.g. 33AAAAA0000A1Z5" maxlength="15" style="text-transform: uppercase;" />
+            </div>
+            <div class="split-item">
+              <label for="sup-form-pan">PAN Number</label>
+              <input type="text" id="sup-form-pan" placeholder="e.g. AAAAA0000A" maxlength="10" style="text-transform: uppercase;" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 8px;">
+            <div class="split-item">
+              <label for="sup-form-phone">Contact Phone / Mobile</label>
+              <input type="tel" id="sup-form-phone" placeholder="10-digit mobile number" />
+            </div>
+            <div class="split-item">
+              <label for="sup-form-email">Email Address</label>
+              <input type="email" id="sup-form-email" placeholder="billing@supplier.com" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 8px;">
+            <div class="split-item" style="flex: 2;">
+              <label for="sup-form-address">Billing Address</label>
+              <input type="text" id="sup-form-address" placeholder="Street / Industrial Estate" />
+            </div>
+            <div class="split-item" style="flex: 1;">
+              <label for="sup-form-city">City</label>
+              <input type="text" id="sup-form-city" placeholder="e.g. Chennai" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 8px;">
+            <div class="split-item">
+              <label for="sup-form-state">State</label>
+              <input type="text" id="sup-form-state" value="Tamilnadu" />
+            </div>
+            <div class="split-item">
+              <label for="sup-form-credit-limit">Credit Limit (₹)</label>
+              <input type="number" id="sup-form-credit-limit" value="0.00" min="0" step="100" />
+            </div>
+            <div class="split-item">
+              <label for="sup-form-opening-balance">Opening Balance (Cr ₹)</label>
+              <input type="number" id="sup-form-opening-balance" value="0.00" step="any" />
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; border-top: 1px solid #cbd5e1; padding-top: 10px;">
+            <button type="button" class="btn-classic" id="btn-cancel-supplier-modal">Cancel</button>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-save-supplier-modal" style="background: #0f766e; border-color: #115e59; font-weight: 700; padding: 6px 18px;">
+              Save Supplier
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: SUPPLIER LEDGER STATEMENT
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-supplier-ledger" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 820px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #0f766e;">
+          <h2>Supplier Statement / Accounts Payable Ledger</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-supplier-ledger">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 15px; font-weight: 800; color: #065f46;" id="sup-ledger-name">Supplier Name</div>
+              <div style="font-size: 11px; color: #4b5563;" id="sup-ledger-meta">Code: SUP-001 | GSTIN: 33AAAAA0000A1Z5</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 11px; color: #6b7280; text-transform: uppercase;">Outstanding Balance (Payable)</div>
+              <div style="font-size: 18px; font-weight: 800; color: #b91c1c;" id="sup-ledger-balance">₹ 0.00 Cr</div>
+            </div>
+          </div>
+
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="sup-ledger-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 95px;">Date</th>
+                  <th style="width: 130px;">Voucher No</th>
+                  <th style="width: 120px;">Ref / Bill No</th>
+                  <th style="min-width: 180px;">Particulars</th>
+                  <th style="width: 110px; text-align: right;">Debit (₹)</th>
+                  <th style="width: 110px; text-align: right;">Credit (₹)</th>
+                  <th style="width: 120px; text-align: right;">Running Bal (₹)</th>
+                </tr>
+              </thead>
+              <tbody id="sup-ledger-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 12px; padding: 6px 0 0 0; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-classic" id="btn-close-sup-ledger-bottom">Close (Esc)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: STOCK ITEM RUNNING LEDGER DRILLDOWN
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-stock-item-ledger" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 860px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #15803d;">
+          <h2>Stock Item Ledger (Movement &amp; Running Balance)</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-stock-item-ledger">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 15px; font-weight: 800; color: #166534;" id="stock-ledger-item-name">Product Name</div>
+              <div style="font-size: 11px; color: #4b5563;" id="stock-ledger-item-meta">Barcode: 890... | Unit: Pcs</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 11px; color: #6b7280; text-transform: uppercase;">Current Stock Balance</div>
+              <div style="font-size: 18px; font-weight: 800; color: #15803d;" id="stock-ledger-closing-bal">0</div>
+            </div>
+          </div>
+
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="stock-item-ledger-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="width: 95px;">Date</th>
+                  <th style="width: 140px;">Voucher Type</th>
+                  <th style="width: 130px;">Voucher No</th>
+                  <th style="width: 90px; text-align: right; color: #166534;">Inward (+)</th>
+                  <th style="width: 90px; text-align: right; color: #b91c1c;">Outward (-)</th>
+                  <th style="width: 100px; text-align: right; font-weight: 800;">Balance</th>
+                  <th style="min-width: 160px;">Remarks / Ref</th>
+                </tr>
+              </thead>
+              <tbody id="stock-item-ledger-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 12px; padding: 6px 0 0 0; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-classic" id="btn-close-stock-ledger-bottom">Close (Esc)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: SUPPLIER INVOICE DOCUMENT SCANNING & OCR
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-invoice-ocr" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 860px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #0284c7;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 800; color: #1e40af;">OCR</span>
+            <h2>Supplier Invoice Document Scanning &amp; OCR Engine</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-ocr-modal">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <!-- Step 1: Input source -->
+          <div style="background: #f8fafc; border: 1px dashed #0284c7; border-radius: 6px; padding: 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-weight: 700; font-size: 13px; color: #0369a1;">Upload Invoice File or Paste Text / Sample Bill:</span>
+              <button type="button" class="btn-classic" id="btn-ocr-load-sample" style="background: #e0f2fe; border-color: #0284c7; color: #0369a1; font-weight: 700;">
+                Load Sample GST Tax Invoice
+              </button>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center;">
+              <input type="file" id="ocr-file-input" accept=".pdf,.png,.jpg,.jpeg,.txt" style="font-size: 12px;" />
+              <button type="button" class="btn-classic primary-action-btn" id="btn-ocr-run-extract" style="background: #0284c7; border-color: #0369a1; font-weight: 700; padding: 6px 16px;">
+                Process &amp; Extract Document
+              </button>
+            </div>
+
+            <textarea id="ocr-raw-text-input" placeholder="Or paste invoice plain text / OCR raw output here..." style="width: 100%; height: 90px; font-family: monospace; font-size: 11px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;"></textarea>
+          </div>
+
+          <!-- Step 2: Extraction Review Results -->
+          <div id="ocr-results-panel" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="font-size: 13px; font-weight: 800; color: #1e3a8a;">
+                Extracted Supplier Bill Data &amp; Catalogue Match Review
+              </h3>
+              <span id="ocr-status-pill" class="stock-badge-optimal" style="padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;">
+                Heuristic &amp; Pattern Extraction Validated
+              </span>
+            </div>
+
+            <div class="comp-field-row-split" style="background: #e0f2fe; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px;">
+              <div class="split-item">
+                <span style="color: #64748b;">Supplier:</span>
+                <strong id="ocr-res-supplier">--</strong>
+              </div>
+              <div class="split-item">
+                <span style="color: #64748b;">Supplier GSTIN:</span>
+                <strong id="ocr-res-gstin">--</strong>
+              </div>
+              <div class="split-item">
+                <span style="color: #64748b;">Invoice No:</span>
+                <strong id="ocr-res-inv-no">--</strong>
+              </div>
+              <div class="split-item">
+                <span style="color: #64748b;">Invoice Date:</span>
+                <strong id="ocr-res-date">--</strong>
+              </div>
+              <div class="split-item">
+                <span style="color: #64748b;">Grand Total:</span>
+                <strong id="ocr-res-total" style="color: #0369a1; font-size: 13px;">₹ 0.00</strong>
+              </div>
+            </div>
+
+            <div class="table-container" style="max-height: 220px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px; margin-bottom: 10px;">
+              <table class="companies-table" id="ocr-items-table">
+                <thead>
+                  <tr style="background: #0284c7; color: #fff;">
+                    <th style="width: 35px; text-align: center;">#</th>
+                    <th style="min-width: 180px;">Extracted Item Description</th>
+                    <th style="min-width: 180px;">Matched Catalogue Item</th>
+                    <th style="width: 60px; text-align: right;">Qty</th>
+                    <th style="width: 50px; text-align: center;">Unit</th>
+                    <th style="width: 80px; text-align: right;">Rate (₹)</th>
+                    <th style="width: 60px; text-align: center;">Tax %</th>
+                    <th style="width: 85px; text-align: right;">Total (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="ocr-items-tbody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #cbd5e1; padding-top: 10px;">
+              <span style="font-size: 11px; color: #64748b;">
+                Review lines above, then click Populate to automatically load this bill into the Purchase Voucher entry screen.
+              </span>
+              <button type="button" class="btn-classic primary-action-btn" id="btn-ocr-populate-purchase" style="background: #15803d; border-color: #166534; font-size: 13px; font-weight: 800; padding: 8px 20px;">
+                Populate Purchase Voucher &rarr;
+              </button>
+            </div>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 12px; padding: 6px 0 0 0; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-classic" id="btn-close-ocr-bottom">Close (Esc)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: SALES RETURN (CREDIT NOTE)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-sales-return" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 650px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #dc2626;">
+          <h2>↩ Create Sales Return (Credit Note)</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-sales-return">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <div class="comp-field-row-split" style="margin-bottom: 10px;">
+            <div class="split-item">
+              <label for="sr-customer-name" style="font-weight: 600;">Customer / Party: *</label>
+              <input type="text" id="sr-customer-name" placeholder="Walk-in Customer" />
+            </div>
+            <div class="split-item">
+              <label for="sr-original-inv" style="font-weight: 600;">Original Sales Bill No:</label>
+              <input type="text" id="sr-original-inv" placeholder="e.g. POS-001 or INV-001" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 10px;">
+            <div class="split-item" style="flex: 2;">
+              <label for="sr-item-select" style="font-weight: 600;">Product to Return: *</label>
+              <select id="sr-item-select" class="select-box" style="height: 32px; font-weight: 600;">
+                <option value="">-- Choose Product --</option>
+              </select>
+            </div>
+            <div class="split-item">
+              <label for="sr-qty" style="font-weight: 700; color: #dc2626;">Return Qty: *</label>
+              <input type="number" id="sr-qty" value="1" min="0.001" step="any" style="border: 2px solid #dc2626; font-weight: 700;" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 10px;">
+            <div class="split-item">
+              <label for="sr-rate" style="font-weight: 600;">Return Rate (₹):</label>
+              <input type="number" id="sr-rate" value="0.00" min="0" step="any" />
+            </div>
+            <div class="split-item">
+              <label for="sr-tax-rate" style="font-weight: 600;">Tax %:</label>
+              <input type="number" id="sr-tax-rate" value="18" min="0" max="28" />
+            </div>
+            <div class="split-item">
+              <label for="sr-stock-condition" style="font-weight: 600;">Stock Action:</label>
+              <select id="sr-stock-condition" class="select-box" style="height: 32px;">
+                <option value="SALEABLE">Restore to Saleable Stock (+)</option>
+                <option value="DAMAGED">Mark Damaged (No Restock)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label for="sr-reason" style="font-weight: 600; display: block; margin-bottom: 4px;">Return Reason / Remarks:</label>
+            <input type="text" id="sr-reason" placeholder="e.g. Customer changed mind, wrong item bought" style="width: 100%; padding: 6px 10px;" />
+          </div>
+
+          <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 8px 12px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <span style="font-size: 12px; color: #991b1b; font-weight: 600;">Net Credit Amount (Refund / Credit):</span>
+            <strong id="sr-total-display" style="font-size: 16px; color: #dc2626;">₹ 0.00</strong>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn-classic" id="btn-cancel-sales-return">Cancel</button>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-submit-sales-return" style="background: #dc2626; border-color: #b91c1c; font-weight: 800; padding: 6px 20px;">
+              Post Sales Return
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: PURCHASE RETURN (DEBIT NOTE)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-purchase-return" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 650px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #9333ea;">
+          <h2>↩ Create Purchase Return (Debit Note)</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-purchase-return">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <div class="comp-field-row-split" style="margin-bottom: 10px;">
+            <div class="split-item" style="flex: 2;">
+              <label for="pr-supplier-select" style="font-weight: 600;">Supplier: *</label>
+              <select id="pr-supplier-select" class="select-box" style="height: 32px; font-weight: 600;">
+                <option value="">-- Choose Supplier --</option>
+              </select>
+            </div>
+            <div class="split-item">
+              <label for="pr-original-bill" style="font-weight: 600;">Original Supplier Bill No:</label>
+              <input type="text" id="pr-original-bill" placeholder="e.g. INV-9842" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 10px;">
+            <div class="split-item" style="flex: 2;">
+              <label for="pr-item-select" style="font-weight: 600;">Product to Return: *</label>
+              <select id="pr-item-select" class="select-box" style="height: 32px; font-weight: 600;">
+                <option value="">-- Choose Product --</option>
+              </select>
+            </div>
+            <div class="split-item">
+              <label for="pr-qty" style="font-weight: 700; color: #9333ea;">Return Qty: *</label>
+              <input type="number" id="pr-qty" value="1" min="0.001" step="any" style="border: 2px solid #9333ea; font-weight: 700;" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split" style="margin-bottom: 10px;">
+            <div class="split-item">
+              <label for="pr-rate" style="font-weight: 600;">Purchase Rate (₹):</label>
+              <input type="number" id="pr-rate" value="0.00" min="0" step="any" />
+            </div>
+            <div class="split-item">
+              <label for="pr-tax-rate" style="font-weight: 600;">Tax %:</label>
+              <input type="number" id="pr-tax-rate" value="18" min="0" max="28" />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label for="pr-reason" style="font-weight: 600; display: block; margin-bottom: 4px;">Return Reason / Remarks: *</label>
+            <input type="text" id="pr-reason" placeholder="e.g. Rejected quality, damaged in shipping, excess delivery" style="width: 100%; padding: 6px 10px;" />
+          </div>
+
+          <div style="background: #faf5ff; border: 1px solid #e9d5ff; padding: 8px 12px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <span style="font-size: 12px; color: #6b21a8; font-weight: 600;">Net Debit Note Amount (Deducted from Supplier Balance):</span>
+            <strong id="pr-total-display" style="font-size: 16px; color: #9333ea;">₹ 0.00</strong>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn-classic" id="btn-cancel-purchase-return">Cancel</button>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-submit-purchase-return" style="background: #9333ea; border-color: #7e22ce; font-weight: 800; padding: 6px 20px;">
+              Post Purchase Return (Debit Note)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: LOW-STOCK ALERTS & NOTIFICATIONS
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-low-stock-alert" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 720px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #b91c1c;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; font-weight: 800; color: #b91c1c;">ALERT</span>
+            <h2 id="low-stock-modal-title">Low Stock Alert — Products Below Threshold</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-low-stock-modal" title="Dismiss Alert">&times;</button>
+        </div>
+        <div style="padding: 14px;">
+          <div style="margin-bottom: 10px; font-size: 13px; color: #475569;">
+            The following products have dropped strictly below their configured minimum stock alert levels. Please reorder or replenish stock to prevent checkout shortages.
+          </div>
+          <div style="max-height: 280px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 4px; margin-bottom: 14px;">
+            <table class="companies-table" id="low-stock-modal-table" style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; color: #475569;">
+                  <th style="padding: 6px 10px; text-align: left;">Product Name</th>
+                  <th style="padding: 6px 10px; text-align: left;">Barcode / SKU</th>
+                  <th style="padding: 6px 10px; text-align: right;">Current Stock</th>
+                  <th style="padding: 6px 10px; text-align: right;">Threshold</th>
+                  <th style="padding: 6px 10px; text-align: right; color: #b91c1c;">Shortfall</th>
+                  <th style="padding: 6px 10px; text-align: center;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="low-stock-modal-tbody">
+                <!-- Dynamically populated rows -->
+              </tbody>
+            </table>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="font-size: 11px; color: #64748b;">
+              Alerts automatically resolve once inventory is replenished to threshold or above.
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-classic" id="btn-low-stock-view-product" style="font-weight: 600;">
+                View Product
+              </button>
+              <button type="button" class="btn-classic" id="btn-low-stock-view-inventory" style="background: #15803d; border-color: #166534; color: #ffffff; font-weight: 700;">
+                View Inventory
+              </button>
+              <button type="button" class="btn-classic" id="btn-low-stock-dismiss" style="font-weight: 600;">
+                Dismiss
+              </button>
+            </div>
           </div>
         </div>
       </div>

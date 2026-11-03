@@ -187,3 +187,4 @@ if __name__ == "__main__":
     print(f"Tax Category:                {res['item'].get('tax_category')}")
     print(f"Price Configuration Status:  {res['price_configuration_status']}")
     print("=======================================================\n")
+

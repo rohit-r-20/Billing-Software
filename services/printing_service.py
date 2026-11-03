@@ -72,10 +72,20 @@ class PrintingService:
                 line_str = f"{name[:13]:<14} {qty_str:>4} {total:>10.2f}"
             lines.append(line_str)
 
-        lines.extend([
-            line_sep,
-            f"{'Subtotal:':<{cols - 12}} {subtotal:>10.2f}"
-        ])
+        disc_total = float(voucher_data.get("discount_total") or 0.0)
+        if disc_total > 0:
+            gross = float(voucher_data.get("gross_subtotal") or (subtotal + disc_total))
+            lines.extend([
+                line_sep,
+                f"{'Gross Total:':<{cols - 12}} {gross:>10.2f}",
+                f"{'Discount:':<{cols - 12}} -{disc_total:>9.2f}",
+                f"{'Taxable Subtotal:':<{cols - 12}} {subtotal:>10.2f}"
+            ])
+        else:
+            lines.extend([
+                line_sep,
+                f"{'Subtotal:':<{cols - 12}} {subtotal:>10.2f}"
+            ])
 
         if cgst > 0 or sgst > 0:
             lines.append(f"{'CGST:':<{cols - 12}} {cgst:>10.2f}")

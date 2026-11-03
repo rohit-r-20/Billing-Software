@@ -133,3 +133,4 @@ def test_odonil_barcode_lookup_and_cart_checkout_protection(odonil_test_env):
     assert len(unverified) == 1
     assert unverified[0]["name"] == "ODONIL ROOM SPRAY - LAVENDER MIST"
     assert unverified[0]["unit"] == "Can"
+

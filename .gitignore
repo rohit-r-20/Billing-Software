@@ -6,5 +6,5 @@ __pycache__/
 data/
 db/*.db
 !db/migrations/
-backups/pre_restore_safety/
-backups/*.db
+backups/
+*.tar.gz

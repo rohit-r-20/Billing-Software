@@ -20,6 +20,10 @@ from services.reporting_service import reporting_service
 from services.migration_service import migration_service
 from services.demo_product_service import demo_product_service
 from services.mobile_scanner_service import mobile_scanner_service
+from services.supplier_service import supplier_service
+from services.purchase_service import purchase_service
+from services.accounting_service import accounting_service
+from services.ocr_service import ocr_service
 from core.configuration import config
 from core.logging_config import logger
 
@@ -196,7 +200,8 @@ class BackendBridge(QObject):
                 sale_type=sale_type,
                 payment_method=pay_method,
                 payments=payments,
-                narration=narration
+                narration=narration,
+                customer_category=payload.get("customer_category")
             )
             return json.dumps({"success": True, "data": res})
         except Exception as e:
@@ -218,6 +223,276 @@ class BackendBridge(QObject):
             if vch:
                 return json.dumps({"success": True, "data": vch})
             return json.dumps({"success": False, "error": "Voucher not found."})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getDailyDiscount(self, company_id: str, branch_id: str, business_date: str) -> str:
+        try:
+            cfg = billing_service.get_daily_discount(
+                company_id=company_id,
+                branch_id=branch_id if branch_id else None,
+                business_date=business_date if business_date else None
+            )
+            return json.dumps({"success": True, "data": cfg})
+        except Exception as e:
+            logger.error(f"Error getting daily discount: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, float, bool, str, result=str)
+    def setDailyDiscount(
+        self,
+        company_id: str,
+        branch_id: str,
+        business_date: str,
+        discount_percent: float,
+        is_active: bool,
+        enabled_by: str
+    ) -> str:
+        try:
+            res = billing_service.set_daily_discount(
+                company_id=company_id,
+                branch_id=branch_id if branch_id else None,
+                business_date=business_date,
+                discount_percent=discount_percent,
+                is_active=is_active,
+                enabled_by=enabled_by or "Admin"
+            )
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error setting daily discount: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Customer Category Discounts ---
+    @pyqtSlot(str, result=str)
+    def getCustomerCategoryDiscounts(self, company_id: str) -> str:
+        try:
+            res = billing_service.get_customer_category_discounts(company_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error getting customer category discounts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def setCustomerCategoryDiscounts(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = billing_service.set_customer_category_discounts(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error setting customer category discounts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, float, bool, str, result=str)
+    def calculateAuthoritativeDiscount(
+        self,
+        company_id: str,
+        customer_category: str,
+        manual_discount: float,
+        apply_daily: bool,
+        business_date: str
+    ) -> str:
+        try:
+            rate = billing_service.calculate_authoritative_discount(
+                company_id=company_id,
+                customer_category=customer_category,
+                manual_discount_percent=manual_discount if manual_discount > 0 else None,
+                apply_daily_discount=apply_daily,
+                business_date=business_date if business_date else None
+            )
+            return json.dumps({"success": True, "data": rate})
+        except Exception as e:
+            logger.error(f"Error calculating authoritative discount: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Suppliers ---
+    @pyqtSlot(str, str, result=str)
+    def listSuppliers(self, company_id: str, query: str = "") -> str:
+        try:
+            res = supplier_service.list_suppliers(company_id, query)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def saveSupplier(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = supplier_service.save_supplier(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getSupplierLedger(self, company_id: str, supplier_id: str) -> str:
+        try:
+            res = supplier_service.get_supplier_ledger(company_id, supplier_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Purchase Management ---
+    @pyqtSlot(str, str, result=str)
+    def getNextPurchaseVoucherNumber(self, company_id: str, series: str) -> str:
+        try:
+            res = purchase_service.get_next_purchase_voucher_number(company_id, series or "Main")
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def createPurchaseVoucher(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = purchase_service.create_purchase_voucher(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def listPurchaseVouchers(self, company_id: str) -> str:
+        try:
+            res = purchase_service.list_purchase_vouchers(company_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getPurchaseVoucherDetails(self, company_id: str, voucher_id: str) -> str:
+        try:
+            res = purchase_service.get_purchase_voucher_details(company_id, voucher_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def createPurchaseReturn(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = purchase_service.create_purchase_return(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Sales Returns ---
+    @pyqtSlot(str, str, result=str)
+    def createSalesReturn(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = billing_service.create_sales_return(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def listSalesReturns(self, company_id: str) -> str:
+        try:
+            res = billing_service.list_sales_returns(company_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Centralized Inventory ---
+    @pyqtSlot(str, str, str, result=str)
+    def getStockSummary(self, company_id: str, branch_id: str, query: str) -> str:
+        try:
+            res = inventory_service.get_stock_summary(company_id, branch_id if branch_id else None, query or "")
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getStockItemLedger(self, company_id: str, item_id: str, branch_id: str) -> str:
+        try:
+            res = inventory_service.get_stock_item_ledger(company_id, item_id, branch_id if branch_id else None)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getInventoryDashboard(self, company_id: str) -> str:
+        try:
+            res = inventory_service.get_inventory_dashboard(company_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getLowStockAlerts(self, company_id: str) -> str:
+        try:
+            alerts = inventory_service.get_active_low_stock_alerts(company_id)
+            return json.dumps({"success": True, "data": alerts})
+        except Exception as e:
+            logger.error(f"Error getting low stock alerts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def dismissLowStockAlert(self, company_id: str, alert_id: str) -> str:
+        try:
+            inventory_service.dismiss_low_stock_alert(company_id, alert_id if alert_id else None)
+            return json.dumps({"success": True})
+        except Exception as e:
+            logger.error(f"Error dismissing low stock alert: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def evaluateLowStockAlerts(self, company_id: str) -> str:
+        try:
+            alerts = inventory_service.evaluate_low_stock_alerts(company_id)
+            return json.dumps({"success": True, "data": alerts})
+        except Exception as e:
+            logger.error(f"Error evaluating low stock alerts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def recordStockAdjustment(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = inventory_service.record_stock_adjustment(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def recordStockTransfer(self, company_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = inventory_service.record_stock_transfer(company_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Accounting & Ledgers ---
+    @pyqtSlot(str, result=str)
+    def getChartOfAccounts(self, company_id: str) -> str:
+        try:
+            res = accounting_service.get_chart_of_accounts(company_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getDayBook(self, company_id: str, business_date: str) -> str:
+        try:
+            res = accounting_service.get_day_book(company_id, business_date if business_date else None)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getTrialBalance(self, company_id: str) -> str:
+        try:
+            res = accounting_service.get_trial_balance(company_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Supplier Invoice Document OCR ---
+    @pyqtSlot(str, str, str, result=str)
+    def processInvoiceOcr(self, company_id: str, file_path_or_text: str, file_name: str) -> str:
+        try:
+            res = ocr_service.process_invoice_document(company_id, file_path_or_text, file_name or "bill.pdf")
+            return json.dumps({"success": True, "data": res})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 

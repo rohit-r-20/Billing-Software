@@ -167,6 +167,27 @@ class CatalogueService:
         min_price = float(item_data.get("min_sales_price") or item_data.get("minSalesPrice") or 0.0)
         desc = (item_data.get("description") or "").strip()
 
+        # Low-stock alert threshold (optional positive float)
+        raw_min_stock = item_data.get("min_stock_alert_level")
+        if raw_min_stock is None or raw_min_stock == "" or raw_min_stock == "null":
+            raw_min_stock = item_data.get("min_stock_level")
+        if raw_min_stock is not None and str(raw_min_stock).strip() != "":
+            try:
+                min_stock_val = float(raw_min_stock)
+                min_stock_alert_level = max(0.0, min_stock_val)
+            except (ValueError, TypeError):
+                min_stock_alert_level = None
+        else:
+            min_stock_alert_level = None
+
+        raw_alert_enabled = item_data.get("alert_enabled")
+        if raw_alert_enabled is None:
+            alert_enabled = 1
+        elif isinstance(raw_alert_enabled, bool):
+            alert_enabled = 1 if raw_alert_enabled else 0
+        else:
+            alert_enabled = 1 if str(raw_alert_enabled).strip() in ("1", "true", "True") else 0
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             # Check default branch
@@ -193,12 +214,15 @@ class CatalogueService:
                         purc_price = ?,
                         mrp = ?,
                         min_sales_price = ?,
-                        description = ?
+                        description = ?,
+                        min_stock_alert_level = ?,
+                        alert_enabled = ?
                     WHERE company_id = ? AND id = ?;
                 """, (
                     name, alias, print_name, group,
                     unit, tax_cat, hsn,
                     sales_price, purc_price, mrp, min_price, desc,
+                    min_stock_alert_level, alert_enabled,
                     actual_company_id, item_id
                 ))
                 actual_id = item_id
@@ -208,8 +232,9 @@ class CatalogueService:
                     INSERT INTO items (
                         id, company_id, name, alias, print_name, item_group,
                         unit, op_stock_qty, op_stock_val, tax_category, hsn,
-                        sales_price, purc_price, mrp, min_sales_price, description
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        sales_price, purc_price, mrp, min_sales_price, description,
+                        min_stock_alert_level, alert_enabled
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(company_id, name) DO UPDATE SET
                         alias = excluded.alias,
                         print_name = excluded.print_name,
@@ -221,11 +246,14 @@ class CatalogueService:
                         purc_price = excluded.purc_price,
                         mrp = excluded.mrp,
                         min_sales_price = excluded.min_sales_price,
-                        description = excluded.description;
+                        description = excluded.description,
+                        min_stock_alert_level = excluded.min_stock_alert_level,
+                        alert_enabled = excluded.alert_enabled;
                 """, (
                     item_id, actual_company_id, name, alias, print_name, group,
                     unit, op_qty, op_val, tax_cat, hsn,
-                    sales_price, purc_price, mrp, min_price, desc
+                    sales_price, purc_price, mrp, min_price, desc,
+                    min_stock_alert_level, alert_enabled
                 ))
 
                 # Query actual ID
@@ -265,7 +293,9 @@ class CatalogueService:
             "sales_price": sales_price,
             "unit": unit,
             "tax_category": tax_cat,
-            "item_group": group
+            "item_group": group,
+            "min_stock_alert_level": min_stock_alert_level,
+            "alert_enabled": alert_enabled
         }
 
 
