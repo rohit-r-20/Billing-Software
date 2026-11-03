@@ -2481,33 +2481,51 @@ function renderPosCart() {
 }
 
 // =============================================================
-// POS CART TABLE TEXT SIZING CONTROLS
+// POS CART TABLE TEXT SIZING CONTROLS (INCREMENTAL)
 // =============================================================
-const POS_TEXT_SIZES = ["small", "normal", "large"];
-const POS_TEXT_SIZE_STORAGE_KEY = "alpha_pos_table_text_size";
+const POS_MIN_FONT_SIZE = 11;
+const POS_MAX_FONT_SIZE = 18;
+const POS_DEFAULT_FONT_SIZE = 13;
+const POS_FONT_SIZE_STORAGE_KEY = "alpha_pos_table_text_size";
 
 function applyPosCartTextSize(size) {
-  if (!POS_TEXT_SIZES.includes(size)) {
-    size = "normal";
+  let numSize = parseInt(size, 10);
+  if (isNaN(numSize)) {
+    if (size === "small") numSize = 11;
+    else if (size === "large") numSize = 16;
+    else numSize = POS_DEFAULT_FONT_SIZE;
   }
+
+  if (numSize < POS_MIN_FONT_SIZE) numSize = POS_MIN_FONT_SIZE;
+  if (numSize > POS_MAX_FONT_SIZE) numSize = POS_MAX_FONT_SIZE;
 
   const container = document.getElementById("pos-cart-container");
   if (container) {
+    container.style.setProperty("--pos-table-font-size", `${numSize}px`);
+    // Backward compatibility classes
     container.classList.remove("pos-text-size-small", "pos-text-size-normal", "pos-text-size-large");
-    container.classList.add(`pos-text-size-${size}`);
+    if (numSize <= 11) container.classList.add("pos-text-size-small");
+    else if (numSize >= 15) container.classList.add("pos-text-size-large");
+    else container.classList.add("pos-text-size-normal");
   }
 
-  const optBtns = document.querySelectorAll(".btn-text-size-opt");
-  optBtns.forEach((btn) => {
-    if (btn.dataset.size === size) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
-  });
+  const displayEl = document.getElementById("pos-font-size-val");
+  if (displayEl) {
+    displayEl.textContent = `${numSize} px`;
+  }
+
+  const decBtn = document.getElementById("btn-pos-font-dec");
+  if (decBtn) {
+    decBtn.disabled = (numSize <= POS_MIN_FONT_SIZE);
+  }
+
+  const incBtn = document.getElementById("btn-pos-font-inc");
+  if (incBtn) {
+    incBtn.disabled = (numSize >= POS_MAX_FONT_SIZE);
+  }
 
   try {
-    localStorage.setItem(POS_TEXT_SIZE_STORAGE_KEY, size);
+    localStorage.setItem(POS_FONT_SIZE_STORAGE_KEY, numSize.toString());
   } catch (e) {
     console.warn("Could not persist POS table text size:", e);
   }
@@ -2515,27 +2533,29 @@ function applyPosCartTextSize(size) {
 
 function getPosCartTextSize() {
   try {
-    const saved = localStorage.getItem(POS_TEXT_SIZE_STORAGE_KEY);
-    if (saved && POS_TEXT_SIZES.includes(saved)) {
-      return saved;
+    const saved = localStorage.getItem(POS_FONT_SIZE_STORAGE_KEY);
+    if (saved) {
+      if (saved === "small") return 11;
+      if (saved === "large") return 16;
+      if (saved === "normal") return 13;
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= POS_MIN_FONT_SIZE && parsed <= POS_MAX_FONT_SIZE) {
+        return parsed;
+      }
     }
   } catch (e) {}
-  return "normal";
+  return POS_DEFAULT_FONT_SIZE;
 }
 
 function stepPosCartTextSize(delta) {
   const current = getPosCartTextSize();
-  const currentIndex = POS_TEXT_SIZES.indexOf(current);
-  let nextIndex = (currentIndex === -1 ? 1 : currentIndex) + delta;
-  if (nextIndex < 0) nextIndex = 0;
-  if (nextIndex >= POS_TEXT_SIZES.length) nextIndex = POS_TEXT_SIZES.length - 1;
-  applyPosCartTextSize(POS_TEXT_SIZES[nextIndex]);
+  const next = Math.max(POS_MIN_FONT_SIZE, Math.min(POS_MAX_FONT_SIZE, current + delta));
+  applyPosCartTextSize(next);
 }
 
 function initPosTextSizeControls() {
   const decBtn = document.getElementById("btn-pos-font-dec");
   const incBtn = document.getElementById("btn-pos-font-inc");
-  const optBtns = document.querySelectorAll(".btn-text-size-opt");
 
   if (decBtn && !decBtn.dataset.bound) {
     decBtn.dataset.bound = "true";
@@ -2546,16 +2566,6 @@ function initPosTextSizeControls() {
     incBtn.dataset.bound = "true";
     incBtn.addEventListener("click", () => stepPosCartTextSize(1));
   }
-
-  optBtns.forEach((btn) => {
-    if (!btn.dataset.bound) {
-      btn.dataset.bound = "true";
-      btn.addEventListener("click", () => {
-        const sz = btn.dataset.size;
-        applyPosCartTextSize(sz);
-      });
-    }
-  });
 
   // Apply persisted or default size
   applyPosCartTextSize(getPosCartTextSize());
@@ -3837,6 +3847,9 @@ function closeProductSearchModal() {
   } else if (modalSearchTarget === "VOUCHER" && modalTargetVoucherRow) {
     const qtyInput = vchItemsTbody.querySelector(`.vch-qty-input[data-row="${modalTargetVoucherRow}"]`);
     if (qtyInput) qtyInput.focus();
+  } else if (modalSearchTarget === "PURCHASE") {
+    const purBarcodeInput = document.getElementById("pur-barcode-input");
+    if (purBarcodeInput) purBarcodeInput.focus();
   }
 }
 
@@ -3911,6 +3924,33 @@ function selectProductFromModal(item) {
     if (modalTargetVoucherRow) {
       populateVoucherRowWithItem(modalTargetVoucherRow, item);
     }
+  } else if (modalSearchTarget === "PURCHASE") {
+    const costRate = parseFloat(item.purc_price ?? item.purchase_price ?? item.sales_price ?? 0);
+    const taxRate = parseFloat(item.tax_rate ?? 18);
+    const lineTotal = costRate * (1 + (taxRate / 100));
+    purchaseItemsData.push({
+      item_id: item.id,
+      barcode: item.barcode || item.alias || "",
+      name: item.name,
+      batch_no: "",
+      expiry_date: "",
+      qty: 1,
+      free_qty: 0,
+      unit: item.unit || "Pcs.",
+      cost_rate: costRate,
+      discount_pct: 0,
+      taxable_amount: costRate,
+      tax_rate: taxRate,
+      cgst_amount: 0,
+      sgst_amount: 0,
+      igst_amount: 0,
+      line_total: lineTotal
+    });
+    renderPurchaseGridRows();
+    calcPurchaseTotals();
+    showNotification(`Added ${item.name} to purchase voucher.`);
+    const purBarcodeInput = document.getElementById("pur-barcode-input");
+    if (purBarcodeInput) purBarcodeInput.focus();
   }
 }
 
@@ -4844,7 +4884,7 @@ window.addEventListener("keydown", (e) => {
   } else if (currentScreen === "view-purchase-entry") {
     if (e.key === "F1") {
       e.preventDefault();
-      openPosItemSearchModal(null);
+      openProductSearchModal("PURCHASE");
     } else if (e.key === "F5") {
       e.preventDefault();
       showScreen("view-purchase-list");
@@ -6424,6 +6464,8 @@ function setupEnterpriseErpEventListeners() {
   if (btnPurRegNav) btnPurRegNav.addEventListener("click", () => showScreen("view-purchase-list"));
   const btnPurSave = document.getElementById("btn-pur-save-post");
   if (btnPurSave) btnPurSave.addEventListener("click", postPurchaseVoucher);
+  const btnPurSearchItem = document.getElementById("btn-pur-search-item");
+  if (btnPurSearchItem) btnPurSearchItem.addEventListener("click", () => openProductSearchModal("PURCHASE"));
 
   // Barcode scanner input in Purchase Entry
   const purBarcodeInput = document.getElementById("pur-barcode-input");
@@ -6557,8 +6599,37 @@ function setupEnterpriseErpEventListeners() {
   if (tabBtnTrn) tabBtnTrn.addEventListener("click", () => switchStockAdjTab("transfer"));
   const btnAdjSubmit = document.getElementById("btn-adj-submit");
   if (btnAdjSubmit) btnAdjSubmit.addEventListener("click", postStockAdjustment);
+  const btnAdjReset = document.getElementById("btn-adj-reset");
+  if (btnAdjReset) {
+    btnAdjReset.addEventListener("click", () => {
+      const itemSel = document.getElementById("adj-item-select");
+      if (itemSel) itemSel.value = "";
+      const qtyInput = document.getElementById("adj-qty");
+      if (qtyInput) qtyInput.value = "";
+      const reasonInput = document.getElementById("adj-reason");
+      if (reasonInput) reasonInput.value = "";
+      const curStockDisp = document.getElementById("adj-current-stock-disp");
+      if (curStockDisp) curStockDisp.textContent = "0";
+      const newStockDisp = document.getElementById("adj-new-stock-disp");
+      if (newStockDisp) newStockDisp.textContent = "0";
+      showNotification("Stock adjustment inputs reset.");
+    });
+  }
+
   const btnTrnSubmit = document.getElementById("btn-trn-submit");
   if (btnTrnSubmit) btnTrnSubmit.addEventListener("click", postStockTransfer);
+  const btnTrnReset = document.getElementById("btn-trn-reset");
+  if (btnTrnReset) {
+    btnTrnReset.addEventListener("click", () => {
+      const trnItemSel = document.getElementById("trn-item-select");
+      if (trnItemSel) trnItemSel.value = "";
+      const trnQtyInput = document.getElementById("trn-qty");
+      if (trnQtyInput) trnQtyInput.value = "";
+      const trnNotes = document.getElementById("trn-notes");
+      if (trnNotes) trnNotes.value = "";
+      showNotification("Stock transfer inputs reset.");
+    });
+  }
 
   // Day Book & Trial Balance Screen
   const btnDayBookBack = document.getElementById("btn-daybook-back");
@@ -6759,255 +6830,6 @@ function initCascadingSubmenuPositioning() {
     });
   });
 }
-
-// =============================================================
-// OPERATIONAL DASHBOARD & SIDEBAR NAVIGATION
-// =============================================================
-function renderOperationalDashboard() {
-  if (!activeCompany) return;
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const activeFyEl = document.getElementById("dash-active-fy");
-  if (activeFyEl && activeCompany) {
-    activeFyEl.textContent = `F.Y. ${activeCompany.fin_year || "2026-27"}`;
-  }
-
-  // 1. Sales metrics & recent table
-  const salesValEl = document.getElementById("dash-today-sales");
-  const salesCountEl = document.getElementById("dash-sales-count");
-  const salesTbody = document.getElementById("dash-recent-sales-tbody");
-
-  function processSales(bills) {
-    let todaySales = 0;
-    let todayCount = 0;
-    (bills || []).forEach(b => {
-      const bDate = (b.vch_date || b.created_at || "").slice(0, 10);
-      if (bDate === todayStr || !bDate) {
-        todaySales += (parseFloat(b.grand_total) || 0);
-        todayCount++;
-      }
-    });
-
-    if (salesValEl) salesValEl.innerHTML = `&#8377;${todaySales.toFixed(2)}`;
-    if (salesCountEl) salesCountEl.textContent = `${todayCount} invoice${todayCount === 1 ? "" : "s"} generated today (${(bills || []).length} total)`;
-
-    if (salesTbody) {
-      if (!bills || bills.length === 0) {
-        salesTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 14px;">No sales invoices recorded yet.</td></tr>`;
-      } else {
-        const recent = bills.slice(-5).reverse();
-        salesTbody.innerHTML = recent.map(b => `
-          <tr>
-            <td style="font-weight: 700; color: #1e40af;">${escapeHtml(b.vch_no || "VCH-001")}</td>
-            <td>${escapeHtml((b.vch_date || b.created_at || todayStr).slice(0, 10))}</td>
-            <td style="font-weight: 600;">${escapeHtml(b.party_name || "Retail Customer")}</td>
-            <td style="text-align: right; font-weight: 800; color: #047857;">&#8377;${(parseFloat(b.grand_total) || 0).toFixed(2)}</td>
-            <td><span class="status-badge success">Paid</span></td>
-          </tr>
-        `).join("");
-      }
-    }
-  }
-
-  if (window.backend && window.backend.listVouchers) {
-    window.backend.listVouchers(activeCompany.id, (resp) => {
-      try {
-        const r = JSON.parse(resp);
-        if (r.success && Array.isArray(r.data)) {
-          processSales(r.data);
-          return;
-        }
-      } catch (e) {}
-      processSales(getSalesVouchers());
-    });
-  } else {
-    processSales(getSalesVouchers());
-  }
-
-  // 2. Purchases metrics & recent table
-  const purValEl = document.getElementById("dash-today-purchases");
-  const purCountEl = document.getElementById("dash-purchases-count");
-  const purTbody = document.getElementById("dash-recent-purchases-tbody");
-
-  function processPurchases(purs) {
-    let todayPurchases = 0;
-    let todayPurCount = 0;
-    (purs || []).forEach(p => {
-      const pDate = (p.voucher_date || p.created_at || "").slice(0, 10);
-      if (pDate === todayStr || !pDate) {
-        todayPurchases += (parseFloat(p.grand_total) || 0);
-        todayPurCount++;
-      }
-    });
-
-    if (purValEl) purValEl.innerHTML = `&#8377;${todayPurchases.toFixed(2)}`;
-    if (purCountEl) purCountEl.textContent = `${todayPurCount} purchase bill${todayPurCount === 1 ? "" : "s"} posted today (${(purs || []).length} total)`;
-
-    if (purTbody) {
-      if (!purs || purs.length === 0) {
-        purTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 14px;">No inward purchases recorded yet.</td></tr>`;
-      } else {
-        const recent = purs.slice(-5).reverse();
-        purTbody.innerHTML = recent.map(p => `
-          <tr>
-            <td style="font-weight: 700; color: #1e3a8a;">${escapeHtml(p.vch_no || p.supplier_invoice_no || "PUR-001")}</td>
-            <td>${escapeHtml((p.voucher_date || p.created_at || todayStr).slice(0, 10))}</td>
-            <td style="font-weight: 600;">${escapeHtml(p.supplier_name || "Standard Supplier")}</td>
-            <td style="text-align: right; font-weight: 800; color: #0f172a;">&#8377;${(parseFloat(p.grand_total) || 0).toFixed(2)}</td>
-            <td><span class="status-badge success">Posted</span></td>
-          </tr>
-        `).join("");
-      }
-    }
-  }
-
-  if (window.backend && window.backend.listPurchaseVouchers) {
-    window.backend.listPurchaseVouchers(activeCompany.id, (resp) => {
-      try {
-        const r = JSON.parse(resp);
-        if (r.success && Array.isArray(r.data)) {
-          processPurchases(r.data);
-          return;
-        }
-      } catch (e) {}
-      processPurchases([]);
-    });
-  } else {
-    processPurchases([]);
-  }
-
-  // 3. Low stock alerts
-  const lowStockValEl = document.getElementById("dash-low-stock");
-  const lowStockBadgeEl = document.getElementById("dash-low-stock-badge");
-  const lowStockSubEl = document.getElementById("dash-low-stock-sub");
-
-  if (window.backend && window.backend.getLowStockAlerts) {
-    window.backend.getLowStockAlerts(activeCompany.id, (resp) => {
-      try {
-        const r = JSON.parse(resp);
-        if (r.success && Array.isArray(r.data)) {
-          const count = r.data.length;
-          if (lowStockValEl) lowStockValEl.textContent = `${count} item${count === 1 ? "" : "s"}`;
-          if (lowStockBadgeEl) {
-            lowStockBadgeEl.className = count > 0 ? "status-badge warning" : "status-badge success";
-            lowStockBadgeEl.textContent = count > 0 ? "Attention" : "Optimal";
-          }
-          if (lowStockSubEl) {
-            lowStockSubEl.textContent = count > 0
-              ? `${count} product(s) below reorder threshold`
-              : "All products above minimum threshold";
-          }
-        }
-      } catch (e) {}
-    });
-  }
-
-  // 4. Held bills / POS Cart
-  const heldBillsValEl = document.getElementById("dash-held-bills");
-  if (heldBillsValEl) {
-    const activeBillsCount = (typeof heldBills !== "undefined" && heldBills ? heldBills.length : 0) +
-                             (typeof posCart !== "undefined" && posCart && posCart.length > 0 ? 1 : 0);
-    heldBillsValEl.textContent = `${activeBillsCount} bill${activeBillsCount === 1 ? "" : "s"}`;
-  }
-}
-
-function setupSidebarAndDashboardNav() {
-  const navMappings = [
-    { id: "btn-nav-overview", action: () => showScreen("view-dashboard") },
-    { id: "btn-nav-pos", action: () => openFastBillingPos() },
-    { id: "btn-nav-sales-add", action: () => showScreen("view-sales-voucher") },
-    { id: "btn-nav-sales-list", action: () => showScreen("view-sales-list") },
-    { id: "btn-nav-sales-return", action: () => {
-        const m = document.getElementById("modal-sales-return");
-        if (m) m.classList.add("active");
-      }
-    },
-    { id: "btn-nav-purchase-add", action: () => showScreen("view-purchase-entry") },
-    { id: "btn-nav-purchase-list", action: () => showScreen("view-purchase-list") },
-    { id: "btn-nav-purchase-return", action: () => {
-        const m = document.getElementById("modal-purchase-return");
-        if (m) m.classList.add("active");
-      }
-    },
-    { id: "btn-nav-suppliers", action: () => showScreen("view-supplier-master") },
-    { id: "btn-nav-stock", action: () => showScreen("view-stock-summary") },
-    { id: "btn-nav-transfer", action: () => {
-        showScreen("view-stock-adjustments");
-        const tabBtn = document.getElementById("tab-btn-stock-transfer");
-        if (tabBtn) tabBtn.click();
-      }
-    },
-    { id: "btn-nav-adjustments", action: () => {
-        showScreen("view-stock-adjustments");
-        const tabBtn = document.getElementById("tab-btn-stock-adj");
-        if (tabBtn) tabBtn.click();
-      }
-    },
-    { id: "btn-nav-low-stock", action: () => {
-        if (typeof checkLowStockAlerts === "function") checkLowStockAlerts(true);
-      }
-    },
-    { id: "btn-nav-customers", action: () => showScreen("view-add-account-master") },
-    { id: "btn-nav-customer-categories", action: () => {
-        const m = document.getElementById("modal-configuration");
-        if (m) m.classList.add("active");
-      }
-    },
-    { id: "btn-nav-add-product", action: () => showScreen("view-add-item-master") },
-    { id: "btn-nav-products", action: () => showScreen("view-items-list") },
-    { id: "btn-nav-daybook", action: () => showScreen("view-day-book") },
-    { id: "btn-nav-trial-balance", action: () => {
-        showScreen("view-day-book");
-        const tbBtn = document.getElementById("tab-btn-trial-balance");
-        if (tbBtn) tbBtn.click();
-      }
-    },
-    { id: "btn-nav-gst", action: () => {
-        const m = document.getElementById("modal-reports");
-        if (m) m.classList.add("active");
-        else showScreen("view-day-book");
-      }
-    },
-    { id: "btn-nav-config", action: () => {
-        const m = document.getElementById("modal-configuration");
-        if (m) m.classList.add("active");
-      }
-    },
-    { id: "btn-nav-switch-mode", action: () => {
-        const btn = document.getElementById("bar-switch-mode");
-        if (btn) btn.click();
-      }
-    },
-    { id: "btn-nav-backup", action: () => {
-        const m = document.getElementById("modal-backup");
-        if (m) m.classList.add("active");
-      }
-    },
-    { id: "btn-nav-printer", action: () => {
-        const m = document.getElementById("modal-receipt-preview");
-        if (m) m.classList.add("active");
-      }
-    },
-    // Quick Actions on Dashboard
-    { id: "dash-btn-refresh-overview", action: () => renderOperationalDashboard() },
-    { id: "dash-btn-pos", action: () => openFastBillingPos() },
-    { id: "dash-btn-sales-add", action: () => showScreen("view-sales-voucher") },
-    { id: "dash-btn-purchase-add", action: () => showScreen("view-purchase-entry") },
-    { id: "dash-btn-product-add", action: () => showScreen("view-add-item-master") },
-    { id: "dash-btn-stock-view", action: () => showScreen("view-stock-summary") },
-    { id: "dash-btn-daybook", action: () => showScreen("view-day-book") },
-    { id: "dash-btn-view-all-sales", action: () => showScreen("view-sales-list") },
-    { id: "dash-btn-view-all-purchases", action: () => showScreen("view-purchase-list") },
-  ];
-
-  navMappings.forEach(({ id, action }) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener("click", action);
-    }
-  });
-}
-
 
 // =============================================================
 // OPERATIONAL DASHBOARD & SIDEBAR NAVIGATION

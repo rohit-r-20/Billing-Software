@@ -1166,6 +1166,11 @@ html, body {
   flex: 1;
 }
 
+.product-master-grid .master-panel {
+  flex: 1 1 50%;
+  max-width: 50%;
+}
+
 .master-panel {
   display: flex;
   flex-direction: column;
@@ -1278,8 +1283,46 @@ html, body {
 }
 
 .split-col .field-label {
-  width: auto;
-  min-width: 75px;
+  width: 122px;
+  min-width: 122px;
+  max-width: 122px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.checkbox-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  height: 22px;
+}
+
+.checkbox-inline-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.product-master-grid .extra-info-box {
+  flex: none;
+}
+
+.product-master-grid .extra-info-box .textarea-extra,
+.product-master-grid .textarea-desc {
+  height: 52px;
+  min-height: 48px;
+  resize: vertical;
 }
 
 .split-col input {
@@ -2003,6 +2046,7 @@ html, body {
 
 /* Fast Billing (POS) Cart Table & Container */
 .pos-cart-container {
+  --pos-table-font-size: 13px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 4px;
@@ -2018,7 +2062,7 @@ html, body {
 .pos-cart-table-wrapper {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   min-height: 0;
   position: relative;
   background: #ffffff;
@@ -2029,7 +2073,7 @@ html, body {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
-  font-size: 12.5px;
+  font-size: var(--pos-table-font-size, 13px);
   background: #ffffff;
 }
 
@@ -2044,9 +2088,9 @@ html, body {
   background: #1e293b;
   color: #f8fafc;
   font-weight: 700;
-  font-size: 12px;
+  font-size: calc(var(--pos-table-font-size, 13px) - 0.5px);
   letter-spacing: 0.3px;
-  padding: 8px 10px;
+  padding: calc(var(--pos-table-font-size, 13px) * 0.55) 8px;
   border-bottom: 2px solid #0f172a;
   border-right: 1px solid #334155;
   white-space: nowrap;
@@ -2065,13 +2109,13 @@ html, body {
 }
 
 .pos-cart-table td {
-  padding: 7px 10px;
+  padding: calc(var(--pos-table-font-size, 13px) * 0.48) 8px;
   border-bottom: 1px solid #e2e8f0;
   border-right: 1px solid #cbd5e1;
   color: #1e293b;
   vertical-align: middle;
   background-clip: padding-box;
-  font-size: 12.5px;
+  font-size: var(--pos-table-font-size, 13px);
   background-color: #ffffff;
 }
 
@@ -2096,9 +2140,9 @@ html, body {
 
 /* Semantic Column Alignments and Widths */
 .col-pos-num {
-  width: 36px;
-  min-width: 36px;
-  max-width: 42px;
+  width: 28px;
+  min-width: 26px;
+  max-width: 32px;
   text-align: center;
   color: #64748b;
   font-weight: 600;
@@ -2106,8 +2150,8 @@ html, body {
 }
 
 .col-pos-barcode {
-  width: 130px;
-  min-width: 115px;
+  width: 105px;
+  min-width: 95px;
   text-align: left;
   white-space: nowrap;
 }
@@ -2115,31 +2159,35 @@ html, body {
 .pos-barcode-badge {
   display: inline-block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 11px;
+  font-size: calc(var(--pos-table-font-size, 13px) - 1.5px);
   font-weight: 700;
   color: #1e40af;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.4px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.2px;
 }
 
 /* Natural Multi-line Wrapping for Long Product Names */
 .col-pos-desc {
   width: auto;
-  min-width: 180px;
+  min-width: 130px;
   text-align: left;
   white-space: normal;
   word-break: normal;
   overflow-wrap: break-word;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
 .pos-item-name {
   font-weight: 700;
   color: #0f172a;
-  display: inline-block;
+  display: block;
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .cart-unverified-tag {
@@ -2150,21 +2198,21 @@ html, body {
   color: #b91c1c;
   background: #fee2e2;
   border: 1px solid #fecaca;
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 3px;
   letter-spacing: 0.3px;
 }
 
 .col-pos-qty {
-  width: 100px;
-  min-width: 95px;
+  width: 84px;
+  min-width: 76px;
   text-align: center;
   white-space: nowrap;
 }
 
 .col-pos-unit {
-  width: 55px;
-  min-width: 45px;
+  width: 44px;
+  min-width: 36px;
   text-align: center;
   color: #475569;
   font-weight: 600;
@@ -2172,8 +2220,8 @@ html, body {
 }
 
 .col-pos-price {
-  width: 85px;
-  min-width: 75px;
+  width: 74px;
+  min-width: 66px;
   text-align: right;
   font-weight: 600;
   color: #1e293b;
@@ -2183,25 +2231,28 @@ html, body {
 
 /* Optional Discount (%) Column */
 .col-pos-discount {
-  width: 75px;
-  min-width: 65px;
+  width: 58px;
+  min-width: 50px;
   text-align: center;
   white-space: nowrap;
 }
 
 .pos-cart-disc-input {
-  width: 46px;
-  height: 26px;
+  width: calc(var(--pos-table-font-size, 13px) * 3.2);
+  min-width: 38px;
+  height: calc(var(--pos-table-font-size, 13px) * 1.85);
+  min-height: 22px;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 3px;
   text-align: center;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--pos-table-font-size, 13px);
   outline: none;
   background: #ffffff;
   color: #0f172a;
   -moz-appearance: textfield;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 0 2px;
 }
 
 .pos-cart-disc-input:focus {
@@ -2216,8 +2267,8 @@ html, body {
 }
 
 .col-pos-tax {
-  width: 60px;
-  min-width: 50px;
+  width: 48px;
+  min-width: 42px;
   text-align: center;
   color: #047857;
   font-weight: 700;
@@ -2225,8 +2276,8 @@ html, body {
 }
 
 .col-pos-total {
-  width: 95px;
-  min-width: 85px;
+  width: 78px;
+  min-width: 68px;
   text-align: right;
   font-weight: 800;
   color: #047857;
@@ -2235,8 +2286,8 @@ html, body {
 }
 
 .col-pos-action {
-  width: 36px;
-  min-width: 36px;
+  width: 32px;
+  min-width: 28px;
   text-align: center;
   white-space: nowrap;
 }
@@ -2381,7 +2432,6 @@ html, body {
 .btn-text-size-step,
 .btn-text-size-opt {
   border: none;
-  border-right: 1px solid #cbd5e1;
   background: #ffffff;
   color: #334155;
   font-size: 11.5px;
@@ -2396,42 +2446,53 @@ html, body {
   justify-content: center;
 }
 
-.btn-text-size-step:last-child,
-.btn-text-size-opt:last-child {
-  border-right: none;
-}
-
 .btn-text-size-step {
   font-weight: 800;
-  font-size: 13px;
-  padding: 4px 8px;
+  font-size: 14px;
+  padding: 4px 10px;
   background: #f1f5f9;
   color: #1e293b;
-  min-width: 24px;
+  min-width: 28px;
 }
 
-.btn-text-size-step:hover {
+.btn-text-size-step:hover:not(:disabled) {
   background: #e2e8f0;
   color: #0f172a;
 }
 
-.btn-text-size-step:active {
+.btn-text-size-step:active:not(:disabled) {
   background: #cbd5e1;
 }
 
-.btn-text-size-opt:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+.btn-text-size-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.pos-font-size-display {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #ffffff;
+  border-left: 1px solid #cbd5e1;
+  border-right: 1px solid #cbd5e1;
+  min-width: 48px;
+  text-align: center;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-text-size-opt.active {
   background: #2563eb;
   color: #ffffff;
   font-weight: 700;
-}
-
-.btn-text-size-opt.active:hover {
-  background: #1d4ed8;
 }
 
 /* Daily Discount Toggle in POS Cart Toolbar */
@@ -4519,4 +4580,24 @@ html, body {
   color: #64748b;
   margin-top: 2px;
   display: block;
+}
+
+/* Global App Toast Notification */
+.app-toast {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #ffffff;
+  padding: 6px 18px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 99999;
+  pointer-events: none;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }

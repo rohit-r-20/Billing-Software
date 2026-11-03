@@ -911,16 +911,24 @@
 
         <form class="master-form-body" id="form-item-master" autocomplete="off" onsubmit="return false;">
           <input type="hidden" id="item-id" value="" />
-          <div class="master-layout-row">
+          <div class="master-layout-row product-master-grid">
+            <!-- Left Column: Primary Product Data, Stock & Tax -->
             <div class="master-panel left-panel">
+              <!-- SECTION 1: Product Information -->
               <div class="field-row">
                 <label class="field-label" for="item-name">Product Name *</label>
                 <div class="field-input-box">
                   <input type="text" id="item-name" class="input-highlight" placeholder="e.g. Milk Bikis 100g" required />
                 </div>
               </div>
-              <div class="field-row"><label class="field-label" for="item-alias">Barcode / SKU Code</label><input type="text" id="item-alias" placeholder="e.g. 8901234567890" /></div>
-              <div class="field-row"><label class="field-label" for="item-print-name">Receipt Print Name</label><input type="text" id="item-print-name" placeholder="Name printed on bill" /></div>
+              <div class="field-row">
+                <label class="field-label" for="item-alias">Barcode / SKU Code</label>
+                <input type="text" id="item-alias" placeholder="e.g. 8901234567890" />
+              </div>
+              <div class="field-row">
+                <label class="field-label" for="item-print-name">Receipt Print Name</label>
+                <input type="text" id="item-print-name" placeholder="Name printed on bill" />
+              </div>
               <div class="field-row">
                 <label class="field-label" for="item-group">Product Category</label>
                 <select id="item-group" class="select-box">
@@ -935,10 +943,11 @@
                 </select>
               </div>
 
+              <!-- SECTION 2: Unit and Stock Details -->
               <fieldset class="group-box">
                 <legend class="group-title">Unit &amp; Stock Details</legend>
                 <div class="field-row">
-                  <label class="field-label">Unit of Measure</label>
+                  <label class="field-label" for="item-unit">Unit of Measure</label>
                   <select id="item-unit" class="select-box">
                     <option value="Pcs.">Pcs. (Pieces)</option>
                     <option value="Kgs.">Kgs. (Kilograms)</option>
@@ -949,72 +958,103 @@
                   </select>
                 </div>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">Opening Stock (Qty)</label><input type="number" step="0.01" id="item-op-qty" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Stock Value (₹)</label><input type="number" step="0.01" id="item-op-val" value="0.00" /></div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-op-qty">Opening Stock (Qty)</label>
+                    <input type="number" step="0.01" id="item-op-qty" value="0.00" />
+                  </div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-op-val">Stock Value (₹)</label>
+                    <input type="number" step="0.01" id="item-op-val" value="0.00" />
+                  </div>
                 </div>
-                <div class="field-row-split" style="margin-top: 6px; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
+                <div class="field-row-split">
                   <div class="split-col">
                     <label class="field-label" for="item-min-stock-level" title="Alerts if stock < threshold">Min. Stock Alert Level</label>
                     <input type="number" step="0.01" min="0" id="item-min-stock-level" placeholder="Optional (e.g. 10.0)" />
                   </div>
                   <div class="split-col">
-                    <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #1e293b; cursor: pointer; margin-left: 10px;">
-                      <input type="checkbox" id="item-alert-enabled" checked style="width: 14px; height: 14px; margin: 0;" />
-                      Enable Low-Stock Alert
+                    <label class="field-label" for="item-alert-enabled">Stock Notification</label>
+                    <label class="checkbox-inline-label" for="item-alert-enabled">
+                      <input type="checkbox" id="item-alert-enabled" checked />
+                      <span>Enable Low-Stock Alert</span>
                     </label>
                   </div>
                 </div>
               </fieldset>
 
-              <div class="field-row">
-                <label class="field-label">GST Tax Category</label>
-                <select id="item-tax-cat" class="select-box">
-                  <option value="GST 18%">GST 18% (Standard Retail)</option>
-                  <option value="GST 12%">GST 12% (Food / Essentials)</option>
-                  <option value="GST 5%">GST 5% (Basic Grocery)</option>
-                  <option value="GST 28%">GST 28% (Luxury / Aerated)</option>
-                  <option value="GST 0%">GST 0% / Tax Exempt</option>
-                </select>
-              </div>
+              <!-- SECTION 3: Tax Information -->
+              <fieldset class="group-box">
+                <legend class="group-title">Tax &amp; Classification</legend>
+                <div class="field-row">
+                  <label class="field-label" for="item-tax-cat">GST Tax Category</label>
+                  <select id="item-tax-cat" class="select-box">
+                    <option value="GST 18%">GST 18% (Standard Retail)</option>
+                    <option value="GST 12%">GST 12% (Food / Essentials)</option>
+                    <option value="GST 5%">GST 5% (Basic Grocery)</option>
+                    <option value="GST 28%">GST 28% (Luxury / Aerated)</option>
+                    <option value="GST 0%">GST 0% / Tax Exempt</option>
+                  </select>
+                </div>
+                <div class="field-row with-btn">
+                  <label class="field-label" for="item-hsn">HSN/SAC Code</label>
+                  <input type="text" id="item-hsn" placeholder="e.g. 1905" />
+                  <button type="button" class="btn-sub-action">Validate</button>
+                </div>
+              </fieldset>
+            </div>
 
-              <div class="field-row with-btn">
-                <label class="field-label">HSN/SAC Code</label>
-                <input type="text" id="item-hsn" placeholder="e.g. 1905" />
-                <button type="button" class="btn-sub-action">Validate</button>
-              </div>
-
+            <!-- Right Column: Commercial Pricing, Margin & Notes -->
+            <div class="master-panel right-panel">
+              <!-- SECTION 4: Pricing Information -->
               <fieldset class="group-box">
                 <legend class="group-title">Pricing Information (₹)</legend>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">Selling Price (₹) *</label><input type="number" step="0.01" id="item-sales-price" value="0.00" style="font-weight: 700; color: #166534;" /></div>
-                  <div class="split-col"><label class="field-label">Purchase Cost (₹)</label><input type="number" step="0.01" id="item-purc-price" value="0.00" /></div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-sales-price">Selling Price (₹) *</label>
+                    <input type="number" step="0.01" id="item-sales-price" value="0.00" style="font-weight: 700; color: #166534;" />
+                  </div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-purc-price">Purchase Cost (₹)</label>
+                    <input type="number" step="0.01" id="item-purc-price" value="0.00" />
+                  </div>
                 </div>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">M.R.P. (₹)</label><input type="number" step="0.01" id="item-mrp" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Min. Selling Price (₹)</label><input type="number" step="0.01" id="item-min-sales-price" value="0.00" /></div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-mrp">M.R.P. (₹)</label>
+                    <input type="number" step="0.01" id="item-mrp" value="0.00" />
+                  </div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-min-sales-price">Min. Selling Price (₹)</label>
+                    <input type="number" step="0.01" id="item-min-sales-price" value="0.00" />
+                  </div>
                 </div>
               </fieldset>
-            </div>
 
-            <div class="master-panel mid-panel">
+              <!-- SECTION 5: Discounts & Margin -->
               <fieldset class="group-box">
                 <legend class="group-title">Discounts &amp; Margin</legend>
                 <div class="field-row-split">
-                  <div class="split-col"><label class="field-label">Sale Discount (%)</label><input type="number" step="0.01" id="item-sale-disc" value="0.00" /></div>
-                  <div class="split-col"><label class="field-label">Purc. Discount (%)</label><input type="number" step="0.01" id="item-purc-disc" value="0.00" /></div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-sale-disc">Sale Discount (%)</label>
+                    <input type="number" step="0.01" id="item-sale-disc" value="0.00" />
+                  </div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-purc-disc">Purc. Discount (%)</label>
+                    <input type="number" step="0.01" id="item-purc-disc" value="0.00" />
+                  </div>
                 </div>
               </fieldset>
 
+              <!-- SECTION 6: Product Description -->
               <fieldset class="group-box">
                 <legend class="group-title">Product Description</legend>
-                <textarea id="item-desc" class="textarea-desc" placeholder="Brand, flavour, weight, specifications..."></textarea>
+                <textarea id="item-desc" class="textarea-desc" placeholder="Brand, flavour, weight, specifications..." style="height: 52px; resize: vertical;"></textarea>
               </fieldset>
-            </div>
 
-            <div class="master-panel right-panel">
+              <!-- SECTION 7: Barcode & Stock Notes -->
               <fieldset class="group-box extra-info-box">
                 <legend class="group-title">Barcode &amp; Stock Notes</legend>
-                <textarea id="item-extra-info" class="textarea-extra" placeholder="Supplier notes, shelf rack location, batch notes..."></textarea>
+                <textarea id="item-extra-info" class="textarea-extra" placeholder="Supplier notes, shelf rack location, batch notes..." style="height: 52px; resize: vertical;"></textarea>
               </fieldset>
             </div>
           </div>
@@ -1357,13 +1397,11 @@
               <div class="pos-cart-toolbar" id="pos-cart-toolbar">
                 <div class="pos-text-size-control">
                   <span class="pos-text-size-label">
-                    <span class="pos-text-size-icon">Font:</span> Text Size:
+                    <span class="pos-text-size-icon">Font Size:</span> Text
                   </span>
                   <div class="pos-text-size-btn-group" role="group" aria-label="Product List Text Size">
                     <button type="button" class="btn-text-size-step" id="btn-pos-font-dec" title="Decrease font size (−)" aria-label="Decrease text size">−</button>
-                    <button type="button" class="btn-text-size-opt" data-size="small" id="btn-pos-font-small" title="Small text size">Small</button>
-                    <button type="button" class="btn-text-size-opt active" data-size="normal" id="btn-pos-font-normal" title="Normal text size (Default)">Normal</button>
-                    <button type="button" class="btn-text-size-opt" data-size="large" id="btn-pos-font-large" title="Large text size">Large</button>
+                    <span class="pos-font-size-display" id="pos-font-size-val" title="Current product table text size">13 px</span>
                     <button type="button" class="btn-text-size-step" id="btn-pos-font-inc" title="Increase font size (+)" aria-label="Increase text size">+</button>
                   </div>
                 </div>
@@ -1689,7 +1727,7 @@
             <div style="display: flex; gap: 10px; align-items: center; flex: 1;">
               <div style="position: relative; flex: 1; max-width: 450px;">
                 <span style="position: absolute; left: 10px; top: 7px; color: #64748b; font-size: 11px; font-weight: 700;">Find:</span>
-                <input type="text" id="pur-barcode-input" placeholder="Scan barcode or type SKU to instantly add to purchase grid..." style="width: 100%; padding: 6px 10px 6px 30px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px; font-size: 13px;" />
+                <input type="text" id="pur-barcode-input" placeholder="Scan barcode or type SKU to instantly add to purchase grid..." style="width: 100%; padding: 6px 10px 6px 44px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px; font-size: 13px;" />
               </div>
               <button type="button" class="btn-classic" id="btn-pur-search-item" style="padding: 6px 14px; font-weight: 700;">Search Product (F1)</button>
               <button type="button" class="btn-classic primary-action-btn" id="btn-pur-add-row" style="padding: 6px 14px;">+ Add Empty Row</button>
@@ -3307,6 +3345,8 @@
     </div>
 
   </div>
+
+  <div id="app-toast" class="app-toast"></div>
 
   <script src="qwebchannel.js"></script>
   <script src="desktop/static/qrcode.js"></script>
