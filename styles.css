@@ -167,34 +167,6 @@ html, body {
   background: #e2e8f0;
 }
 
-.window-controls {
-  display: flex;
-  align-items: center;
-}
-
-.win-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  width: 32px;
-  height: 28px;
-  font-size: 12px;
-  color: #475569;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-
-.win-btn:hover {
-  background: #e2e8f0;
-}
-
-.win-btn.close:hover {
-  background: #ef4444;
-  color: #ffffff;
-}
-
 /* -------------------------------------------------------------
    Workspace Area & Screen View Switcher
 ------------------------------------------------------------- */
