@@ -59,6 +59,119 @@ class InventoryService:
                 return float(row[0])
             return 0.0
 
+    def calculate_stock_breakdown(
+        self,
+        company_id: str,
+        item_id: str,
+        branch_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Authoritative stock calculation adhering strictly to Section 4:
+        Maintains clear distinctions between:
+        - Opening Stock
+        - Purchased Quantity
+        - Sold Quantity
+        - Sales Return Quantity
+        - Purchase Return Quantity
+        - Stock Transfer In
+        - Stock Transfer Out
+        - Stock Adjustments
+        - Available Stock
+        Uses inventory movement records as the auditable basis for stock calculations.
+        """
+        actual_comp_id = self._resolve_company_id(company_id)
+        target_branch = branch_id or self._get_default_branch_id(actual_comp_id)
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name, op_stock_qty, unit FROM items WHERE id = ? AND company_id = ?;", (item_id, actual_comp_id))
+            it_row = cursor.fetchone()
+            if not it_row:
+                raise ValueError(f"Item {item_id} not found in company {actual_comp_id}")
+
+            opening_stock = float(it_row["op_stock_qty"] or 0.0)
+
+            # Query movements aggregated by movement_type
+            if target_branch:
+                cursor.execute("""
+                    SELECT movement_type,
+                           SUM(CASE WHEN qty > 0 THEN qty ELSE 0 END) as pos_qty,
+                           SUM(CASE WHEN qty < 0 THEN ABS(qty) ELSE 0 END) as neg_qty,
+                           SUM(qty) as net_qty
+                    FROM stock_movements
+                    WHERE company_id = ? AND item_id = ? AND branch_id = ?
+                    GROUP BY movement_type;
+                """, (actual_comp_id, item_id, target_branch))
+            else:
+                cursor.execute("""
+                    SELECT movement_type,
+                           SUM(CASE WHEN qty > 0 THEN qty ELSE 0 END) as pos_qty,
+                           SUM(CASE WHEN qty < 0 THEN ABS(qty) ELSE 0 END) as neg_qty,
+                           SUM(qty) as net_qty
+                    FROM stock_movements
+                    WHERE company_id = ? AND item_id = ?
+                    GROUP BY movement_type;
+                """, (actual_comp_id, item_id))
+
+            rows = cursor.fetchall()
+
+        purchased_qty = 0.0
+        sold_qty = 0.0
+        sales_return_qty = 0.0
+        purchase_return_qty = 0.0
+        transfer_in = 0.0
+        transfer_out = 0.0
+        stock_adjustments = 0.0
+
+        for r in rows:
+            mtype = (r["movement_type"] or "").upper()
+            pos = float(r["pos_qty"] or 0.0)
+            neg = float(r["neg_qty"] or 0.0)
+            net = float(r["net_qty"] or 0.0)
+
+            if mtype in ("PURCHASE", "INWARD"):
+                purchased_qty += pos
+            elif mtype in ("SALE", "OUTWARD"):
+                sold_qty += neg
+            elif mtype == "SALES_RETURN":
+                sales_return_qty += pos
+            elif mtype == "PURCHASE_RETURN":
+                purchase_return_qty += neg
+            elif mtype == "TRANSFER_IN":
+                transfer_in += pos
+            elif mtype == "TRANSFER_OUT":
+                transfer_out += neg
+            elif mtype in ("ADJUSTMENT", "DAMAGE", "EXPIRED", "PHYSICAL_COUNT"):
+                stock_adjustments += net
+
+        available_stock = round(
+            opening_stock
+            + purchased_qty
+            - sold_qty
+            + sales_return_qty
+            - purchase_return_qty
+            + transfer_in
+            - transfer_out
+            + stock_adjustments,
+            3
+        )
+
+        return {
+            "item_id": item_id,
+            "item_name": it_row["name"],
+            "unit": it_row["unit"],
+            "branch_id": target_branch,
+            "opening_stock": round(opening_stock, 3),
+            "purchased_quantity": round(purchased_qty, 3),
+            "sold_quantity": round(sold_qty, 3),
+            "sales_return_quantity": round(sales_return_qty, 3),
+            "purchase_return_quantity": round(purchase_return_qty, 3),
+            "stock_transfer_in": round(transfer_in, 3),
+            "stock_transfer_out": round(transfer_out, 3),
+            "stock_adjustments": round(stock_adjustments, 3),
+            "available_stock": available_stock
+        }
+
     def validate_stock_availability(
         self,
         company_id: str,
@@ -71,18 +184,34 @@ class InventoryService:
         """
         actual_comp_id = self._resolve_company_id(company_id)
         actual_branch = branch_id or self._get_default_branch_id(actual_comp_id)
-        errors = []
 
+        # Check company policy on negative stock
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT allow_negative_stock FROM company_configs WHERE company_id = ?;", (actual_comp_id,))
+            cfg = cursor.fetchone()
+            if cfg and cfg["allow_negative_stock"]:
+                return (True, [])
+
+        errors = []
+        # Aggregate needed quantity per item_id
+        needed_per_item = {}
+        item_names = {}
         for it in items:
             item_id = it.get("id") or it.get("item_id")
+            if not item_id:
+                continue
             qty_needed = float(it.get("qty") or 0.0)
-            name = it.get("name") or "Product"
+            needed_per_item[item_id] = needed_per_item.get(item_id, 0.0) + qty_needed
+            if item_id not in item_names:
+                item_names[item_id] = it.get("name") or "Product"
 
-            if item_id and actual_branch:
+        for item_id, total_needed in needed_per_item.items():
+            if actual_branch:
                 current = self.get_stock(actual_comp_id, item_id, actual_branch)
-                if current - qty_needed < 0:
+                if current - total_needed < -1e-6:
                     errors.append(
-                        f"Insufficient stock for '{name}'. Requested: {qty_needed:g}, Available: {current:g}."
+                        f"Insufficient stock for '{item_names[item_id]}'. Requested: {total_needed:g}, Available: {current:g}."
                     )
 
         return (len(errors) == 0, errors)

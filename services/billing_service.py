@@ -118,9 +118,16 @@ class BillingService:
 
             # Determine default branch if not provided
             if not branch_id:
-                cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (company_id,))
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? ORDER BY is_default DESC, id ASC LIMIT 1;", (company_id,))
                 b_row = cursor.fetchone()
-                branch_id = b_row["id"] if b_row else None
+                if b_row:
+                    branch_id = b_row["id"]
+                else:
+                    branch_id = str(uuid.uuid4())
+                    cursor.execute("""
+                        INSERT INTO branches (id, company_id, code, name, is_default)
+                        VALUES (?, ?, 'MAIN', 'Main Branch', 1);
+                    """, (branch_id, company_id))
 
             # Resolve customer category if not explicitly provided
             resolved_category = (customer_category or "").strip()
@@ -144,56 +151,109 @@ class BillingService:
                 auto_round=True
             )
 
-            # Generate next voucher number
-            vch_no = self.get_next_voucher_number(company_id, series)
-            vch_id = str(uuid.uuid4())
+            # Check company negative stock policy & validate availability
+            cursor.execute("SELECT allow_negative_stock FROM company_configs WHERE company_id = ?;", (company_id,))
+            cfg_row = cursor.fetchone()
+            allow_negative = bool(cfg_row and cfg_row["allow_negative_stock"]) if cfg_row else False
 
-            # 1. Insert Voucher Header
-            cursor.execute("""
-                INSERT INTO sales_vouchers (
-                    id, company_id, branch_id, vch_no, series, vch_date,
-                    sale_type, party_name, account_id, mat_centre, narration,
-                    subtotal, gross_subtotal, discount_total, taxable_amount, tax_rate, cgst_amount, sgst_amount,
-                    igst_amount, round_off, grand_total, payment_method, payment_status, customer_category
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Main Store', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?);
-            """, (
-                vch_id,
-                company_id,
-                branch_id,
-                vch_no,
-                series,
-                vch_date,
-                sale_type,
-                party_name,
-                account_id,
-                narration,
-                totals["subtotal"],
-                totals["subtotal"],
-                totals.get("discount_total", 0.0),
-                totals["taxable_amount"],
-                18.0,  # general rate ref
-                totals["cgst_amount"],
-                totals["sgst_amount"],
-                totals["igst_amount"],
-                totals["round_off"],
-                totals["grand_total"],
-                payment_method,
-                resolved_category
-            ))
+            # Pre-resolve item IDs and validate quantities
+            resolved_item_lines = []
+            needed_quantities: Dict[str, float] = {}
+            item_display_names: Dict[str, str] = {}
 
-            # 2. Insert Line Items and Deduct Stock
-            for idx, line in enumerate(totals["items"], start=1):
+            for line in totals["items"]:
                 item_id = line.get("id") or line.get("item_id")
-                # Authoritative resolution: resolve item_id by name or alias if not provided or unlinked
+                line_name = (line.get("name") or "Product").strip()
                 if not item_id or len(str(item_id)) < 10:
-                    item_name_query = (line.get("name") or "").strip().upper()
                     cursor.execute("""
-                        SELECT id FROM items WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(alias) = ?);
-                    """, (company_id, item_name_query, item_name_query))
+                        SELECT id, name FROM items WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(alias) = ?);
+                    """, (company_id, line_name.upper(), line_name.upper()))
                     resolved_row = cursor.fetchone()
                     if resolved_row:
                         item_id = resolved_row["id"]
+                        item_display_names[item_id] = resolved_row["name"]
+                    else:
+                        item_display_names[item_id or line_name] = line_name
+                else:
+                    item_display_names[item_id] = line_name
 
+                qty = float(line["qty"])
+                if item_id:
+                    needed_quantities[item_id] = needed_quantities.get(item_id, 0.0) + qty
+                resolved_item_lines.append((item_id, line))
+
+            # Strictly validate stock availability before any invoice generation if negative stock prohibited
+            if not allow_negative and branch_id:
+                for it_id, total_needed in needed_quantities.items():
+                    cursor.execute("""
+                        SELECT current_qty FROM stock_balances
+                        WHERE branch_id = ? AND item_id = ?;
+                    """, (branch_id, it_id))
+                    sb_row = cursor.fetchone()
+                    if sb_row and sb_row["current_qty"] is not None:
+                        current_avail = float(sb_row["current_qty"])
+                    else:
+                        cursor.execute("SELECT COALESCE(op_stock_qty, 0.0) FROM items WHERE id = ?;", (it_id,))
+                        it_rec = cursor.fetchone()
+                        current_avail = float(it_rec[0]) if it_rec else 0.0
+
+                    if current_avail - total_needed < -1e-6:
+                        prod_name = item_display_names.get(it_id, "Product")
+                        raise ValueError(
+                            f"Insufficient stock for '{prod_name}'. Available: {current_avail:g}, Requested: {total_needed:g}. "
+                            f"Negative stock is disabled by company policy."
+                        )
+
+            # Generate next voucher number with concurrency collision resolution
+            import time
+            import sqlite3
+            vch_id = str(uuid.uuid4())
+            vch_no = None
+
+            for attempt in range(10):
+                vch_no = self.get_next_voucher_number(company_id, series)
+                try:
+                    # 1. Insert Voucher Header
+                    cursor.execute("""
+                        INSERT INTO sales_vouchers (
+                            id, company_id, branch_id, vch_no, series, vch_date,
+                            sale_type, party_name, account_id, mat_centre, narration,
+                            subtotal, gross_subtotal, discount_total, taxable_amount, tax_rate, cgst_amount, sgst_amount,
+                            igst_amount, round_off, grand_total, payment_method, payment_status, customer_category
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Main Store', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?);
+                    """, (
+                        vch_id,
+                        company_id,
+                        branch_id,
+                        vch_no,
+                        series,
+                        vch_date,
+                        sale_type,
+                        party_name,
+                        account_id,
+                        narration,
+                        totals["subtotal"],
+                        totals["subtotal"],
+                        totals.get("discount_total", 0.0),
+                        totals["taxable_amount"],
+                        18.0,  # general rate ref
+                        totals["cgst_amount"],
+                        totals["sgst_amount"],
+                        totals["igst_amount"],
+                        totals["round_off"],
+                        totals["grand_total"],
+                        payment_method,
+                        resolved_category
+                    ))
+                    break
+                except sqlite3.IntegrityError as e:
+                    if ("sales_vouchers" in str(e).lower() or "unique" in str(e).lower()) and attempt < 9:
+                        time.sleep(0.01 * (attempt + 1))
+                        continue
+                    raise
+
+            # 2. Insert Line Items and Deduct Stock
+            for idx, (item_id, line) in enumerate(resolved_item_lines, start=1):
                 qty = float(line["qty"])
                 price = float(line["price"])
                 amount = float(line["line_total"])
@@ -227,15 +287,36 @@ class BillingService:
                     tax_amt
                 ))
 
-                # Deduct inventory if item is linked and branch is present
+                # Deduct inventory atomically with negative stock guard
                 if item_id and branch_id:
+                    # Ensure stock balance row exists initialized from item opening stock if unseeded
                     cursor.execute("""
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty - excluded.current_qty,
-                            last_updated = CURRENT_TIMESTAMP;
-                    """, (str(uuid.uuid4()), company_id, branch_id, item_id, qty))
+                        SELECT ?, ?, ?, ?, COALESCE(op_stock_qty, 0.0)
+                        FROM items WHERE id = ?
+                        ON CONFLICT(branch_id, item_id) DO NOTHING;
+                    """, (str(uuid.uuid4()), company_id, branch_id, item_id, item_id))
+
+                    if not allow_negative:
+                        cursor.execute("""
+                            UPDATE stock_balances
+                            SET current_qty = current_qty - ?, last_updated = CURRENT_TIMESTAMP
+                            WHERE branch_id = ? AND item_id = ? AND current_qty >= ?;
+                        """, (qty, branch_id, item_id, qty))
+                        if cursor.rowcount == 0:
+                            cursor.execute("SELECT current_qty FROM stock_balances WHERE branch_id = ? AND item_id = ?;", (branch_id, item_id))
+                            row_sb = cursor.fetchone()
+                            act_avail = float(row_sb["current_qty"]) if row_sb else 0.0
+                            raise ValueError(
+                                f"Insufficient stock for '{item_display_names.get(item_id, 'Product')}'. "
+                                f"Available: {act_avail:g}, Requested: {qty:g}. Negative stock is disabled."
+                            )
+                    else:
+                        cursor.execute("""
+                            UPDATE stock_balances
+                            SET current_qty = current_qty - ?, last_updated = CURRENT_TIMESTAMP
+                            WHERE branch_id = ? AND item_id = ?;
+                        """, (qty, branch_id, item_id))
 
                     cursor.execute("""
                         INSERT INTO stock_movements (
@@ -487,6 +568,51 @@ class BillingService:
                 auto_round=True
             )
 
+            # Check company negative stock policy & validate availability
+            cursor.execute("SELECT allow_negative_stock FROM company_configs WHERE company_id = ?;", (company_id,))
+            cfg_row = cursor.fetchone()
+            allow_negative = bool(cfg_row and cfg_row["allow_negative_stock"]) if cfg_row else False
+
+            resolved_mod_lines = []
+            needed_mod_quantities: Dict[str, float] = {}
+            mod_item_display_names: Dict[str, str] = {}
+
+            for line in totals["items"]:
+                item_id = line.get("id") or line.get("item_id")
+                line_name = (line.get("name") or "Product").strip()
+                if not item_id or len(str(item_id)) < 10:
+                    cursor.execute("""
+                        SELECT id, name FROM items WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(alias) = ?);
+                    """, (company_id, line_name.upper(), line_name.upper()))
+                    resolved_row = cursor.fetchone()
+                    if resolved_row:
+                        item_id = resolved_row["id"]
+                        mod_item_display_names[item_id] = resolved_row["name"]
+                    else:
+                        mod_item_display_names[item_id or line_name] = line_name
+                else:
+                    mod_item_display_names[item_id] = line_name
+
+                qty = float(line["qty"])
+                if item_id:
+                    needed_mod_quantities[item_id] = needed_mod_quantities.get(item_id, 0.0) + qty
+                resolved_mod_lines.append((item_id, line))
+
+            if not allow_negative and actual_branch_id:
+                for it_id, total_needed in needed_mod_quantities.items():
+                    cursor.execute("""
+                        SELECT current_qty FROM stock_balances
+                        WHERE branch_id = ? AND item_id = ?;
+                    """, (actual_branch_id, it_id))
+                    sb_row = cursor.fetchone()
+                    current_avail = float(sb_row["current_qty"]) if sb_row and sb_row["current_qty"] is not None else 0.0
+                    if current_avail - total_needed < -1e-6:
+                        prod_name = mod_item_display_names.get(it_id, "Product")
+                        raise ValueError(
+                            f"Insufficient stock for '{prod_name}'. Available: {current_avail:g}, Requested: {total_needed:g}. "
+                            f"Negative stock is disabled by company policy."
+                        )
+
             # Date fallback
             updated_date = vch_date or old_vch["vch_date"] or datetime.now().strftime("%d-%m-%Y")
 
@@ -534,17 +660,7 @@ class BillingService:
             ))
 
             # 7. Insert new line items and deduct updated stock
-            for idx, line in enumerate(totals["items"], start=1):
-                item_id = line.get("id") or line.get("item_id")
-                if not item_id or len(str(item_id)) < 10:
-                    item_name_query = (line.get("name") or "").strip().upper()
-                    cursor.execute("""
-                        SELECT id FROM items WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(alias) = ?);
-                    """, (company_id, item_name_query, item_name_query))
-                    resolved_row = cursor.fetchone()
-                    if resolved_row:
-                        item_id = resolved_row["id"]
-
+            for idx, (item_id, line) in enumerate(resolved_mod_lines, start=1):
                 qty = float(line["qty"])
                 price = float(line["price"])
                 amount = float(line["line_total"])
@@ -874,6 +990,7 @@ class BillingService:
 
         logger.info(f"Sales Return {vch_no} processed successfully.")
         return {
+            "id": ret_id,
             "return_id": ret_id,
             "vch_no": vch_no,
             "grand_total": total_grand,

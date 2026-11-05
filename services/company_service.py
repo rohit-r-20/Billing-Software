@@ -164,7 +164,8 @@ class CompanyService:
                     "vchPrefix": row["vch_prefix"],
                     "defaultTax": row["default_tax"],
                     "autoRound": row["auto_round"],
-                    "receiptWidth": row["receipt_width"]
+                    "receiptWidth": row["receipt_width"],
+                    "allowNegativeStock": bool(row["allow_negative_stock"]) if "allow_negative_stock" in row.keys() else False
                 }
             return {
                 "vchStart": 1,
@@ -172,7 +173,8 @@ class CompanyService:
                 "vchPrefix": "",
                 "defaultTax": "18",
                 "autoRound": "Y",
-                "receiptWidth": 80
+                "receiptWidth": 80,
+                "allowNegativeStock": False
             }
 
     def save_config(self, company_id_or_code: str, config_data: Dict[str, Any]):
@@ -185,16 +187,19 @@ class CompanyService:
                 raise ValueError("Company not found.")
             comp_id = row["id"]
 
+            allow_neg = 1 if config_data.get("allowNegativeStock") or config_data.get("allow_negative_stock") else 0
+
             cursor.execute("""
-                INSERT INTO company_configs (company_id, vch_start, vch_digits, vch_prefix, default_tax, auto_round, receipt_width)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO company_configs (company_id, vch_start, vch_digits, vch_prefix, default_tax, auto_round, receipt_width, allow_negative_stock)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_id) DO UPDATE SET
                     vch_start = excluded.vch_start,
                     vch_digits = excluded.vch_digits,
                     vch_prefix = excluded.vch_prefix,
                     default_tax = excluded.default_tax,
                     auto_round = excluded.auto_round,
-                    receipt_width = excluded.receipt_width;
+                    receipt_width = excluded.receipt_width,
+                    allow_negative_stock = excluded.allow_negative_stock;
             """, (
                 comp_id,
                 int(config_data.get("vchStart", 1)),
@@ -202,7 +207,8 @@ class CompanyService:
                 str(config_data.get("vchPrefix", "")),
                 str(config_data.get("defaultTax", "18")),
                 str(config_data.get("autoRound", "Y")),
-                int(config_data.get("receiptWidth", 80))
+                int(config_data.get("receiptWidth", 80)),
+                allow_neg
             ))
             conn.commit()
 

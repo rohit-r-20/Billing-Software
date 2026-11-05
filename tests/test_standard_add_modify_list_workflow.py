@@ -232,7 +232,8 @@ def test_criterion_6_modify_workflows():
         "name": f"PROD MODIFY {uid}",
         "alias": f"MOD-SKU-{uid}",
         "barcodes": f"BAR-{uid}",
-        "sales_price": 250.0
+        "sales_price": 250.0,
+        "op_stock_qty": 50.0
     })
     prod_id = prod["id"]
 

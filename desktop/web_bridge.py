@@ -513,6 +513,46 @@ class BackendBridge(QObject):
 
     # --- Centralized Inventory ---
     @pyqtSlot(str, str, str, result=str)
+    def validateStockAvailability(self, company_id: str, branch_id: str, items_json: str) -> str:
+        """Validates stock availability against negative stock policy for shared inventory."""
+        try:
+            items = json.loads(items_json) if isinstance(items_json, str) else items_json
+            is_valid, errors = inventory_service.validate_stock_availability(
+                company_id=company_id,
+                branch_id=branch_id if branch_id else None,
+                items=items
+            )
+            return json.dumps({"success": True, "data": {"isValid": is_valid, "errors": errors}})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getStockBreakdown(self, company_id: str, item_id: str, branch_id: str) -> str:
+        """Returns the complete 9-metric audit breakdown of inventory movements for an item."""
+        try:
+            breakdown = inventory_service.calculate_stock_breakdown(
+                company_id=company_id,
+                item_id=item_id,
+                branch_id=branch_id if branch_id else None
+            )
+            return json.dumps({"success": True, "data": breakdown})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getAuthoritativeStock(self, company_id: str, item_id: str, branch_id: str) -> str:
+        """Returns current shared available stock for an item."""
+        try:
+            qty = inventory_service.get_stock(
+                company_id=company_id,
+                item_id=item_id,
+                branch_id=branch_id if branch_id else None
+            )
+            return json.dumps({"success": True, "data": qty})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
     def getStockSummary(self, company_id: str, branch_id: str, query: str) -> str:
         try:
             res = inventory_service.get_stock_summary(company_id, branch_id if branch_id else None, query or "")
