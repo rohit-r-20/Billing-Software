@@ -5,6 +5,7 @@ stock-inward ledger postings, supplier payable updates, Purchase Returns (Debit 
 and double-entry accounting journal postings.
 """
 import uuid
+import json
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Any, List, Optional, Tuple
@@ -189,8 +190,8 @@ class PurchaseService:
             qty = Decimal(str(it.get("qty") or 1.0))
             free_qty = Decimal(str(it.get("free_qty") or 0.0))
             unit = it.get("unit") or "Pcs."
-            rate = Decimal(str(it.get("purchase_rate") or it.get("rate") or it.get("price") or 0.0))
-            disc_pct = Decimal(str(it.get("discount_percent") or 0.0))
+            rate = Decimal(str(it.get("purchase_rate") or it.get("rate") or it.get("price") or it.get("cost_rate") or 0.0))
+            disc_pct = Decimal(str(it.get("discount_percent") or it.get("discount_pct") or 0.0))
             tax_rate = Decimal(str(it.get("tax_rate") if it.get("tax_rate") is not None else 18.0))
 
             # Line calculations
@@ -483,6 +484,372 @@ class PurchaseService:
             res = dict(vch)
             res["items"] = items
             return res
+
+    def modify_purchase_voucher(
+        self,
+        company_id: str,
+        voucher_id: str,
+        data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Modifies an existing purchase voucher within an atomic database transaction.
+        Reconciles inward inventory, supplier payable balances, and accounting journal entries.
+        Preserves original voucher ID and sequential number.
+        """
+        actual_comp_id = self._resolve_company_id(company_id)
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # 1. Fetch existing voucher
+            cursor.execute("""
+                SELECT * FROM purchase_vouchers WHERE company_id = ? AND id = ?;
+            """, (actual_comp_id, voucher_id))
+            old_pv = cursor.fetchone()
+            if not old_pv:
+                raise ValueError(f"Purchase voucher '{voucher_id}' not found.")
+
+            vch_no = old_pv["vch_no"]
+            branch_id = old_pv["branch_id"] or self._get_default_branch_id(actual_comp_id)
+            old_supplier_id = old_pv["supplier_id"]
+            old_outstanding = float(old_pv["outstanding_balance"] or 0.0)
+
+            # 2. Revert previous stock inward and supplier balance if not draft
+            if not old_pv["is_draft"]:
+                cursor.execute("""
+                    SELECT item_id, qty, free_qty FROM purchase_voucher_items WHERE voucher_id = ?;
+                """, (voucher_id,))
+                for old_it in cursor.fetchall():
+                    item_id = old_it["item_id"]
+                    tot_qty = float(old_it["qty"] or 0.0) + float(old_it["free_qty"] or 0.0)
+                    if item_id and branch_id and tot_qty > 0:
+                        cursor.execute("""
+                            UPDATE stock_balances
+                            SET current_qty = current_qty - ?, last_updated = CURRENT_TIMESTAMP
+                            WHERE branch_id = ? AND item_id = ?;
+                        """, (tot_qty, branch_id, item_id))
+
+                if old_supplier_id and old_outstanding > 0:
+                    cursor.execute("""
+                        UPDATE suppliers
+                        SET current_balance = current_balance - ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE company_id = ? AND id = ?;
+                    """, (old_outstanding, actual_comp_id, old_supplier_id))
+
+            # 3. Clean up previous movements, journals, and line items
+            cursor.execute("""
+                DELETE FROM stock_movements WHERE reference_id = ? AND reference_type = 'PURCHASE';
+            """, (vch_no,))
+
+            cursor.execute("""
+                SELECT id FROM journal_entries WHERE company_id = ? AND reference_id = ?;
+            """, (actual_comp_id, voucher_id))
+            for j_row in cursor.fetchall():
+                cursor.execute("DELETE FROM journal_entry_lines WHERE journal_id = ?;", (j_row["id"],))
+            cursor.execute("DELETE FROM journal_entries WHERE company_id = ? AND reference_id = ?;", (actual_comp_id, voucher_id))
+
+            cursor.execute("DELETE FROM purchase_voucher_items WHERE voucher_id = ?;", (voucher_id,))
+
+            # 4. Process updated header and supplier details
+            supplier_name = (data.get("supplier_name") or old_pv["supplier_name"] or "").strip()
+            if not supplier_name:
+                raise ValueError("Supplier name cannot be empty.")
+
+            supp_obj = self.supplier_service.find_supplier_by_name(actual_comp_id, supplier_name)
+            if not supp_obj:
+                saved_supp = self.supplier_service.save_supplier(actual_comp_id, {
+                    "name": supplier_name,
+                    "gstin": data.get("supplier_gstin", ""),
+                    "state": data.get("supplier_state", "Tamilnadu"),
+                    "address": data.get("supplier_address", "")
+                })
+                supplier_id = saved_supp["id"]
+            else:
+                supplier_id = supp_obj["id"]
+
+            supplier_gstin = data.get("supplier_gstin") or (supp_obj.get("gstin") if supp_obj else "")
+            supplier_state = data.get("supplier_state") or (supp_obj.get("state") if supp_obj else "Tamilnadu")
+            place_of_supply = data.get("place_of_supply") or supplier_state
+
+            supp_inv_no = data.get("supplier_invoice_no") or old_pv["supplier_invoice_no"] or vch_no
+            supp_inv_date = data.get("supplier_invoice_date") or old_pv["supplier_invoice_date"] or datetime.now().strftime("%Y-%m-%d")
+            vch_date = data.get("vch_date") or old_pv["vch_date"] or datetime.now().strftime("%Y-%m-%d")
+            payment_type = data.get("payment_type") or old_pv["payment_type"] or "CREDIT"
+            purchase_type = data.get("purchase_type") or old_pv["purchase_type"] or "TAX_INVOICE"
+            narration = data.get("narration") or old_pv["narration"] or ""
+            additional_expenses = float(data.get("additional_expenses") or 0.0)
+            is_draft = 1 if data.get("is_draft") else 0
+            created_by = data.get("created_by") or old_pv["created_by"] or "Admin"
+
+            raw_items = data.get("items") or []
+            if not raw_items:
+                raise ValueError("Purchase voucher must contain at least one line item.")
+
+            cursor.execute("SELECT state FROM companies WHERE id = ?;", (actual_comp_id,))
+            comp_state_row = cursor.fetchone()
+            company_state = comp_state_row["state"] if comp_state_row else "Tamilnadu"
+            is_interstate = (company_state.strip().lower() != supplier_state.strip().lower())
+
+            # 5. Calculate line items and totals
+            calculated_items = []
+            gross_subtotal = Decimal("0")
+            total_discount = Decimal("0")
+            taxable_total = Decimal("0")
+            cgst_total = Decimal("0")
+            sgst_total = Decimal("0")
+            igst_total = Decimal("0")
+
+            for idx, it in enumerate(raw_items, start=1):
+                name = (it.get("name") or it.get("item_name") or f"Item {idx}").strip()
+                item_id = it.get("id") or it.get("item_id")
+                barcode = it.get("barcode") or it.get("alias") or ""
+                qty = Decimal(str(it.get("qty") or 1.0))
+                free_qty = Decimal(str(it.get("free_qty") or 0.0))
+                unit = it.get("unit") or "Pcs."
+                rate = Decimal(str(it.get("purchase_rate") or it.get("rate") or it.get("price") or it.get("cost_rate") or 0.0))
+                disc_pct = Decimal(str(it.get("discount_percent") or it.get("discount_pct") or 0.0))
+                tax_rate = Decimal(str(it.get("tax_rate") if it.get("tax_rate") is not None else 18.0))
+
+                gross = rate * qty
+                disc_amt = gross * (disc_pct / Decimal("100"))
+                taxable = gross - disc_amt
+                tax = taxable * (tax_rate / Decimal("100"))
+                line_tot = taxable + tax
+
+                if is_interstate:
+                    cgst = Decimal("0")
+                    sgst = Decimal("0")
+                    igst = tax
+                else:
+                    cgst = (tax / Decimal("2")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    sgst = tax - cgst
+                    igst = Decimal("0")
+
+                gross_subtotal += gross
+                total_discount += disc_amt
+                taxable_total += taxable
+                cgst_total += cgst
+                sgst_total += sgst
+                igst_total += igst
+
+                calculated_items.append({
+                    "sn": idx,
+                    "item_id": item_id,
+                    "name": name,
+                    "barcode": barcode,
+                    "qty": float(qty),
+                    "free_qty": float(free_qty),
+                    "unit": unit,
+                    "purchase_rate": float(rate),
+                    "discount_percent": float(disc_pct),
+                    "discount_amount": float(disc_amt),
+                    "taxable_amount": float(taxable),
+                    "tax_rate": float(tax_rate),
+                    "cgst_amount": float(cgst),
+                    "sgst_amount": float(sgst),
+                    "igst_amount": float(igst),
+                    "cess_amount": 0.0,
+                    "line_total": float(line_tot),
+                    "batch_no": it.get("batch_no") or "",
+                    "expiry_date": it.get("expiry_date") or ""
+                })
+
+            total_tax = cgst_total + sgst_total + igst_total
+            raw_grand = taxable_total + total_tax + Decimal(str(additional_expenses))
+            rounded_grand = raw_grand.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            round_off = rounded_grand - raw_grand
+
+            amount_paid = float(rounded_grand) if payment_type in ("CASH", "BANK") else float(data.get("amount_paid") or 0.0)
+            outstanding = float(rounded_grand) - amount_paid
+
+            # 6. Update Purchase Voucher header
+            cursor.execute("""
+                UPDATE purchase_vouchers SET
+                    supplier_invoice_no = ?,
+                    supplier_invoice_date = ?,
+                    vch_date = ?,
+                    supplier_id = ?,
+                    supplier_name = ?,
+                    supplier_gstin = ?,
+                    supplier_address = ?,
+                    supplier_state = ?,
+                    place_of_supply = ?,
+                    payment_type = ?,
+                    due_date = ?,
+                    purchase_type = ?,
+                    narration = ?,
+                    gross_amount = ?,
+                    discount_total = ?,
+                    additional_expenses = ?,
+                    taxable_amount = ?,
+                    cgst_amount = ?,
+                    sgst_amount = ?,
+                    igst_amount = ?,
+                    cess_amount = 0.0,
+                    round_off = ?,
+                    grand_total = ?,
+                    amount_paid = ?,
+                    outstanding_balance = ?,
+                    is_draft = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND company_id = ?;
+            """, (
+                supp_inv_no, supp_inv_date, vch_date, supplier_id, supplier_name,
+                supplier_gstin, data.get("supplier_address", ""), supplier_state, place_of_supply,
+                payment_type, data.get("due_date", ""), purchase_type, narration,
+                float(gross_subtotal), float(total_discount), additional_expenses,
+                float(taxable_total), float(cgst_total), float(sgst_total), float(igst_total),
+                float(round_off), float(rounded_grand), amount_paid, outstanding,
+                is_draft, voucher_id, actual_comp_id
+            ))
+
+            # 7. Insert new line items and update stock inward
+            for it in calculated_items:
+                item_id = it["item_id"]
+                if not item_id:
+                    cursor.execute("""
+                        SELECT id FROM items WHERE company_id = ? AND UPPER(name) = ?;
+                    """, (actual_comp_id, it["name"].upper()))
+                    row_it = cursor.fetchone()
+                    if row_it:
+                        item_id = row_it["id"]
+
+                cursor.execute("""
+                    INSERT INTO purchase_voucher_items (
+                        id, voucher_id, item_id, sn, barcode, item_name,
+                        hsn, qty, free_qty, unit, purchase_rate, discount_percent,
+                        discount_amount, taxable_amount, tax_rate, cgst_amount,
+                        sgst_amount, igst_amount, cess_amount, line_total,
+                        batch_no, expiry_date
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, (
+                    str(uuid.uuid4()), voucher_id, item_id, it["sn"], it["barcode"],
+                    it["name"], "", it["qty"], it["free_qty"], it["unit"],
+                    it["purchase_rate"], it["discount_percent"], it["discount_amount"],
+                    it["taxable_amount"], it["tax_rate"], it["cgst_amount"],
+                    it["sgst_amount"], it["igst_amount"], 0.0, it["line_total"],
+                    it["batch_no"], it["expiry_date"]
+                ))
+
+                if not is_draft and item_id and branch_id:
+                    total_inward = it["qty"] + it["free_qty"]
+                    cursor.execute("""
+                        INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(branch_id, item_id) DO UPDATE SET
+                            current_qty = current_qty + excluded.current_qty,
+                            last_updated = CURRENT_TIMESTAMP;
+                    """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, total_inward))
+
+                    cursor.execute("""
+                        INSERT INTO stock_movements (
+                            id, company_id, branch_id, item_id, movement_type,
+                            qty, unit_cost, reference_type, reference_id, notes
+                        ) VALUES (?, ?, ?, ?, 'PURCHASE', ?, ?, 'PURCHASE', ?, ?);
+                    """, (
+                        str(uuid.uuid4()), actual_comp_id, branch_id, item_id,
+                        total_inward, it["purchase_rate"], vch_no,
+                        f"Purchase Bill #{supp_inv_no} from {supplier_name} (Modified)"
+                    ))
+
+            # 8. Update supplier balance if not draft
+            if not is_draft and outstanding > 0 and supplier_id:
+                cursor.execute("""
+                    UPDATE suppliers
+                    SET current_balance = current_balance + ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE company_id = ? AND id = ?;
+                """, (outstanding, actual_comp_id, supplier_id))
+
+            # 9. Post accounting journals if not draft
+            if not is_draft:
+                journal_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO journal_entries (
+                        id, company_id, vch_no, vch_date, vch_type, reference_id, narration
+                    ) VALUES (?, ?, ?, ?, 'PURCHASE', ?, ?);
+                """, (
+                    journal_id, actual_comp_id, vch_no, vch_date, voucher_id,
+                    f"Purchase from {supplier_name} Inv #{supp_inv_no} (Modified)"
+                ))
+
+                cursor.execute("""
+                    INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                    VALUES (?, ?, 'Purchase Account', ?, 0.0, 'Gross Purchases less discounts');
+                """, (str(uuid.uuid4()), journal_id, float(taxable_total)))
+
+                if cgst_total > 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Input CGST Account', ?, 0.0, 'Eligible Input Tax Credit');
+                    """, (str(uuid.uuid4()), journal_id, float(cgst_total)))
+                if sgst_total > 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Input SGST Account', ?, 0.0, 'Eligible Input Tax Credit');
+                    """, (str(uuid.uuid4()), journal_id, float(sgst_total)))
+                if igst_total > 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Input IGST Account', ?, 0.0, 'Eligible Inter-State Input Tax Credit');
+                    """, (str(uuid.uuid4()), journal_id, float(igst_total)))
+
+                if round_off > 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Round Off Account', ?, 0.0, 'Rounding');
+                    """, (str(uuid.uuid4()), journal_id, float(round_off)))
+                elif round_off < 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Round Off Account', 0.0, ?, 'Rounding');
+                    """, (str(uuid.uuid4()), journal_id, abs(float(round_off))))
+
+                credit_acct = f"Cash / Bank ({payment_type})" if payment_type in ("CASH", "BANK") else f"Supplier - {supplier_name}"
+                cursor.execute("""
+                    INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                    VALUES (?, ?, ?, 0.0, ?, 'Supplier settlement / liability');
+                """, (str(uuid.uuid4()), journal_id, credit_acct, float(rounded_grand)))
+
+            # 10. Audit log
+            audit_details = json.dumps({
+                "vch_no": vch_no,
+                "supplier_name": supplier_name,
+                "old_grand_total": float(old_pv["grand_total"] or 0.0),
+                "new_grand_total": float(rounded_grand)
+            })
+            cursor.execute("""
+                INSERT INTO audit_logs (id, company_id, username, action, entity_type, entity_id, details)
+                VALUES (?, ?, ?, 'MODIFY_PURCHASE', 'PURCHASE_VOUCHER', ?, ?);
+            """, (str(uuid.uuid4()), actual_comp_id, created_by, vch_no, audit_details))
+
+            conn.commit()
+
+        logger.info(f"Purchase voucher {vch_no} ({voucher_id}) modified successfully for company {actual_comp_id}.")
+        return {
+            "voucher_id": voucher_id,
+            "vch_no": vch_no,
+            "supplier_invoice_no": supp_inv_no,
+            "grand_total": float(rounded_grand),
+            "outstanding": outstanding
+        }
+
+    def delete_purchase_voucher(self, company_id: str, voucher_id: str) -> None:
+        """
+        Safely inspects dependencies before deleting purchase vouchers.
+        """
+        actual_comp_id = self._resolve_company_id(company_id)
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, is_draft FROM purchase_vouchers WHERE company_id = ? AND id = ?;", (actual_comp_id, voucher_id))
+            pv = cursor.fetchone()
+            if not pv:
+                raise ValueError(f"Purchase voucher '{voucher_id}' not found.")
+            if not pv["is_draft"]:
+                # Check if referenced in returns
+                cursor.execute("SELECT COUNT(id) FROM purchase_returns WHERE company_id = ? AND original_voucher_id = ?;", (actual_comp_id, voucher_id))
+                if cursor.fetchone()[0] > 0:
+                    raise ValueError("Cannot delete purchase voucher that has active Purchase Returns / Debit Notes linked to it.")
+            logger.info(f"Purchase voucher {voucher_id} deletion validated.")
 
     def create_purchase_return(
         self,

@@ -71,14 +71,15 @@ def test_company_navigation_exactly_two_entries():
     assert "Company Profile & Tax Info" not in labels
 
 
-def test_administration_navigation_exactly_nine_entries():
-    """Verify Administration contains exactly 9 submenus in exact order."""
+def test_administration_navigation_structure():
+    """Verify Administration contains Masters, Item Master, and untouched configuration/utility sections."""
     nav_config = _get_evaluated_nav_config()
     admin = next(s for s in nav_config if s["id"] == "administration")
     labels = [sub["label"] for sub in admin["submenus"]]
 
     expected_order = [
         "Masters",
+        "Item Master",
         "Configuration",
         "Users",
         "Mobile App",
@@ -88,8 +89,36 @@ def test_administration_navigation_exactly_nine_entries():
         "Miscellaneous Data Entry",
         "Change Financial Year"
     ]
-    assert len(labels) == 9
+    assert len(labels) == 10
     assert labels == expected_order
+
+
+def test_four_modules_display_exactly_add_modify_list():
+    """Verify Acceptance Criteria 1-4: Masters, Item Master, Sales, and Purchase display ONLY Add, Modify, List."""
+    nav_config = _get_evaluated_nav_config()
+    admin = next(s for s in nav_config if s["id"] == "administration")
+    tx = next(s for s in nav_config if s["id"] == "transaction")
+
+    masters = next(sub for sub in admin["submenus"] if sub["label"] == "Masters")
+    items = next(sub for sub in admin["submenus"] if sub["label"] == "Item Master")
+    sales = next(sub for sub in tx["submenus"] if sub["label"] == "Sales")
+    purchase = next(sub for sub in tx["submenus"] if sub["label"] == "Purchase")
+
+    # 1. Masters displays exactly Add, Modify, List
+    masters_ops = [c["label"] for c in masters["children"]]
+    assert masters_ops == ["Add", "Modify", "List"], f"Masters must have only Add, Modify, List; got {masters_ops}"
+
+    # 2. Item Master displays exactly Add, Modify, List
+    items_ops = [c["label"] for c in items["children"]]
+    assert items_ops == ["Add", "Modify", "List"], f"Item Master must have only Add, Modify, List; got {items_ops}"
+
+    # 3. Sales displays exactly Add, Modify, List
+    sales_ops = [c["label"] for c in sales["children"]]
+    assert sales_ops == ["Add", "Modify", "List"], f"Sales must have only Add, Modify, List; got {sales_ops}"
+
+    # 4. Purchase displays exactly Add, Modify, List
+    pur_ops = [c["label"] for c in purchase["children"]]
+    assert pur_ops == ["Add", "Modify", "List"], f"Purchase must have only Add, Modify, List; got {pur_ops}"
 
 
 def test_transaction_navigation_exactly_thirteen_entries():

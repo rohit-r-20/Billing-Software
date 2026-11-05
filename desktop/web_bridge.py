@@ -124,6 +124,16 @@ class BackendBridge(QObject):
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
+    @pyqtSlot(str, str, result=str)
+    def getAccountById(self, company_id: str, account_id: str) -> str:
+        try:
+            acc = account_service.get_account_by_id(company_id, account_id)
+            if acc:
+                return json.dumps({"success": True, "data": acc})
+            return json.dumps({"success": False, "error": f"Account with ID '{account_id}' not found."})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
     # --- Items & Barcodes ---
     @pyqtSlot(str, str, result=str)
     def searchItems(self, company_id: str, query: str) -> str:
@@ -206,6 +216,50 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": res})
         except Exception as e:
             logger.error(f"Error creating sale invoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def modifySaleInvoice(self, company_id: str, vch_id: str, json_data: str) -> str:
+        try:
+            payload = json.loads(json_data)
+            items = payload.get("items", [])
+            party = payload.get("party_name", "CASH")
+            sale_type = payload.get("sale_type", "L/GST-18%")
+            pay_method = payload.get("payment_method", "CASH")
+            payments = payload.get("payments")
+            narration = payload.get("narration", "")
+            vch_date = payload.get("vch_date")
+
+            res = billing_service.modify_sale_invoice(
+                company_id=company_id,
+                vch_id=vch_id,
+                items=items,
+                party_name=party,
+                account_id=payload.get("account_id"),
+                sale_type=sale_type,
+                payment_method=pay_method,
+                payments=payments,
+                branch_id=payload.get("branch_id"),
+                vch_date=vch_date,
+                narration=narration,
+                cashier_username=payload.get("cashier_username", "Admin"),
+                customer_category=payload.get("customer_category")
+            )
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error modifying sale invoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def deleteSaleInvoice(self, company_id: str, vch_id: str) -> str:
+        """
+        CRITICAL SALES SECURITY RULE:
+        A saved sales bill must NEVER be deletable.
+        """
+        try:
+            billing_service.delete_sale_invoice(company_id, vch_id)
+            return json.dumps({"success": False, "error": "Sales invoices cannot be deleted."})
+        except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, result=str)
@@ -346,6 +400,24 @@ class BackendBridge(QObject):
             data = json.loads(json_data)
             res = purchase_service.create_purchase_voucher(company_id, data)
             return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def modifyPurchaseVoucher(self, company_id: str, voucher_id: str, json_data: str) -> str:
+        try:
+            data = json.loads(json_data)
+            res = purchase_service.modify_purchase_voucher(company_id, voucher_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error modifying purchase voucher: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def deletePurchaseVoucher(self, company_id: str, voucher_id: str) -> str:
+        try:
+            purchase_service.delete_purchase_voucher(company_id, voucher_id)
+            return json.dumps({"success": True, "message": "Purchase voucher deleted."})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 

@@ -808,8 +808,11 @@
       ========================================================== -->
       <section class="screen-view erp-form-screen" id="view-add-account-master">
         <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-acc-back-list" title="Back to Accounts List">&larr; Accounts List</button>
+          </div>
           <div class="ribbon-center">
-            <span class="screen-badge-title">Add Account Master</span>
+            <span class="screen-badge-title" id="account-master-screen-title">Add Account Master</span>
           </div>
           <div class="ribbon-right">
             <span class="key-hint">List - F5</span>
@@ -820,6 +823,7 @@
         </div>
 
         <form class="master-form-body" id="form-account-master" autocomplete="off" onsubmit="return false;">
+          <input type="hidden" id="acc-id" value="" />
           <div class="master-layout-row">
             <div class="master-panel left-panel">
               <fieldset class="group-box">
@@ -923,6 +927,74 @@
           <span>[ Esc - Quit ]</span>
           <span>[ F2 - Done / Save ]</span>
           <span>[ F4 - Pick Party Details from GSTIN ]</span>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW 3B: ACCOUNT MASTER LIST (Masters -> List)
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-account-list">
+        <div class="form-screen-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-acc-list-back" title="Back to Dashboard">&larr; Dashboard</button>
+          </div>
+          <div class="ribbon-center">
+            <span class="screen-badge-title">List of Accounts / Ledger Master</span>
+          </div>
+          <div class="ribbon-right">
+            <span class="key-hint">[F2 Add | F5 Refresh | Esc Close]</span>
+            <button class="ribbon-btn-close" id="btn-acc-list-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="master-form-body">
+          <div class="items-list-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+            <div class="items-search-box" style="flex: 1;">
+              <span class="search-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
+              <input type="text" id="acc-list-search" class="items-search-input" placeholder="Search by Account Name, Mobile, GSTIN or Group..." autocomplete="off" />
+            </div>
+            <select id="acc-list-group-filter" class="table-filter-select" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px;">
+              <option value="">All Groups</option>
+              <option value="Sundry Debtors">Sundry Debtors (Customers)</option>
+              <option value="Sundry Creditors">Sundry Creditors (Suppliers)</option>
+              <option value="Bank Accounts">Bank Accounts</option>
+              <option value="Cash-in-hand">Cash-in-hand</option>
+              <option value="Sales Accounts">Sales Accounts</option>
+              <option value="Purchase Accounts">Purchase Accounts</option>
+            </select>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-acc-list-add-new">+ Add Account</button>
+            <button type="button" class="btn-classic" id="btn-acc-list-refresh">Refresh</button>
+          </div>
+
+          <div class="table-container full-height" style="height: calc(100% - 95px); background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+            <table class="companies-table" id="acc-master-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th style="min-width: 200px;">Account Name</th>
+                  <th style="width: 140px;">Group</th>
+                  <th style="width: 130px;">Category</th>
+                  <th style="width: 140px;">State / GSTIN</th>
+                  <th style="width: 110px;">Mobile</th>
+                  <th style="width: 120px; text-align: right;">Balance (₹)</th>
+                  <th style="width: 100px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="acc-master-tbody">
+                <!-- Dynamically populated from backend accounts -->
+              </tbody>
+            </table>
+            <div id="acc-master-empty" class="empty-table-msg" style="display: none; padding: 24px; text-align: center; color: #64748b;">
+              No accounts found. Click "+ Add Account" to create a new ledger account.
+            </div>
+          </div>
+
+          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span id="acc-list-count" style="font-size: 12px; font-weight: 700; color: #1e40af;">Total Accounts: 0</span>
+            <div class="bar-right-buttons">
+              <button type="button" class="btn-classic" id="btn-acc-list-close-bottom">Close (Esc)</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1120,7 +1192,7 @@
         <!-- Top Screen Ribbon -->
         <div class="form-screen-ribbon">
           <div class="ribbon-center">
-            <span class="screen-badge-title">Add Sales Voucher</span>
+            <span class="screen-badge-title" id="sales-voucher-screen-title">Add Sales Voucher</span>
           </div>
           <div class="ribbon-right">
             <span class="key-hint">List - F5</span>
@@ -1131,6 +1203,7 @@
 
         <!-- Sales Voucher Body -->
         <div class="master-form-body sales-voucher-body">
+          <input type="hidden" id="sales-modify-vch-id" value="" />
           
           <!-- Voucher Header Details -->
           <div class="voucher-top-bar">
@@ -1690,7 +1763,7 @@
             <button type="button" class="btn-ribbon-back" id="btn-pur-back-dash" title="Back to Dashboard">&larr; Dashboard</button>
           </div>
           <div class="ribbon-center">
-            <span class="screen-badge-title">Add Purchase Voucher (Inward Goods)</span>
+            <span class="screen-badge-title" id="purchase-entry-screen-title">Add Purchase Voucher (Inward Goods)</span>
           </div>
           <div class="ribbon-right">
             <span class="key-hint">[F1 Search | F5 Register | Esc Close]</span>
@@ -1699,6 +1772,7 @@
         </div>
 
         <div class="master-form-body purchase-voucher-body">
+          <input type="hidden" id="pur-modify-vch-id" value="" />
           <!-- Purchase Header Details -->
           <div class="voucher-top-bar" style="background: #e2e8f0; border: 1px solid #94a3b8; border-radius: 4px; padding: 10px; margin-bottom: 8px;">
             <div class="vch-meta-row" style="display: flex; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">
@@ -3467,6 +3541,145 @@
                 Dismiss
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Select Account to Modify -->
+    <div class="modal-overlay" id="modal-select-account-modify" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 820px; max-width: 95vw;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Masters:</span>
+            <h2>Select Account Master to Modify</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-acc-modify-modal">&times;</button>
+        </div>
+        <div style="padding: 14px 16px;">
+          <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="acc-modify-modal-search" class="items-search-input" placeholder="Search account by name, mobile, GSTIN or group..." autocomplete="off" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px;" />
+            <button type="button" class="btn-classic" id="btn-acc-modify-modal-clear">Clear</button>
+          </div>
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="acc-modify-modal-table">
+              <thead>
+                <tr>
+                  <th style="min-width: 200px;">Account Name</th>
+                  <th style="width: 140px;">Group</th>
+                  <th style="width: 130px;">Category</th>
+                  <th style="width: 130px;">Mobile / GSTIN</th>
+                  <th style="width: 110px; text-align: right;">Balance (₹)</th>
+                  <th style="width: 90px; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="acc-modify-modal-tbody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Select Item to Modify -->
+    <div class="modal-overlay" id="modal-select-item-modify" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 820px; max-width: 95vw;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Item Master:</span>
+            <h2>Select Item / Product to Modify</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-item-modify-modal">&times;</button>
+        </div>
+        <div style="padding: 14px 16px;">
+          <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="item-modify-modal-search" class="items-search-input" placeholder="Search product by name, barcode, or category..." autocomplete="off" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px;" />
+            <button type="button" class="btn-classic" id="btn-item-modify-modal-clear">Clear</button>
+          </div>
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="item-modify-modal-table">
+              <thead>
+                <tr>
+                  <th style="min-width: 220px;">Product Name</th>
+                  <th style="width: 150px;">Barcode / SKU</th>
+                  <th style="width: 130px;">Category</th>
+                  <th style="width: 110px; text-align: right;">Price (₹)</th>
+                  <th style="width: 90px; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="item-modify-modal-tbody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Select Sales Invoice to Modify -->
+    <div class="modal-overlay" id="modal-select-sales-modify" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 860px; max-width: 95vw;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Sales:</span>
+            <h2>Select Sales Invoice to Modify</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-sales-modify-modal">&times;</button>
+        </div>
+        <div style="padding: 14px 16px;">
+          <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="sales-modify-modal-search" class="items-search-input" placeholder="Search invoice by number, customer name, date..." autocomplete="off" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px;" />
+            <button type="button" class="btn-classic" id="btn-sales-modify-modal-clear">Clear</button>
+          </div>
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="sales-modify-modal-table">
+              <thead>
+                <tr>
+                  <th style="width: 110px;">Vch No.</th>
+                  <th style="width: 110px;">Date</th>
+                  <th style="min-width: 220px;">Customer / Party</th>
+                  <th style="width: 130px; text-align: right;">Net Total (₹)</th>
+                  <th style="width: 100px; text-align: center;">Status</th>
+                  <th style="width: 90px; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="sales-modify-modal-tbody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Select Purchase Voucher to Modify -->
+    <div class="modal-overlay" id="modal-select-purchase-modify" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 860px; max-width: 95vw;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Purchase:</span>
+            <h2>Select Purchase Voucher to Modify</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-purchase-modify-modal">&times;</button>
+        </div>
+        <div style="padding: 14px 16px;">
+          <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="purchase-modify-modal-search" class="items-search-input" placeholder="Search purchase voucher by number, supplier invoice, supplier name..." autocomplete="off" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 600; border: 2px solid #2563eb; border-radius: 4px;" />
+            <button type="button" class="btn-classic" id="btn-purchase-modify-modal-clear">Clear</button>
+          </div>
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="purchase-modify-modal-table">
+              <thead>
+                <tr>
+                  <th style="width: 120px;">Voucher No.</th>
+                  <th style="width: 110px;">Date</th>
+                  <th style="width: 130px;">Supplier Bill</th>
+                  <th style="min-width: 220px;">Supplier Name</th>
+                  <th style="width: 120px; text-align: right;">Total (₹)</th>
+                  <th style="width: 90px; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="purchase-modify-modal-tbody">
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

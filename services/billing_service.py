@@ -4,6 +4,7 @@ Manages atomic invoice creation, sequential numbering, stock movement deduction,
 payment recording, and sales returns with full transaction rollback protection.
 """
 import uuid
+import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from db.database import db_manager, DatabaseManager
@@ -363,6 +364,343 @@ class BillingService:
             vch["payments"] = [dict(r) for r in cursor.fetchall()]
 
             return vch
+
+    def modify_sale_invoice(
+        self,
+        company_id: str,
+        vch_id: str,
+        items: List[Dict[str, Any]],
+        party_name: str = "CASH",
+        account_id: Optional[str] = None,
+        sale_type: str = "L/GST-18%",
+        payment_method: str = "CASH",
+        payments: Optional[List[Dict[str, Any]]] = None,
+        branch_id: Optional[str] = None,
+        vch_date: Optional[str] = None,
+        narration: str = "",
+        cashier_username: str = "A",
+        customer_category: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Modifies an existing sales invoice within an atomic database transaction.
+        Reconciles stock balances, replaces stock movements, re-posts double-entry accounting journals,
+        and logs the modification audit trail, preserving the original invoice identity and sequential number.
+
+        CRITICAL SECURITY RULE:
+        A saved sales bill must NEVER be deleted.
+        """
+        if not items:
+            raise ValueError("Cannot save an empty invoice. At least one line item is required.")
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # 1. Fetch existing voucher
+            cursor.execute("""
+                SELECT * FROM sales_vouchers WHERE company_id = ? AND id = ?;
+            """, (company_id, vch_id))
+            old_vch = cursor.fetchone()
+            if not old_vch:
+                raise ValueError(f"Sales Invoice with ID '{vch_id}' not found.")
+
+            vch_no = old_vch["vch_no"]
+            series = old_vch["series"] or "Main"
+            actual_branch_id = branch_id or old_vch["branch_id"]
+            if not actual_branch_id:
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (company_id,))
+                b_row = cursor.fetchone()
+                actual_branch_id = b_row["id"] if b_row else None
+
+            # Get company state
+            cursor.execute("SELECT state FROM companies WHERE id = ?;", (company_id,))
+            c_row = cursor.fetchone()
+            company_state = c_row["state"] if c_row and c_row["state"] else "Tamilnadu"
+
+            # 2. Revert previous inventory deductions
+            cursor.execute("""
+                SELECT item_id, qty FROM sales_voucher_items WHERE voucher_id = ?;
+            """, (vch_id,))
+            old_items = cursor.fetchall()
+            if actual_branch_id:
+                for o_it in old_items:
+                    o_item_id = o_it["item_id"]
+                    o_qty = float(o_it["qty"] or 0.0)
+                    if o_item_id and o_qty > 0:
+                        cursor.execute("""
+                            UPDATE stock_balances
+                            SET current_qty = current_qty + ?, last_updated = CURRENT_TIMESTAMP
+                            WHERE branch_id = ? AND item_id = ?;
+                        """, (o_qty, actual_branch_id, o_item_id))
+
+            # 3. Clean up previous movements, journals, payments, and line items
+            cursor.execute("""
+                DELETE FROM stock_movements WHERE reference_id = ? AND reference_type = 'INVOICE';
+            """, (vch_no,))
+
+            cursor.execute("""
+                SELECT id FROM journal_entries WHERE company_id = ? AND reference_id = ?;
+            """, (company_id, vch_id))
+            for j_row in cursor.fetchall():
+                cursor.execute("DELETE FROM journal_entry_lines WHERE journal_id = ?;", (j_row["id"],))
+            cursor.execute("DELETE FROM journal_entries WHERE company_id = ? AND reference_id = ?;", (company_id, vch_id))
+
+            cursor.execute("DELETE FROM payments WHERE voucher_id = ?;", (vch_id,))
+            cursor.execute("DELETE FROM sales_voucher_items WHERE voucher_id = ?;", (vch_id,))
+
+            # 4. Resolve customer category
+            resolved_category = (customer_category or "").strip()
+            if not resolved_category:
+                if account_id:
+                    cursor.execute("SELECT customer_category FROM accounts WHERE id = ?;", (account_id,))
+                    acc_row = cursor.fetchone()
+                    resolved_category = acc_row["customer_category"] if acc_row and acc_row["customer_category"] else "Direct Customer"
+                elif party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
+                    cursor.execute("SELECT customer_category FROM accounts WHERE company_id = ? AND UPPER(name) = ?;", (company_id, party_name.strip().upper()))
+                    acc_row = cursor.fetchone()
+                    resolved_category = acc_row["customer_category"] if acc_row and acc_row["customer_category"] else "Direct Customer"
+                else:
+                    resolved_category = old_vch["customer_category"] or "Direct Customer"
+
+            # 5. Calculate updated voucher totals
+            totals = tax_service.calculate_voucher_totals(
+                items=items,
+                company_state=company_state,
+                sale_type=sale_type,
+                auto_round=True
+            )
+
+            # Date fallback
+            updated_date = vch_date or old_vch["vch_date"] or datetime.now().strftime("%d-%m-%Y")
+
+            # 6. Update sales_vouchers header (preserves ID, vch_no, created_at)
+            cursor.execute("""
+                UPDATE sales_vouchers SET
+                    vch_date = ?,
+                    sale_type = ?,
+                    party_name = ?,
+                    account_id = ?,
+                    narration = ?,
+                    subtotal = ?,
+                    gross_subtotal = ?,
+                    discount_total = ?,
+                    taxable_amount = ?,
+                    tax_rate = ?,
+                    cgst_amount = ?,
+                    sgst_amount = ?,
+                    igst_amount = ?,
+                    round_off = ?,
+                    grand_total = ?,
+                    payment_method = ?,
+                    customer_category = ?
+                WHERE id = ? AND company_id = ?;
+            """, (
+                updated_date,
+                sale_type,
+                party_name,
+                account_id,
+                narration,
+                totals["subtotal"],
+                totals["subtotal"],
+                totals.get("discount_total", 0.0),
+                totals["taxable_amount"],
+                18.0,
+                totals["cgst_amount"],
+                totals["sgst_amount"],
+                totals["igst_amount"],
+                totals["round_off"],
+                totals["grand_total"],
+                payment_method,
+                resolved_category,
+                vch_id,
+                company_id
+            ))
+
+            # 7. Insert new line items and deduct updated stock
+            for idx, line in enumerate(totals["items"], start=1):
+                item_id = line.get("id") or line.get("item_id")
+                if not item_id or len(str(item_id)) < 10:
+                    item_name_query = (line.get("name") or "").strip().upper()
+                    cursor.execute("""
+                        SELECT id FROM items WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(alias) = ?);
+                    """, (company_id, item_name_query, item_name_query))
+                    resolved_row = cursor.fetchone()
+                    if resolved_row:
+                        item_id = resolved_row["id"]
+
+                qty = float(line["qty"])
+                price = float(line["price"])
+                amount = float(line["line_total"])
+                disc_pct = float(line.get("discount_percent", 0.0))
+                disc_amt = float(line.get("discount_amount", 0.0))
+                taxable_amt = float(line.get("taxable_amount", 0.0))
+                tax_rate = float(line.get("tax_rate", 0.0))
+                tax_amt = float(line.get("tax_amount", 0.0))
+
+                cursor.execute("""
+                    INSERT INTO sales_voucher_items (
+                        id, voucher_id, item_id, sn, item_name, hsn,
+                        qty, unit, price, amount, discount_percent, discount_amount,
+                        taxable_amount, tax_rate, tax_amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, (
+                    str(uuid.uuid4()),
+                    vch_id,
+                    item_id,
+                    idx,
+                    line.get("name", f"Item {idx}"),
+                    line.get("hsn", ""),
+                    qty,
+                    line.get("unit", "Pcs."),
+                    price,
+                    amount,
+                    disc_pct,
+                    disc_amt,
+                    taxable_amt,
+                    tax_rate,
+                    tax_amt
+                ))
+
+                if item_id and actual_branch_id:
+                    cursor.execute("""
+                        INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(branch_id, item_id) DO UPDATE SET
+                            current_qty = current_qty - excluded.current_qty,
+                            last_updated = CURRENT_TIMESTAMP;
+                    """, (str(uuid.uuid4()), company_id, actual_branch_id, item_id, qty))
+
+                    cursor.execute("""
+                        INSERT INTO stock_movements (
+                            id, company_id, branch_id, item_id, movement_type,
+                            qty, unit_cost, reference_type, reference_id, notes
+                        ) VALUES (?, ?, ?, ?, 'SALE', ?, ?, 'INVOICE', ?, ?);
+                    """, (
+                        str(uuid.uuid4()),
+                        company_id,
+                        actual_branch_id,
+                        item_id,
+                        -qty,
+                        price,
+                        vch_no,
+                        f"Sale invoice modified by {cashier_username}"
+                    ))
+
+            # 8. Insert new Payments
+            payment_list = payments or [{"method": payment_method, "amount": totals["grand_total"]}]
+            for p in payment_list:
+                cursor.execute("""
+                    INSERT INTO payments (
+                        id, company_id, voucher_id, method, amount, ref_number, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                """, (
+                    str(uuid.uuid4()),
+                    company_id,
+                    vch_id,
+                    p.get("method", "CASH"),
+                    float(p.get("amount") or totals["grand_total"]),
+                    p.get("ref_number", ""),
+                    p.get("notes", "")
+                ))
+
+            # 9. Double-Entry Accounting Journal Posting
+            journal_id = str(uuid.uuid4())
+            cursor.execute("""
+                INSERT INTO journal_entries (
+                    id, company_id, vch_no, vch_date, vch_type, reference_id, narration
+                ) VALUES (?, ?, ?, ?, 'SALE', ?, ?);
+            """, (
+                journal_id, company_id, vch_no, updated_date, vch_id,
+                f"Sales Invoice #{vch_no} to {party_name} (Modified)"
+            ))
+
+            debit_account = f"Cash / Bank ({payment_method})" if party_name == "CASH" else party_name
+            cursor.execute("""
+                INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                VALUES (?, ?, ?, ?, 0.0, 'Settlement / Customer receivable');
+            """, (str(uuid.uuid4()), journal_id, debit_account, float(totals["grand_total"])))
+
+            cursor.execute("""
+                INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                VALUES (?, ?, 'Sales Account', 0.0, ?, 'Net sales revenue');
+            """, (str(uuid.uuid4()), journal_id, float(totals["taxable_amount"])))
+
+            if totals["cgst_amount"] > 0:
+                cursor.execute("""
+                    INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                    VALUES (?, ?, 'Output CGST Account', 0.0, ?, 'CGST collected on sales');
+                """, (str(uuid.uuid4()), journal_id, float(totals["cgst_amount"])))
+            if totals["sgst_amount"] > 0:
+                cursor.execute("""
+                    INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                    VALUES (?, ?, 'Output SGST Account', 0.0, ?, 'SGST collected on sales');
+                """, (str(uuid.uuid4()), journal_id, float(totals["sgst_amount"])))
+            if totals["igst_amount"] > 0:
+                cursor.execute("""
+                    INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                    VALUES (?, ?, 'Output IGST Account', 0.0, ?, 'IGST collected on interstate sales');
+                """, (str(uuid.uuid4()), journal_id, float(totals["igst_amount"])))
+
+            if totals.get("round_off"):
+                round_val = float(totals["round_off"])
+                if round_val > 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Round Off Account', 0.0, ?, 'Rounding adjustment');
+                    """, (str(uuid.uuid4()), journal_id, round_val))
+                elif round_val < 0:
+                    cursor.execute("""
+                        INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
+                        VALUES (?, ?, 'Round Off Account', ?, 0.0, 'Rounding adjustment');
+                    """, (str(uuid.uuid4()), journal_id, abs(round_val)))
+
+            # 10. Audit Log of Modification
+            audit_details = json.dumps({
+                "vch_no": vch_no,
+                "old_grand_total": float(old_vch["grand_total"] or 0.0),
+                "new_grand_total": float(totals["grand_total"]),
+                "old_party": old_vch["party_name"],
+                "new_party": party_name,
+                "items_count": len(totals["items"])
+            })
+            cursor.execute("""
+                INSERT INTO audit_logs (
+                    id, company_id, username, action, entity_type, entity_id, details
+                ) VALUES (?, ?, ?, 'MODIFY_SALE', 'INVOICE', ?, ?);
+            """, (
+                str(uuid.uuid4()),
+                company_id,
+                cashier_username,
+                vch_no,
+                audit_details
+            ))
+
+            conn.commit()
+
+        # Re-evaluate low-stock alerts
+        try:
+            from services.inventory_service import inventory_service
+            inventory_service.evaluate_low_stock_alerts(company_id)
+        except Exception as e:
+            logger.debug(f"evaluate_low_stock_alerts after sale modify: {e}")
+
+        logger.info(f"Invoice {vch_no} ({vch_id}) modified successfully for company {company_id}. New Total: ₹{totals['grand_total']}")
+        return {
+            "voucher_id": vch_id,
+            "vch_no": vch_no,
+            "grand_total": totals["grand_total"],
+            "totals": totals
+        }
+
+    def delete_sale_invoice(self, company_id: str, vch_id: str) -> None:
+        """
+        CRITICAL SALES SECURITY RULE:
+        A saved sales bill must NEVER be deletable through the Modify option or any service method.
+        """
+        logger.warning(f"Blocked deletion attempt for sales invoice {vch_id} in company {company_id}.")
+        raise PermissionError(
+            "Security Rule Violation: A saved sales bill must NEVER be deleted. "
+            "Use controlled modification or appropriate sales return / credit note workflow."
+        )
 
     def create_sales_return(
         self,

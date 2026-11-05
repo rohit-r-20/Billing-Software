@@ -195,6 +195,33 @@ class CatalogueService:
             branch_row = cursor.fetchone()
             branch_id = branch_row["id"] if branch_row else None
 
+            # Validate: Prevent duplicate item codes across different items
+            if alias:
+                cursor.execute("""
+                    SELECT id, name FROM items 
+                    WHERE company_id = ? AND UPPER(alias) = ? AND id != ?;
+                """, (actual_company_id, alias.upper(), item_id))
+                dup_code = cursor.fetchone()
+                if dup_code:
+                    raise ValueError(f"Item code / SKU '{alias}' is already assigned to item '{dup_code['name']}'.")
+
+            # Validate: Prevent conflicting barcodes across different items
+            barcodes_to_check = item_data.get("barcodes") or ([alias] if alias else [])
+            if isinstance(barcodes_to_check, str):
+                barcodes_to_check = [b.strip() for b in barcodes_to_check.split(",") if b.strip()]
+            for bcode in barcodes_to_check:
+                b_str = str(bcode).strip().upper()
+                if b_str:
+                    cursor.execute("""
+                        SELECT ib.barcode, i.name 
+                        FROM item_barcodes ib
+                        JOIN items i ON i.id = ib.item_id
+                        WHERE ib.company_id = ? AND UPPER(ib.barcode) = ? AND ib.item_id != ?;
+                    """, (actual_company_id, b_str, item_id))
+                    dup_bar = cursor.fetchone()
+                    if dup_bar:
+                        raise ValueError(f"Conflicting barcode '{b_str}' is already registered to item '{dup_bar['name']}'.")
+
             # Check if item exists by item_id
             cursor.execute("SELECT id FROM items WHERE company_id = ? AND id = ?;", (actual_company_id, item_id))
             existing_by_id = cursor.fetchone()

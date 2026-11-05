@@ -40,6 +40,7 @@ const viewCompanies = document.getElementById("view-companies");
 const viewModeSelection = document.getElementById("view-mode-selection");
 const viewDashboard = document.getElementById("view-dashboard");
 const viewAddAccountMaster = document.getElementById("view-add-account-master");
+const viewAccountList = document.getElementById("view-account-list");
 const viewAddItemMaster = document.getElementById("view-add-item-master");
 const viewSalesVoucher = document.getElementById("view-sales-voucher");
 const viewSalesList = document.getElementById("view-sales-list");
@@ -456,6 +457,7 @@ function showScreen(screenId) {
     viewModeSelection,
     viewDashboard,
     viewAddAccountMaster,
+    viewAccountList,
     viewAddItemMaster,
     viewSalesVoucher,
     viewSalesList,
@@ -489,6 +491,7 @@ function showScreen(screenId) {
     "view-items-list": { title: "Products Catalogue", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Products List</strong>" },
     "view-supplier-master": { title: "Supplier Master", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Supplier Master</strong>" },
     "view-add-account-master": { title: "Account Master", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Account Master</strong>" },
+    "view-account-list": { title: "List of Accounts", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Account Master List</strong>" },
     "view-stock-summary": { title: "Stock Valuation & WAC Summary", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Stock Valuation</strong>" },
     "view-stock-adjustments": { title: "Stock Adjustments & Transfers", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Stock Operations</strong>" },
     "view-day-book": { title: "Financial Day Book & Trial Balance", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Day Book & Trial Balance</strong>" },
@@ -514,6 +517,7 @@ function showScreen(screenId) {
     "view-items-list": "btn-nav-products",
     "view-add-item-master": "btn-nav-add-product",
     "view-add-account-master": "btn-nav-customers",
+    "view-account-list": "btn-nav-customers",
     "view-day-book": "btn-nav-daybook"
   };
   const activeNavId = screenNavMap[screenId];
@@ -537,12 +541,16 @@ function showScreen(screenId) {
     renderCompanyTable();
   } else if (screenId === "view-dashboard") {
     renderOperationalDashboard();
-  } else if (screenId === "view-dashboard") {
-    renderOperationalDashboard();
   } else if (screenId === "view-mode-selection") {
     renderModeSelection();
   } else if (screenId === "view-add-account-master") {
     accName.focus();
+  } else if (screenId === "view-account-list") {
+    renderAccountMasterList();
+    setTimeout(() => {
+      const searchIn = document.getElementById("acc-list-search");
+      if (searchIn) searchIn.focus();
+    }, 50);
   } else if (screenId === "view-add-item-master") {
     itemName.focus();
   } else if (screenId === "view-sales-voucher") {
@@ -1081,8 +1089,177 @@ function handleSaveConfiguration() {
 }
 
 // =============================================================
-// ACCOUNT MASTER
+// ACCOUNT MASTER & THREE-OPTION WORKFLOW STATE
 // =============================================================
+let currentModifySaleVchId = null;
+let isSalesModifyMode = false;
+let currentModifyPurchaseVchId = null;
+let isPurchaseModifyMode = false;
+
+function openAddAccountMaster() {
+  if (formAccountMaster) formAccountMaster.reset();
+  const idEl = document.getElementById("acc-id");
+  if (idEl) idEl.value = "";
+  const titleEl = document.getElementById("account-master-screen-title");
+  if (titleEl) titleEl.textContent = "Add Account Master";
+  showScreen("view-add-account-master");
+}
+
+function openModifyAccountMaster(accId) {
+  if (!accId) {
+    const modal = document.getElementById("modal-select-account-modify");
+    if (modal) {
+      modal.classList.add("show");
+      modal.style.display = "flex";
+      renderSelectAccountModifyModal();
+    }
+    return;
+  }
+  if (!activeCompany) return;
+
+  const loadIntoForm = (acc) => {
+    if (!acc) {
+      alert("Account details not found.");
+      return;
+    }
+    const idEl = document.getElementById("acc-id");
+    if (idEl) idEl.value = acc.id || "";
+    if (accName) accName.value = acc.name || "";
+    const aliasEl = document.getElementById("acc-alias");
+    if (aliasEl) aliasEl.value = acc.alias || "";
+    const printEl = document.getElementById("acc-print-name");
+    if (printEl) printEl.value = acc.print_name || acc.printName || acc.name || "";
+    const groupEl = document.getElementById("acc-group");
+    if (groupEl) groupEl.value = acc.account_group || acc.group || "Sundry Debtors";
+    const opBalEl = document.getElementById("acc-op-bal");
+    if (opBalEl) opBalEl.value = acc.op_bal ?? acc.opBal ?? 0;
+    const opTypeEl = document.getElementById("acc-op-type");
+    if (opTypeEl) opTypeEl.value = acc.op_type || acc.opType || "D";
+    const addr1El = document.getElementById("acc-addr1");
+    if (addr1El) addr1El.value = acc.address || "";
+    const stateEl = document.getElementById("acc-state");
+    if (stateEl) stateEl.value = acc.state || "Tamilnadu";
+    const dealerEl = document.getElementById("acc-dealer-type");
+    if (dealerEl) dealerEl.value = acc.dealer_type || acc.dealerType || "Unregistered";
+    const catEl = document.getElementById("acc-customer-category");
+    if (catEl) catEl.value = acc.customer_category || acc.customerCategory || "Direct Customer";
+    if (accGstin) accGstin.value = acc.gstin || "";
+    const mobEl = document.getElementById("acc-mobile");
+    if (mobEl) mobEl.value = acc.mobile || "";
+    const bankNameEl = document.getElementById("acc-bank-name");
+    if (bankNameEl) bankNameEl.value = acc.bank_name || acc.bankName || "";
+    const bankAccEl = document.getElementById("acc-bank-acc");
+    if (bankAccEl) bankAccEl.value = acc.bank_acc || acc.bankAcc || "";
+    const ifscEl = document.getElementById("acc-bank-ifsc");
+    if (ifscEl) ifscEl.value = acc.ifsc || "";
+    const titleEl = document.getElementById("account-master-screen-title");
+    if (titleEl) titleEl.textContent = `Modify Account Master: ${acc.name}`;
+    showScreen("view-add-account-master");
+  };
+
+  if (window.backend && window.backend.getAccountById) {
+    window.backend.getAccountById(activeCompany.id, accId, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          loadIntoForm(r.data);
+          return;
+        }
+      } catch (e) {}
+      if (window.backend.listAccounts) {
+        window.backend.listAccounts(activeCompany.id, (lResp) => {
+          try {
+            const lr = JSON.parse(lResp);
+            const found = (lr.data || []).find(a => a.id === accId || a.name === accId);
+            loadIntoForm(found);
+          } catch(e) {}
+        });
+      }
+    });
+  } else if (window.backend && window.backend.listAccounts) {
+    window.backend.listAccounts(activeCompany.id, (lResp) => {
+      try {
+        const lr = JSON.parse(lResp);
+        const found = (lr.data || []).find(a => a.id === accId || a.name === accId);
+        loadIntoForm(found);
+      } catch(e) {}
+    });
+  }
+}
+
+function renderAccountMasterList(searchQuery, groupFilter) {
+  if (!activeCompany) return;
+  const tbody = document.getElementById("acc-master-tbody");
+  const emptyEl = document.getElementById("acc-master-empty");
+  const countEl = document.getElementById("acc-list-count");
+  if (!tbody) return;
+
+  const q = (searchQuery !== undefined ? searchQuery : (document.getElementById("acc-list-search")?.value || "")).toLowerCase().trim();
+  const g = (groupFilter !== undefined ? groupFilter : (document.getElementById("acc-list-group-filter")?.value || "")).trim();
+
+  const handleAccountsData = (accounts) => {
+    let filtered = accounts.filter(acc => {
+      const matchQ = !q || (acc.name && acc.name.toLowerCase().includes(q)) || 
+                           (acc.mobile && acc.mobile.includes(q)) || 
+                           (acc.gstin && acc.gstin.toLowerCase().includes(q)) ||
+                           (acc.account_group && acc.account_group.toLowerCase().includes(q));
+      const matchG = !g || acc.account_group === g || acc.group === g;
+      return matchQ && matchG;
+    });
+
+    if (countEl) countEl.textContent = `Total Accounts: ${filtered.length}`;
+    if (filtered.length === 0) {
+      tbody.innerHTML = "";
+      if (emptyEl) emptyEl.style.display = "block";
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = "none";
+    tbody.innerHTML = "";
+    filtered.forEach((acc, idx) => {
+      const tr = document.createElement("tr");
+      const bal = parseFloat(acc.current_balance ?? acc.op_bal ?? acc.opBal ?? 0) || 0;
+      tr.innerHTML = `
+        <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+        <td><strong>${escapeHtml(acc.name)}</strong></td>
+        <td><span class="badge-category">${escapeHtml(acc.account_group || acc.group || "Sundry Debtors")}</span></td>
+        <td>${escapeHtml(acc.customer_category || acc.customerCategory || "Direct Customer")}</td>
+        <td>${escapeHtml(acc.gstin || acc.state || "-")}</td>
+        <td>${escapeHtml(acc.mobile || "-")}</td>
+        <td style="text-align: right; font-weight: 700; color: ${bal < 0 ? '#b91c1c' : '#1e3a8a'};">₹ ${bal.toFixed(2)}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn-table-action primary btn-modify-acc" data-id="${acc.id}">Modify</button>
+        </td>
+      `;
+      tr.querySelector(".btn-modify-acc").addEventListener("click", (e) => {
+        e.stopPropagation();
+        openModifyAccountMaster(acc.id);
+      });
+      tr.addEventListener("dblclick", () => {
+        openModifyAccountMaster(acc.id);
+      });
+      tbody.appendChild(tr);
+    });
+  };
+
+  if (window.backend && window.backend.listAccounts) {
+    window.backend.listAccounts(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          handleAccountsData(r.data);
+          return;
+        }
+      } catch (e) {}
+      handleAccountsData([]);
+    });
+  } else {
+    const key = `alpha_accounts_${activeCompany.code}`;
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e){}
+    handleAccountsData(list);
+  }
+}
+
 function handleSaveAccountMaster() {
   const name = accName.value.trim();
   if (!name) {
@@ -1092,6 +1269,7 @@ function handleSaveAccountMaster() {
   }
 
   const custCategory = document.getElementById("acc-customer-category") ? document.getElementById("acc-customer-category").value : "Direct Customer";
+  const existingAccId = document.getElementById("acc-id") ? document.getElementById("acc-id").value : "";
 
   const accountData = {
     name: name,
@@ -1115,13 +1293,18 @@ function handleSaveAccountMaster() {
     ifsc: document.getElementById("acc-bank-ifsc").value.trim().toUpperCase(),
     createdAt: new Date().toISOString()
   };
+  if (existingAccId) {
+    accountData.id = existingAccId;
+  }
 
   if (activeCompany) {
     if (window.backend) {
       window.backend.saveAccount(activeCompany.id, JSON.stringify(accountData), (resp) => {
         try {
           const r = JSON.parse(resp);
-          if (r.success) showNotification(`Account "${name}" saved to database!`);
+          if (r.success) {
+            showNotification(existingAccId ? `Account "${name}" modified successfully!` : `Account "${name}" saved to database!`);
+          }
         } catch (e) {}
       });
     }
@@ -1130,13 +1313,22 @@ function handleSaveAccountMaster() {
     try {
       list = JSON.parse(localStorage.getItem(key) || "[]");
     } catch (e) {}
-    list.push(accountData);
+    const existingIdx = list.findIndex(a => (existingAccId && a.id === existingAccId) || a.name === name);
+    if (existingIdx !== -1) {
+      list[existingIdx] = accountData;
+    } else {
+      list.push(accountData);
+    }
     localStorage.setItem(key, JSON.stringify(list));
   }
 
-  showNotification(`Account Master "${name}" saved!`);
+  showNotification(existingAccId ? `Account Master "${name}" updated!` : `Account Master "${name}" saved!`);
   formAccountMaster.reset();
-  showScreen("view-dashboard");
+  const idEl = document.getElementById("acc-id");
+  if (idEl) idEl.value = "";
+  const titleEl = document.getElementById("account-master-screen-title");
+  if (titleEl) titleEl.textContent = "Add Account Master";
+  showScreen("view-account-list");
 }
 
 function validateGstinOnline() {
@@ -1167,7 +1359,7 @@ function resetProductMasterForm() {
   const alertEnabledEl = document.getElementById("item-alert-enabled");
   if (alertEnabledEl) alertEnabledEl.checked = true;
   const titleEl = document.getElementById("item-master-screen-title");
-  if (titleEl) titleEl.textContent = "Add / Edit Product";
+  if (titleEl) titleEl.textContent = "Add Product";
 }
 
 function loadProductForEditing(itemId) {
@@ -1217,7 +1409,7 @@ function loadProductForEditing(itemId) {
     }
 
     const titleEl = document.getElementById("item-master-screen-title");
-    if (titleEl) titleEl.textContent = `Edit Product: ${item.name}`;
+    if (titleEl) titleEl.textContent = `Modify Product: ${item.name}`;
 
     showScreen("view-add-item-master");
     if (itemName) itemName.focus();
@@ -2042,6 +2234,29 @@ function handleSaveSalesVoucher() {
         line_total: it.amount
       }))
     };
+
+    if (isSalesModifyMode && currentModifySaleVchId) {
+      window.backend.modifySaleInvoice(activeCompany.id, currentModifySaleVchId, JSON.stringify(payload), (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success) {
+            showNotification(`Sales Bill #${currentNo} modified successfully! Inventory and accounts reconciled.`);
+            checkLowStockAlerts(false);
+            isSalesModifyMode = false;
+            currentModifySaleVchId = null;
+            const titleEl = document.getElementById("sales-voucher-screen-title");
+            if (titleEl) titleEl.textContent = "Add Sales Voucher";
+            showScreen("view-sales-list");
+          } else {
+            alert(`Failed to modify sale invoice: ${r.error}`);
+          }
+        } catch (e) {
+          alert(`Error: ${e.message}`);
+        }
+      });
+      return;
+    }
+
     window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
       try {
         const r = JSON.parse(resp);
@@ -2064,6 +2279,64 @@ function handleSaveSalesVoucher() {
   }
 }
 
+function openModifySaleInvoice(vchId) {
+  if (!activeCompany) return;
+  const loadInvoice = (vch) => {
+    if (!vch) {
+      alert("Sales invoice not found.");
+      return;
+    }
+    isSalesModifyMode = true;
+    currentModifySaleVchId = vch.id || vchId;
+    const modIn = document.getElementById("sales-modify-vch-id");
+    if (modIn) modIn.value = currentModifySaleVchId;
+
+    if (vchNumber) vchNumber.value = vch.vch_no || "";
+    if (infoVchNo) infoVchNo.textContent = vch.vch_no || "";
+    if (vchDate && vch.vch_date) vchDate.value = vch.vch_date;
+    if (vchPartyInput) vchPartyInput.value = vch.party_name || "CASH";
+    if (vchSaleType && vch.sale_type) vchSaleType.value = vch.sale_type;
+    if (vchNarration) vchNarration.value = vch.narration || "";
+
+    const titleEl = document.getElementById("sales-voucher-screen-title");
+    if (titleEl) titleEl.textContent = `Modify Sales Voucher: ${vch.vch_no}`;
+
+    renderVoucherItemRows();
+    const items = vch.items || [];
+    for (let r = 1; r <= 11; r++) {
+      const it = items[r - 1];
+      const nameEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-item-input[data-row="${r}"]`) : null;
+      const qtyEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-qty-input[data-row="${r}"]`) : null;
+      const unitEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-unit-input[data-row="${r}"]`) : null;
+      const priceEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-price-input[data-row="${r}"]`) : null;
+      const amtEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-amount-input[data-row="${r}"]`) : null;
+      if (nameEl) {
+        nameEl.value = it ? (it.name || "") : "";
+        nameEl.dataset.itemId = it ? (it.item_id || "") : "";
+      }
+      if (qtyEl) qtyEl.value = it ? (it.qty || "") : "";
+      if (unitEl) unitEl.value = it ? (it.unit || "Pcs.") : "Pcs.";
+      if (priceEl) priceEl.value = it ? (it.price || "") : "";
+      if (amtEl) amtEl.value = it ? (it.line_total || it.amount || "") : "";
+    }
+    recalculateVoucherTotals();
+    showScreen("view-sales-voucher");
+  };
+
+  if (window.backend && window.backend.listVouchers) {
+    window.backend.listVouchers(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          const found = r.data.find(v => v.id === vchId || v.vch_no === vchId);
+          loadInvoice(found);
+          return;
+        }
+      } catch (e) {}
+    });
+  }
+}
+
 // =============================================================
 // SALES BILLS REGISTER / LIST
 // =============================================================
@@ -2079,6 +2352,8 @@ function renderSalesRegister() {
           salesRegisterTbody.innerHTML = "";
           r.data.forEach((bill) => {
             const tr = document.createElement("tr");
+            tr.style.cursor = "pointer";
+            tr.title = "Double-click to modify invoice";
             tr.innerHTML = `
               <td style="font-weight: 800; color: #1e40af;">${escapeHtml(bill.vch_no)}</td>
               <td>${escapeHtml(bill.vch_date)}</td>
@@ -2087,6 +2362,9 @@ function renderSalesRegister() {
               <td>${((bill.grand_total || 0) - (bill.subtotal || 0)).toFixed(2)}</td>
               <td style="font-weight: 800; color: #047857;">₹ ${(bill.grand_total || 0).toFixed(2)}</td>
             `;
+            tr.addEventListener("dblclick", () => {
+              openModifySaleInvoice(bill.id || bill.vch_no);
+            });
             salesRegisterTbody.appendChild(tr);
           });
           return;
@@ -4875,6 +5153,20 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "F2") {
       e.preventDefault();
       handleSaveAccountMaster();
+    } else if (e.key === "F5") {
+      e.preventDefault();
+      showScreen("view-account-list");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      showScreen("view-account-list");
+    }
+  } else if (currentScreen === "view-account-list") {
+    if (e.key === "F2") {
+      e.preventDefault();
+      openAddAccountMaster();
+    } else if (e.key === "F5") {
+      e.preventDefault();
+      renderAccountMasterList();
     } else if (e.key === "Escape") {
       e.preventDefault();
       showScreen("view-dashboard");
@@ -4996,6 +5288,13 @@ function initPurchaseEntryScreen() {
     showScreen("view-companies");
     return;
   }
+
+  isPurchaseModifyMode = false;
+  currentModifyPurchaseVchId = null;
+  const modIn = document.getElementById("pur-modify-vch-id");
+  if (modIn) modIn.value = "";
+  const titleEl = document.getElementById("purchase-entry-screen-title");
+  if (titleEl) titleEl.textContent = "Add Purchase Voucher (Inward Goods)";
   
   const purDateInput = document.getElementById("pur-date");
   const purSupDateInput = document.getElementById("pur-supplier-inv-date");
@@ -5368,6 +5667,29 @@ function postPurchaseVoucher() {
     }))
   };
 
+  if (isPurchaseModifyMode && currentModifyPurchaseVchId) {
+    if (window.backend && window.backend.modifyPurchaseVoucher) {
+      window.backend.modifyPurchaseVoucher(activeCompany.id, currentModifyPurchaseVchId, JSON.stringify(payload), (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success) {
+            showNotification(`Purchase Voucher ${r.data.vch_no} modified successfully! Inward inventory reconciled.`);
+            isPurchaseModifyMode = false;
+            currentModifyPurchaseVchId = null;
+            const titleEl = document.getElementById("purchase-entry-screen-title");
+            if (titleEl) titleEl.textContent = "Add Purchase Voucher (Inward Goods)";
+            showScreen("view-purchase-list");
+          } else {
+            alert(`Failed to modify purchase voucher: ${r.error}`);
+          }
+        } catch (e) {
+          alert(`Error: ${e.message}`);
+        }
+      });
+    }
+    return;
+  }
+
   if (window.backend && window.backend.createPurchaseVoucher) {
     window.backend.createPurchaseVoucher(activeCompany.id, JSON.stringify(payload), (resp) => {
       try {
@@ -5387,6 +5709,79 @@ function postPurchaseVoucher() {
         console.error("Error creating purchase voucher:", e);
         alert(`Error: ${e.message}`);
       }
+    });
+  }
+}
+
+function openModifyPurchaseVoucher(vchId) {
+  if (!activeCompany) return;
+  const loadVoucher = (vch) => {
+    if (!vch) {
+      alert("Purchase voucher not found.");
+      return;
+    }
+    isPurchaseModifyMode = true;
+    currentModifyPurchaseVchId = vch.id || vchId;
+    const modIn = document.getElementById("pur-modify-vch-id");
+    if (modIn) modIn.value = currentModifyPurchaseVchId;
+
+    const supplierSelect = document.getElementById("pur-supplier-select");
+    if (supplierSelect && vch.supplier_id) supplierSelect.value = vch.supplier_id;
+    const supInvNo = document.getElementById("pur-supplier-inv-no");
+    if (supInvNo) supInvNo.value = vch.supplier_invoice_no || "";
+    const supInvDate = document.getElementById("pur-supplier-inv-date");
+    if (supInvDate && vch.supplier_invoice_date) supInvDate.value = vch.supplier_invoice_date;
+    const purDate = document.getElementById("pur-date");
+    if (purDate && vch.voucher_date) purDate.value = vch.voucher_date;
+    const series = document.getElementById("pur-series");
+    if (series && vch.series) series.value = vch.series;
+    const paymentMode = document.getElementById("pur-payment-mode");
+    if (paymentMode && vch.payment_mode) paymentMode.value = vch.payment_mode;
+    const freight = document.getElementById("pur-freight-exp");
+    if (freight) freight.value = vch.freight_charges || "0";
+    const handling = document.getElementById("pur-handling-exp");
+    if (handling) handling.value = vch.handling_charges || "0";
+    const narration = document.getElementById("pur-narration");
+    if (narration) narration.value = vch.narration || "";
+
+    const titleEl = document.getElementById("purchase-entry-screen-title");
+    if (titleEl) titleEl.textContent = `Modify Purchase Voucher: ${vch.vch_no}`;
+
+    if (Array.isArray(vch.items) && vch.items.length > 0) {
+      purchaseItemsData = vch.items.map(it => ({
+        item_id: it.item_id || "",
+        barcode: it.barcode || "",
+        name: it.name || "",
+        batch_no: it.batch_no || "",
+        expiry_date: it.expiry_date || "",
+        qty: parseFloat(it.qty) || 1,
+        free_qty: parseFloat(it.free_qty) || 0,
+        unit: it.unit || "Pcs",
+        cost_rate: parseFloat(it.cost_rate) || 0,
+        discount_pct: parseFloat(it.discount_pct) || 0,
+        tax_rate: parseFloat(it.tax_rate) || 0,
+        taxable_amount: parseFloat(it.taxable_amount) || 0,
+        tax_amount: parseFloat(it.tax_amount) || 0,
+        line_total: parseFloat(it.line_total) || 0
+      }));
+    } else {
+      purchaseItemsData = [ createEmptyPurchaseItem() ];
+    }
+    renderPurchaseGridRows();
+    calcPurchaseTotals();
+    showScreen("view-purchase-entry");
+  };
+
+  if (window.backend && window.backend.listPurchaseVouchers) {
+    window.backend.listPurchaseVouchers(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          const found = r.data.find(v => v.id === vchId || v.vch_no === vchId);
+          loadVoucher(found);
+          return;
+        }
+      } catch (e) {}
     });
   }
 }
@@ -5432,12 +5827,23 @@ function renderPurchaseRegister() {
               <td style="text-align: right; font-weight: 800; color: #0f172a;">₹ ${netAmt.toFixed(2)}</td>
               <td style="text-align: center;"><span class="stock-badge-optimal">POSTED</span></td>
               <td style="text-align: center;">
+                <button type="button" class="btn-classic pur-modify-btn" data-id="${vch.id}" style="padding: 2px 8px; font-size: 11px; margin-right: 4px;">Modify</button>
                 <button type="button" class="btn-classic pur-view-btn" data-id="${vch.id}" style="padding: 2px 8px; font-size: 11px;">View</button>
               </td>
             `;
 
-            tr.querySelector(".pur-view-btn").addEventListener("click", () => {
+            tr.querySelector(".pur-modify-btn").addEventListener("click", (e) => {
+              e.stopPropagation();
+              openModifyPurchaseVoucher(vch.id);
+            });
+
+            tr.querySelector(".pur-view-btn").addEventListener("click", (e) => {
+              e.stopPropagation();
               viewPurchaseVoucherDetails(vch.id);
+            });
+
+            tr.addEventListener("dblclick", () => {
+              openModifyPurchaseVoucher(vch.id);
             });
 
             tbody.appendChild(tr);
@@ -7230,12 +7636,308 @@ function setupCompanyAndPlaceholderModalListeners() {
       if (modalEditComp && modalEditComp.classList.contains("show")) closeEditCompanyModal();
       if (modalCloseComp && modalCloseComp.classList.contains("show")) closeCloseCompanyModal();
       if (modalPlaceholder && modalPlaceholder.classList.contains("show")) closePlaceholderModal();
+      const mAcc = document.getElementById("modal-select-account-modify");
+      if (mAcc && (mAcc.classList.contains("show") || mAcc.style.display !== "none")) closeModal("modal-select-account-modify");
+      const mItem = document.getElementById("modal-select-item-modify");
+      if (mItem && (mItem.classList.contains("show") || mItem.style.display !== "none")) closeModal("modal-select-item-modify");
+      const mSales = document.getElementById("modal-select-sales-modify");
+      if (mSales && (mSales.classList.contains("show") || mSales.style.display !== "none")) closeModal("modal-select-sales-modify");
+      const mPur = document.getElementById("modal-select-purchase-modify");
+      if (mPur && (mPur.classList.contains("show") || mPur.style.display !== "none")) closeModal("modal-select-purchase-modify");
     }
   });
 }
 
+// =============================================================
+// THREE-OPTION WORKFLOW SELECTION MODALS & EVENT HANDLERS
+// =============================================================
+function openModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.add("show");
+    modal.style.display = "flex";
+  }
+}
+
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.remove("show");
+    modal.style.display = "none";
+  }
+}
+
+window.openModal = openModal;
+window.closeModal = closeModal;
+
+function renderSelectAccountModifyModal() {
+  if (!activeCompany) return;
+  const tbody = document.getElementById("acc-modify-modal-tbody");
+  const searchIn = document.getElementById("acc-modify-modal-search");
+  if (!tbody) return;
+  const q = (searchIn?.value || "").toLowerCase().trim();
+
+  const populate = (accounts) => {
+    const list = accounts.filter(a => !q || (a.name && a.name.toLowerCase().includes(q)) || (a.mobile && a.mobile.includes(q)) || (a.gstin && a.gstin.toLowerCase().includes(q)));
+    tbody.innerHTML = "";
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px; color:#64748b;">No matching accounts found</td></tr>`;
+      return;
+    }
+    list.forEach(a => {
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      const bal = parseFloat(a.current_balance ?? a.op_bal ?? 0) || 0;
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(a.name)}</strong></td>
+        <td>${escapeHtml(a.account_group || a.group || "Sundry Debtors")}</td>
+        <td>${escapeHtml(a.customer_category || "Direct Customer")}</td>
+        <td>${escapeHtml(a.mobile || a.gstin || "-")}</td>
+        <td style="text-align: right; font-weight: 700;">₹ ${bal.toFixed(2)}</td>
+        <td style="text-align: center;"><button type="button" class="btn-classic primary-action-btn" style="padding: 2px 8px; font-size: 11px;">Modify</button></td>
+      `;
+      const onSelect = () => {
+        closeModal("modal-select-account-modify");
+        openModifyAccountMaster(a.id);
+      };
+      tr.addEventListener("click", onSelect);
+      tbody.appendChild(tr);
+    });
+  };
+
+  if (window.backend && window.backend.listAccounts) {
+    window.backend.listAccounts(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          populate(r.data);
+          return;
+        }
+      } catch (e) {}
+      populate([]);
+    });
+  } else {
+    const key = `alpha_accounts_${activeCompany.code}`;
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e){}
+    populate(list);
+  }
+}
+
+function renderSelectItemModifyModal() {
+  if (!activeCompany) return;
+  const tbody = document.getElementById("item-modify-modal-tbody");
+  const searchIn = document.getElementById("item-modify-modal-search");
+  if (!tbody) return;
+  const q = (searchIn?.value || "").toLowerCase().trim();
+
+  fetchAllItems(q, (items) => {
+    tbody.innerHTML = "";
+    if (!items || items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 20px; color:#64748b;">No matching products found</td></tr>`;
+      return;
+    }
+    items.forEach(it => {
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      const price = parseFloat(it.sales_price || it.salesPrice || it.price || 0).toFixed(2);
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(it.name)}</strong></td>
+        <td><span class="badge-barcode">${escapeHtml(it.barcodes || it.barcode || it.alias || "-")}</span></td>
+        <td>${escapeHtml(it.item_group || it.group || "General")}</td>
+        <td style="text-align: right; font-weight: 700; color: #166534;">₹ ${price}</td>
+        <td style="text-align: center;"><button type="button" class="btn-classic primary-action-btn" style="padding: 2px 8px; font-size: 11px;">Modify</button></td>
+      `;
+      const onSelect = () => {
+        closeModal("modal-select-item-modify");
+        loadProductForEditing(it.id);
+      };
+      tr.addEventListener("click", onSelect);
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+function renderSelectSalesModifyModal() {
+  if (!activeCompany) return;
+  const tbody = document.getElementById("sales-modify-modal-tbody");
+  const searchIn = document.getElementById("sales-modify-modal-search");
+  if (!tbody) return;
+  const q = (searchIn?.value || "").toLowerCase().trim();
+
+  if (window.backend && window.backend.listVouchers) {
+    window.backend.listVouchers(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          const list = r.data.filter(v => !q || (v.vch_no && v.vch_no.toLowerCase().includes(q)) || (v.party_name && v.party_name.toLowerCase().includes(q)));
+          tbody.innerHTML = "";
+          if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px; color:#64748b;">No matching sales invoices found</td></tr>`;
+            return;
+          }
+          list.forEach(v => {
+            const tr = document.createElement("tr");
+            tr.style.cursor = "pointer";
+            const total = parseFloat(v.grand_total || 0).toFixed(2);
+            tr.innerHTML = `
+              <td style="font-weight: 800; color: #1e40af;">${escapeHtml(v.vch_no)}</td>
+              <td>${escapeHtml(v.vch_date || "")}</td>
+              <td style="font-weight: 700;">${escapeHtml(v.party_name || "CASH")}</td>
+              <td style="text-align: right; font-weight: 800; color: #047857;">₹ ${total}</td>
+              <td style="text-align: center;"><span class="stock-badge-optimal">POSTED</span></td>
+              <td style="text-align: center;"><button type="button" class="btn-classic primary-action-btn" style="padding: 2px 8px; font-size: 11px;">Modify</button></td>
+            `;
+            const onSelect = () => {
+              closeModal("modal-select-sales-modify");
+              openModifySaleInvoice(v.id || v.voucher_id || v.vch_no);
+            };
+            tr.addEventListener("click", onSelect);
+            tbody.appendChild(tr);
+          });
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+function renderSelectPurchaseModifyModal() {
+  if (!activeCompany) return;
+  const tbody = document.getElementById("purchase-modify-modal-tbody");
+  const searchIn = document.getElementById("purchase-modify-modal-search");
+  if (!tbody) return;
+  const q = (searchIn?.value || "").toLowerCase().trim();
+
+  if (window.backend && window.backend.listPurchaseVouchers) {
+    window.backend.listPurchaseVouchers(activeCompany.id, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && Array.isArray(r.data)) {
+          const list = r.data.filter(v => !q || (v.vch_no && v.vch_no.toLowerCase().includes(q)) || (v.supplier_name && v.supplier_name.toLowerCase().includes(q)) || (v.supplier_invoice_no && v.supplier_invoice_no.toLowerCase().includes(q)));
+          tbody.innerHTML = "";
+          if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px; color:#64748b;">No matching purchase vouchers found</td></tr>`;
+            return;
+          }
+          list.forEach(v => {
+            const tr = document.createElement("tr");
+            tr.style.cursor = "pointer";
+            const total = parseFloat(v.grand_total || 0).toFixed(2);
+            tr.innerHTML = `
+              <td style="font-weight: 800; color: #1e40af;">${escapeHtml(v.vch_no)}</td>
+              <td>${escapeHtml(v.voucher_date || "")}</td>
+              <td style="font-weight: 600;">${escapeHtml(v.supplier_invoice_no || "-")}</td>
+              <td>${escapeHtml(v.supplier_name || "")}</td>
+              <td style="text-align: right; font-weight: 800; color: #0f172a;">₹ ${total}</td>
+              <td style="text-align: center;"><button type="button" class="btn-classic primary-action-btn" style="padding: 2px 8px; font-size: 11px;">Modify</button></td>
+            `;
+            const onSelect = () => {
+              closeModal("modal-select-purchase-modify");
+              openModifyPurchaseVoucher(v.id);
+            };
+            tr.addEventListener("click", onSelect);
+            tbody.appendChild(tr);
+          });
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+function setupThreeOptionWorkflowListeners() {
+  // Account List controls
+  const btnAccBackList = document.getElementById("btn-acc-back-list");
+  if (btnAccBackList) btnAccBackList.addEventListener("click", () => showScreen("view-account-list"));
+  const btnAccListBack = document.getElementById("btn-acc-list-back");
+  if (btnAccListBack) btnAccListBack.addEventListener("click", () => showScreen("view-dashboard"));
+  const btnAccListClose = document.getElementById("btn-acc-list-close");
+  if (btnAccListClose) btnAccListClose.addEventListener("click", () => showScreen("view-dashboard"));
+  const btnAccListCloseBottom = document.getElementById("btn-acc-list-close-bottom");
+  if (btnAccListCloseBottom) btnAccListCloseBottom.addEventListener("click", () => showScreen("view-dashboard"));
+  const btnAccListAdd = document.getElementById("btn-acc-list-add-new");
+  if (btnAccListAdd) btnAccListAdd.addEventListener("click", () => openAddAccountMaster());
+  const btnAccListRefresh = document.getElementById("btn-acc-list-refresh");
+  if (btnAccListRefresh) btnAccListRefresh.addEventListener("click", () => renderAccountMasterList());
+  const accListSearch = document.getElementById("acc-list-search");
+  if (accListSearch) {
+    accListSearch.addEventListener("input", (e) => renderAccountMasterList(e.target.value));
+  }
+  const accListGroupFilter = document.getElementById("acc-list-group-filter");
+  if (accListGroupFilter) {
+    accListGroupFilter.addEventListener("change", (e) => renderAccountMasterList(undefined, e.target.value));
+  }
+
+  // Account Modify Modal
+  const btnCloseAccMod = document.getElementById("btn-close-acc-modify-modal");
+  if (btnCloseAccMod) btnCloseAccMod.addEventListener("click", () => closeModal("modal-select-account-modify"));
+  const accModSearch = document.getElementById("acc-modify-modal-search");
+  if (accModSearch) accModSearch.addEventListener("input", () => renderSelectAccountModifyModal());
+  const btnAccModClear = document.getElementById("btn-acc-modify-modal-clear");
+  if (btnAccModClear && accModSearch) {
+    btnAccModClear.addEventListener("click", () => {
+      accModSearch.value = "";
+      accModSearch.focus();
+      renderSelectAccountModifyModal();
+    });
+  }
+
+  // Item Modify Modal
+  const btnCloseItemMod = document.getElementById("btn-close-item-modify-modal");
+  if (btnCloseItemMod) btnCloseItemMod.addEventListener("click", () => closeModal("modal-select-item-modify"));
+  const itemModSearch = document.getElementById("item-modify-modal-search");
+  if (itemModSearch) itemModSearch.addEventListener("input", () => renderSelectItemModifyModal());
+  const btnItemModClear = document.getElementById("btn-item-modify-modal-clear");
+  if (btnItemModClear && itemModSearch) {
+    btnItemModClear.addEventListener("click", () => {
+      itemModSearch.value = "";
+      itemModSearch.focus();
+      renderSelectItemModifyModal();
+    });
+  }
+
+  // Sales Modify Modal
+  const btnCloseSalesMod = document.getElementById("btn-close-sales-modify-modal");
+  if (btnCloseSalesMod) btnCloseSalesMod.addEventListener("click", () => closeModal("modal-select-sales-modify"));
+  const salesModSearch = document.getElementById("sales-modify-modal-search");
+  if (salesModSearch) salesModSearch.addEventListener("input", () => renderSelectSalesModifyModal());
+  const btnSalesModClear = document.getElementById("btn-sales-modify-modal-clear");
+  if (btnSalesModClear && salesModSearch) {
+    btnSalesModClear.addEventListener("click", () => {
+      salesModSearch.value = "";
+      salesModSearch.focus();
+      renderSelectSalesModifyModal();
+    });
+  }
+
+  // Purchase Modify Modal
+  const btnClosePurMod = document.getElementById("btn-close-purchase-modify-modal");
+  if (btnClosePurMod) btnClosePurMod.addEventListener("click", () => closeModal("modal-select-purchase-modify"));
+  const purModSearch = document.getElementById("purchase-modify-modal-search");
+  if (purModSearch) purModSearch.addEventListener("input", () => renderSelectPurchaseModifyModal());
+  const btnPurModClear = document.getElementById("btn-purchase-modify-modal-clear");
+  if (btnPurModClear && purModSearch) {
+    btnPurModClear.addEventListener("click", () => {
+      purModSearch.value = "";
+      purModSearch.focus();
+      renderSelectPurchaseModifyModal();
+    });
+  }
+}
+
+// Global Exports
+window.renderSelectAccountModifyModal = renderSelectAccountModifyModal;
+window.renderSelectItemModifyModal = renderSelectItemModifyModal;
+window.renderSelectSalesModifyModal = renderSelectSalesModifyModal;
+window.renderSelectPurchaseModifyModal = renderSelectPurchaseModifyModal;
+window.openAddAccountMaster = openAddAccountMaster;
+window.openModifyAccountMaster = openModifyAccountMaster;
+window.openModifySaleInvoice = openModifySaleInvoice;
+window.openModifyPurchaseVoucher = openModifyPurchaseVoucher;
+window.renderAccountMasterList = renderAccountMasterList;
+
 setupEnterpriseErpEventListeners();
 setupCompanyAndPlaceholderModalListeners();
+setupThreeOptionWorkflowListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
 applyZoom(uiZoom);

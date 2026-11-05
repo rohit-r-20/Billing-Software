@@ -29,7 +29,7 @@ const PRIMARY_NAV_CONFIG = [
     ]
   },
 
-  // 2. ADMINISTRATION (Exactly 9 entries in exact order)
+  // 2. ADMINISTRATION
   {
     id: "administration",
     label: "Administration",
@@ -40,14 +40,25 @@ const PRIMARY_NAV_CONFIG = [
         label: "Masters", 
         icon: "folderTree",
         action: "open-view",
+        targetView: "view-account-list",
+        expandable: true,
+        children: [
+          { id: "sub-mast-add", label: "Add", action: "open-view", targetView: "view-add-account-master", icon: "plusCircle" },
+          { id: "sub-mast-modify", label: "Modify", action: "open-modal", modalId: "modal-select-account-modify", icon: "edit3" },
+          { id: "sub-mast-list", label: "List", action: "open-view", targetView: "view-account-list", icon: "list" }
+        ]
+      },
+      { 
+        id: "sub-admin-item-master", 
+        label: "Item Master", 
+        icon: "package",
+        action: "open-view",
         targetView: "view-items-list",
         expandable: true,
         children: [
-          { id: "sub-admin-mast-accounts", label: "Account Master", action: "open-view", targetView: "view-add-account-master", icon: "wallet" },
-          { id: "sub-admin-mast-items", label: "Item Master (Catalogue)", action: "open-view", targetView: "view-items-list", icon: "package" },
-          { id: "sub-admin-mast-add-item", label: "Add Product SKU", action: "open-view", targetView: "view-add-item-master", icon: "plusCircle" },
-          { id: "sub-admin-mast-suppliers", label: "Supplier Master", action: "open-view", targetView: "view-supplier-master", icon: "user" },
-          { id: "sub-admin-mast-customers", label: "Customer Master", action: "open-view", targetView: "view-add-account-master", icon: "users" }
+          { id: "sub-item-add", label: "Add", action: "open-view", targetView: "view-add-item-master", icon: "plusCircle" },
+          { id: "sub-item-modify", label: "Modify", action: "open-modal", modalId: "modal-select-item-modify", icon: "edit3" },
+          { id: "sub-item-list", label: "List", action: "open-view", targetView: "view-items-list", icon: "list" }
         ]
       },
       { 
@@ -109,7 +120,7 @@ const PRIMARY_NAV_CONFIG = [
     ]
   },
 
-  // 3. TRANSACTION (Exactly 13 entries in exact order)
+  // 3. TRANSACTION
   {
     id: "transaction",
     label: "Transaction",
@@ -123,9 +134,9 @@ const PRIMARY_NAV_CONFIG = [
         targetView: "view-sales-voucher",
         expandable: true,
         children: [
-          { id: "sub-tx-sales-new", label: "New Tax Invoice", action: "open-view", targetView: "view-sales-voucher", icon: "fileText" },
-          { id: "sub-tx-sales-pos", label: "Fast Billing (POS)", action: "open-view", targetView: "view-fast-billing", icon: "shoppingBag", badge: "POS" },
-          { id: "sub-tx-sales-reg", label: "Sales Register", action: "open-view", targetView: "view-sales-list", icon: "fileText" }
+          { id: "sub-sales-add", label: "Add", action: "open-view", targetView: "view-sales-voucher", icon: "plusCircle" },
+          { id: "sub-sales-modify", label: "Modify", action: "open-modal", modalId: "modal-select-sales-modify", icon: "edit3" },
+          { id: "sub-sales-list", label: "List", action: "open-view", targetView: "view-sales-list", icon: "list" }
         ]
       },
       { 
@@ -136,8 +147,9 @@ const PRIMARY_NAV_CONFIG = [
         targetView: "view-purchase-entry",
         expandable: true,
         children: [
-          { id: "sub-tx-pur-inward", label: "Purchase Entry (Inward)", action: "open-view", targetView: "view-purchase-entry", icon: "shoppingCart" },
-          { id: "sub-tx-pur-reg", label: "Purchase Register", action: "open-view", targetView: "view-purchase-list", icon: "fileText" }
+          { id: "sub-pur-add", label: "Add", action: "open-view", targetView: "view-purchase-entry", icon: "plusCircle" },
+          { id: "sub-pur-modify", label: "Modify", action: "open-modal", modalId: "modal-select-purchase-modify", icon: "edit3" },
+          { id: "sub-pur-list", label: "List", action: "open-view", targetView: "view-purchase-list", icon: "list" }
         ]
       },
       { 
@@ -547,7 +559,19 @@ class SidebarNavigationManager {
         window.openModal(sub.modalId);
       } else {
         const modal = document.getElementById(sub.modalId);
-        if (modal) modal.style.display = "flex";
+        if (modal) {
+          modal.classList.add("show");
+          modal.style.display = "flex";
+        }
+      }
+      if (sub.modalId === "modal-select-account-modify" && typeof window.renderSelectAccountModifyModal === "function") {
+        window.renderSelectAccountModifyModal();
+      } else if (sub.modalId === "modal-select-item-modify" && typeof window.renderSelectItemModifyModal === "function") {
+        window.renderSelectItemModifyModal();
+      } else if (sub.modalId === "modal-select-sales-modify" && typeof window.renderSelectSalesModifyModal === "function") {
+        window.renderSelectSalesModifyModal();
+      } else if (sub.modalId === "modal-select-purchase-modify" && typeof window.renderSelectPurchaseModifyModal === "function") {
+        window.renderSelectPurchaseModifyModal();
       }
       this.updateBreadcrumb(sub.label);
     } else if (sub.action === "edit-company") {
