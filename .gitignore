@@ -8,3 +8,6 @@ db/*.db
 !db/migrations/
 backups/
 *.tar.gz
+_legacy_backup/
+scratch/
+

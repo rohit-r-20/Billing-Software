@@ -16,6 +16,12 @@ if _venv_python.exists() and sys.executable != str(_venv_python):
     except ImportError:
         os.execv(str(_venv_python), [str(_venv_python)] + sys.argv)
 
+# Set Chromium command-line flags BEFORE PyQt5/QWebEngine initialization.
+# On Windows, --no-sandbox is required to prevent QtWebEngineProcess renderer crash (STATUS_BREAKPOINT -2147483645).
+existing_flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
+if '--no-sandbox' not in existing_flags:
+    os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = f'{existing_flags} --no-sandbox --disable-logging'.strip()
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 

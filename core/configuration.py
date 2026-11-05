@@ -8,10 +8,10 @@ from pathlib import Path
 
 
 class AppConfig:
-    APP_NAME = "Alpha Billing Software"
-    APP_DISPLAY_NAME = "Anti Matrix Billing ERP"
-    VENDOR_NAME = "Anti Matrix"
-    VERSION = "2.1.0"
+    APP_NAME = "Alpha Billing"
+    APP_DISPLAY_NAME = "Alpha Billing Cloud ERP"
+    VENDOR_NAME = "Alpha Billing"
+    VERSION = "2.5.0"
     
     # Base directory of the application
     BASE_DIR = Path(__file__).resolve().parent.parent

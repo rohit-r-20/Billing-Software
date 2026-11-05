@@ -1,0 +1,88 @@
+/**
+ * ALPHA BILLING - Design System Tokens
+ * Premium Modern Enterprise SaaS Design Tokens
+ */
+:root {
+  /* Brand Palette */
+  --alpha-brand-primary: #2563eb;       /* Royal Blue */
+  --alpha-brand-primary-hover: #1d4ed8;
+  --alpha-brand-primary-light: #eff6ff;
+  --alpha-brand-primary-border: #bfdbfe;
+  --alpha-brand-dark: #0f172a;          /* Slate 900 */
+  --alpha-brand-navy: #1e3a8a;          /* Navy 900 */
+  --alpha-brand-accent: #3b82f6;
+
+  /* Neutral Surface Palette */
+  --alpha-bg-app: #f8fafc;              /* Slate 50 */
+  --alpha-bg-surface: #ffffff;          /* Pure White */
+  --alpha-bg-surface-subtle: #f1f5f9;   /* Slate 100 */
+  --alpha-bg-surface-hover: #f8fafc;
+  --alpha-bg-sidebar: #ffffff;
+  --alpha-bg-header: #ffffff;
+
+  /* Typography Colors */
+  --alpha-text-primary: #0f172a;        /* Deep Charcoal / Slate 900 */
+  --alpha-text-secondary: #334155;      /* Slate 700 */
+  --alpha-text-muted: #64748b;          /* Slate 500 */
+  --alpha-text-faint: #94a3b8;          /* Slate 400 */
+  --alpha-text-inverted: #ffffff;
+
+  /* Borders & Dividers */
+  --alpha-border-subtle: #f1f5f9;       /* Slate 100 */
+  --alpha-border-default: #e2e8f0;      /* Slate 200 */
+  --alpha-border-hover: #cbd5e1;        /* Slate 300 */
+  --alpha-border-focus: #3b82f6;
+
+  /* Semantic Status Colors */
+  --alpha-success: #10b981;             /* Emerald 500 */
+  --alpha-success-bg: #ecfdf5;
+  --alpha-success-border: #a7f3d0;
+  --alpha-success-text: #065f46;
+
+  --alpha-warning: #f59e0b;             /* Amber 500 */
+  --alpha-warning-bg: #fffbeb;
+  --alpha-warning-border: #fde68a;
+  --alpha-warning-text: #92400e;
+
+  --alpha-danger: #ef4444;              /* Rose 500 */
+  --alpha-danger-bg: #fef2f2;
+  --alpha-danger-border: #fecaca;
+  --alpha-danger-text: #991b1b;
+
+  --alpha-info: #0284c7;                /* Sky 600 */
+  --alpha-info-bg: #f0f9ff;
+  --alpha-info-border: #bae6fd;
+  --alpha-info-text: #075985;
+
+  /* Elevation Shadows (Crisp & Subtle) */
+  --alpha-shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --alpha-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --alpha-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --alpha-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --alpha-shadow-dropdown: 0 12px 28px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(15, 23, 42, 0.06);
+
+  /* Dimensions & Spacing */
+  --alpha-sidebar-width: 260px;
+  --alpha-sidebar-collapsed-width: 68px;
+  --alpha-header-height: 64px;
+  --alpha-radius-sm: 6px;
+  --alpha-radius-md: 8px;
+  --alpha-radius-lg: 12px;
+  --alpha-radius-xl: 16px;
+  --alpha-radius-full: 9999px;
+
+  /* Transitions */
+  --alpha-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --alpha-transition-normal: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  --alpha-transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Compatibility Tokens with Existing Test Suites */
+  --bg-desktop: #f8fafc;
+  --brand-navy: #1e3a8a;
+  --brand-primary: #1e40af;
+  --brand-accent: #2563eb;
+  --status-success-bg: #ecfdf5;
+  --status-warning-bg: #fffbeb;
+  --status-danger-bg: #fef2f2;
+}
+

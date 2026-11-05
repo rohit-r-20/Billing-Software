@@ -439,11 +439,11 @@ window.addEventListener("resize", () => {
   }
 });
 
-quickZoomIn.addEventListener("click", () => applyZoom(uiZoom + 0.05));
-quickZoomOut.addEventListener("click", () => applyZoom(uiZoom - 0.05));
-menuZoomIn.addEventListener("click", () => applyZoom(uiZoom + 0.05));
-menuZoomOut.addEventListener("click", () => applyZoom(uiZoom - 0.05));
-menuZoomReset.addEventListener("click", () => applyZoom(1.0));
+if (quickZoomIn) quickZoomIn.addEventListener("click", () => applyZoom(uiZoom + 0.05));
+if (quickZoomOut) quickZoomOut.addEventListener("click", () => applyZoom(uiZoom - 0.05));
+if (menuZoomIn) menuZoomIn.addEventListener("click", () => applyZoom(uiZoom + 0.05));
+if (menuZoomOut) menuZoomOut.addEventListener("click", () => applyZoom(uiZoom - 0.05));
+if (menuZoomReset) menuZoomReset.addEventListener("click", () => applyZoom(1.0));
 
 // =============================================================
 // SCREEN VIEW ROUTER
@@ -475,6 +475,31 @@ function showScreen(screenId) {
     }
   });
 
+  // Update Header Title & Breadcrumbs
+  const titleEl = document.getElementById("header-page-title");
+  const breadcrumbEl = document.getElementById("dashboard-breadcrumb");
+  const viewMeta = {
+    "view-dashboard": { title: "Business Dashboard", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Dashboard</strong>" },
+    "view-fast-billing": { title: "Fast Billing (Retail POS)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Fast Billing (POS)</strong>" },
+    "view-sales-voucher": { title: "Sales Tax Invoice", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Sales Tax Invoice</strong>" },
+    "view-sales-list": { title: "Sales Invoices Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Sales Register</strong>" },
+    "view-purchase-entry": { title: "Purchase Entry (Inward)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Purchase Entry</strong>" },
+    "view-purchase-list": { title: "Purchase Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Purchase Register</strong>" },
+    "view-add-item-master": { title: "Item & Product Master", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Add Product</strong>" },
+    "view-items-list": { title: "Products Catalogue", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Products List</strong>" },
+    "view-supplier-master": { title: "Supplier Master", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Supplier Master</strong>" },
+    "view-add-account-master": { title: "Account Master", bc: "Alpha Billing &rsaquo; Administration &rsaquo; <strong>Account Master</strong>" },
+    "view-stock-summary": { title: "Stock Valuation & WAC Summary", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Stock Valuation</strong>" },
+    "view-stock-adjustments": { title: "Stock Adjustments & Transfers", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Stock Operations</strong>" },
+    "view-day-book": { title: "Financial Day Book & Trial Balance", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Day Book & Trial Balance</strong>" },
+    "view-companies": { title: "List of Companies", bc: "Alpha Billing &rsaquo; Company &rsaquo; <strong>Switch Company</strong>" },
+    "view-login": { title: "Sign In", bc: "Alpha Billing &rsaquo; <strong>Authentication</strong>" }
+  };
+  if (viewMeta[screenId]) {
+    if (titleEl) titleEl.textContent = viewMeta[screenId].title;
+    if (breadcrumbEl) breadcrumbEl.innerHTML = viewMeta[screenId].bc;
+  }
+
   // Update Sidebar active navigation item
   const screenNavMap = {
     "view-dashboard": "btn-nav-overview",
@@ -492,7 +517,7 @@ function showScreen(screenId) {
     "view-day-book": "btn-nav-daybook"
   };
   const activeNavId = screenNavMap[screenId];
-  document.querySelectorAll(".dash-nav-item").forEach(item => {
+  document.querySelectorAll(".dash-nav-item, .nav-sub-btn").forEach(item => {
     item.classList.toggle("active", item.id === activeNavId);
   });
 
@@ -2106,9 +2131,9 @@ function renderLocalSalesRegister() {
   });
 }
 
-btnNewBillFromList.addEventListener("click", () => showScreen("view-sales-voucher"));
-btnCloseSalesList.addEventListener("click", () => showScreen("view-dashboard"));
-btnSalesListClose.addEventListener("click", () => showScreen("view-dashboard"));
+if (btnNewBillFromList) btnNewBillFromList.addEventListener("click", () => showScreen("view-sales-voucher"));
+if (btnCloseSalesList) btnCloseSalesList.addEventListener("click", () => showScreen("view-dashboard"));
+if (btnSalesListClose) btnSalesListClose.addEventListener("click", () => showScreen("view-dashboard"));
 
 // =============================================================
 // CONTROLLED ENHANCEMENT: LOW-STOCK ALERTS & CUSTOMER CATEGORIES
@@ -3542,26 +3567,26 @@ formConfiguration.addEventListener("submit", (e) => {
 btnCloseConfigModal.addEventListener("click", closeConfigurationModal);
 btnCancelConfig.addEventListener("click", closeConfigurationModal);
 
-// Dashboard Menu Events
-menuCloseCompany.addEventListener("click", closeCompany);
-menuEditCompany.addEventListener("click", () => {
+// Dashboard Menu Events (Legacy compatibility)
+if (menuCloseCompany) menuCloseCompany.addEventListener("click", closeCompany);
+if (menuEditCompany) menuEditCompany.addEventListener("click", () => {
   if (activeCompany) alert(`Editing details for ${activeCompany.name}`);
 });
-menuNewCompany.addEventListener("click", openCreateCompanyModal);
-menuAddAccountMaster.addEventListener("click", () => showScreen("view-add-account-master"));
+if (menuNewCompany) menuNewCompany.addEventListener("click", openCreateCompanyModal);
+if (menuAddAccountMaster) menuAddAccountMaster.addEventListener("click", () => showScreen("view-add-account-master"));
 if (menuAddItemMaster) menuAddItemMaster.addEventListener("click", () => {
   resetProductMasterForm();
   showScreen("view-add-item-master");
 });
 if (menuListItemMaster) menuListItemMaster.addEventListener("click", openProductsListView);
 if (menuModifyItemMaster) menuModifyItemMaster.addEventListener("click", openProductsListView);
-menuConfigFeatures.addEventListener("click", openConfigurationModal);
-menuConfigVoucherSeries.addEventListener("click", openConfigurationModal);
-menuSalesAdd.addEventListener("click", () => showScreen("view-sales-voucher"));
-menuSalesList.addEventListener("click", () => showScreen("view-sales-list"));
-menuDisplayBills.addEventListener("click", () => showScreen("view-sales-list"));
+if (menuConfigFeatures) menuConfigFeatures.addEventListener("click", openConfigurationModal);
+if (menuConfigVoucherSeries) menuConfigVoucherSeries.addEventListener("click", openConfigurationModal);
+if (menuSalesAdd) menuSalesAdd.addEventListener("click", () => showScreen("view-sales-voucher"));
+if (menuSalesList) menuSalesList.addEventListener("click", () => showScreen("view-sales-list"));
+if (menuDisplayBills) menuDisplayBills.addEventListener("click", () => showScreen("view-sales-list"));
 
-menuChangePassword.addEventListener("click", () => {
+if (menuChangePassword) menuChangePassword.addEventListener("click", () => {
   if (!activeCompany) return;
   const newPass = prompt(`Enter new password for ${activeCompany.name}:`, activeCompany.password || "");
   if (newPass !== null) {
@@ -7080,6 +7105,22 @@ function setupSidebarAndDashboardNav() {
 }
 
 // Startup
+window.showToast = window.showNotification = showNotification;
+if (window.BusinessContext) window.BusinessContext.init();
+if (window.SidebarNavigation) window.SidebarNavigation.init();
+if (window.HeaderManager) window.HeaderManager.init();
+if (window.DashboardManager) window.DashboardManager.init();
+if (window.GlobalSearchManager) window.GlobalSearchManager.init();
+
+if (!window.activeCompany) {
+  window.activeCompany = {
+    id: "COMP0001",
+    code: "COMP0001",
+    name: "ANTI MATRIX RETAIL & WHOLESALE",
+    fin_year: "2026-2027"
+  };
+}
+
 renderCompanyTable();
 populateLoginCompanies();
 updateSystemClock();
@@ -7088,8 +7129,114 @@ setupPosBarcodeAutocomplete();
 initPosTextSizeControls();
 initDailyDiscountControls();
 initPosTenderListeners();
+
+function setupCompanyAndPlaceholderModalListeners() {
+  // 1. Edit Company Modal
+  const modalEditComp = document.getElementById("modal-edit-company");
+  const btnCloseEditComp = document.getElementById("btn-close-edit-company-modal");
+  const btnCancelEditComp = document.getElementById("btn-cancel-edit-company");
+  const formEditComp = document.getElementById("form-edit-company");
+
+  function closeEditCompanyModal() {
+    if (modalEditComp) {
+      modalEditComp.classList.remove("show");
+      modalEditComp.style.display = "none";
+    }
+  }
+
+  if (btnCloseEditComp) btnCloseEditComp.addEventListener("click", closeEditCompanyModal);
+  if (btnCancelEditComp) btnCancelEditComp.addEventListener("click", closeEditCompanyModal);
+
+  if (formEditComp) {
+    formEditComp.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = document.getElementById("edit-comp-name").value.trim();
+      const code = document.getElementById("edit-comp-code").value.trim();
+      const finYear = document.getElementById("edit-comp-finyear").value.trim();
+      const gstin = document.getElementById("edit-comp-gstin").value.trim();
+      const state = document.getElementById("edit-comp-state").value.trim();
+      const address = document.getElementById("edit-comp-address").value.trim();
+
+      if (!name) {
+        if (typeof showNotification === "function") showNotification("Please enter a valid Company Name.", "warning");
+        return;
+      }
+
+      if (window.BusinessContext) {
+        window.BusinessContext.updateCompanyDetails(code, {
+          name,
+          finYear,
+          taxNo: gstin,
+          state,
+          address
+        });
+      }
+
+      closeEditCompanyModal();
+      if (typeof showNotification === "function") showNotification(`Company "${name}" updated successfully.`, "success");
+    });
+  }
+
+  // 2. Close Company Confirmation Modal
+  const modalCloseComp = document.getElementById("modal-close-company-confirm");
+  const btnCloseCompX = document.getElementById("btn-close-company-confirm-x");
+  const btnCancelCloseComp = document.getElementById("btn-cancel-close-company");
+  const btnConfirmCloseComp = document.getElementById("btn-confirm-close-company");
+
+  function closeCloseCompanyModal() {
+    if (modalCloseComp) {
+      modalCloseComp.classList.remove("show");
+      modalCloseComp.style.display = "none";
+    }
+  }
+
+  if (btnCloseCompX) btnCloseCompX.addEventListener("click", closeCloseCompanyModal);
+  if (btnCancelCloseComp) btnCancelCloseComp.addEventListener("click", closeCloseCompanyModal);
+
+  if (btnConfirmCloseComp) {
+    btnConfirmCloseComp.addEventListener("click", () => {
+      closeCloseCompanyModal();
+      if (window.BusinessContext) {
+        window.BusinessContext.closeActiveCompanySession();
+      }
+      if (typeof showScreen === "function") showScreen("view-companies");
+      if (typeof showNotification === "function") showNotification("Company workspace closed. Select a company to continue.", "info");
+    });
+  }
+
+  // 3. Feature Placeholder Modal
+  const modalPlaceholder = document.getElementById("modal-feature-placeholder");
+  const btnClosePlaceholder = document.getElementById("btn-close-placeholder-modal");
+  const btnOkPlaceholder = document.getElementById("btn-ok-placeholder-modal");
+
+  function closePlaceholderModal() {
+    if (modalPlaceholder) {
+      modalPlaceholder.classList.remove("show");
+      modalPlaceholder.style.display = "none";
+    }
+  }
+
+  if (btnClosePlaceholder) btnClosePlaceholder.addEventListener("click", closePlaceholderModal);
+  if (btnOkPlaceholder) {
+    btnOkPlaceholder.addEventListener("click", () => {
+      closePlaceholderModal();
+      if (typeof showScreen === "function") showScreen("view-dashboard");
+    });
+  }
+
+  // Escape key handler for these modals
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (modalEditComp && modalEditComp.classList.contains("show")) closeEditCompanyModal();
+      if (modalCloseComp && modalCloseComp.classList.contains("show")) closeCloseCompanyModal();
+      if (modalPlaceholder && modalPlaceholder.classList.contains("show")) closePlaceholderModal();
+    }
+  });
+}
+
 setupEnterpriseErpEventListeners();
+setupCompanyAndPlaceholderModalListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
 applyZoom(uiZoom);
-showScreen("view-login");
+showScreen("view-dashboard");

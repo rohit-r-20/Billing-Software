@@ -3,29 +3,148 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Alpha Billing Software</title>
+  <title>ALPHA BILLING - Enterprise Cloud Business ERP</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="desktop-container" id="app-root">
-    <!-- Top Minimal Application Bar -->
-    <header class="alpha-titlebar">
-      <div class="title-left">
-        <span class="app-logo-badge">&alpha;</span>
-        <span class="title-app-name">Alpha Billing Software</span>
-      </div>
-      <div class="header-center-tools">
-        <!-- Quick zoom buttons in header for convenience -->
-        <span class="zoom-indicator-text">Zoom: <strong id="quick-zoom-label">100%</strong></span>
-        <button type="button" class="btn-tool-zoom" id="quick-zoom-out" title="Zoom Out (-)">-</button>
-        <button type="button" class="btn-tool-zoom" id="quick-zoom-in" title="Zoom In (+)">+</button>
-      </div>
-    </header>
+  <div class="alpha-app-shell" id="app-root">
+    <!-- Backdrop for mobile drawer navigation -->
+    <div class="alpha-backdrop" id="alpha-backdrop"></div>
 
-    <!-- Main Dynamic Application Body -->
-    <main class="workspace-area" id="main-workspace">
+    <!-- A. LEFT SIDEBAR -->
+    <aside class="alpha-sidebar" id="alpha-sidebar">
+      <!-- Brand Identity Header -->
+      <div class="alpha-sidebar-brand">
+        <div class="brand-link" id="brand-home-link" onclick="if(window.showScreen) window.showScreen('view-dashboard');">
+          <div class="brand-logo-icon">&alpha;</div>
+          <div class="brand-meta">
+            <span class="brand-title">ALPHA BILLING</span>
+            <span class="brand-subtitle">Cloud Business ERP</span>
+          </div>
+        </div>
+        <button type="button" class="btn-sidebar-toggle" id="btn-sidebar-toggle" title="Collapse Sidebar (Ctrl+B)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
+        </button>
+      </div>
 
-      <!-- =========================================================
+      <!-- 8 Primary Navigation Sections (Injected by js/navigation.js) -->
+      <nav class="alpha-sidebar-nav" id="alpha-sidebar-nav" role="navigation" aria-label="Primary Navigation">
+      </nav>
+
+      <!-- User Profile Footer -->
+      <div class="alpha-sidebar-footer">
+        <div class="user-avatar-badge">
+          <span>AD</span>
+          <span class="user-status-dot"></span>
+        </div>
+        <div class="user-info">
+          <span class="user-name">Administrator</span>
+          <span class="user-role-badge">Super Admin</span>
+        </div>
+        <button type="button" class="btn-user-action" id="btn-sidebar-logout" title="Sign Out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- B. MAIN CONTENT WRAPPER -->
+    <div class="alpha-content-wrapper">
+      <!-- TOP HEADER -->
+      <header class="alpha-top-header">
+        <div class="header-left-group">
+          <button type="button" class="btn-mobile-menu-toggle" id="btn-mobile-menu-toggle" aria-label="Toggle Navigation">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          </button>
+          <div class="header-title-box">
+            <h1 class="header-page-title" id="header-page-title">Business Dashboard</h1>
+            <nav class="header-breadcrumb" id="dashboard-breadcrumb">
+              <span class="breadcrumb-crumb">Alpha Billing</span>
+              <span class="breadcrumb-sep">&rsaquo;</span>
+              <span class="breadcrumb-crumb">Display</span>
+              <span class="breadcrumb-sep">&rsaquo;</span>
+              <span class="breadcrumb-active">Dashboard</span>
+            </nav>
+          </div>
+        </div>
+
+        <!-- Center Context Selectors -->
+        <div class="header-center-selectors">
+          <!-- Company Selector Dropdown -->
+          <div style="position:relative;">
+            <button type="button" class="context-selector-pill" id="btn-header-company" title="Switch Company Context">
+              <span class="context-icon"></span>
+              <div class="context-label-box">
+                <span class="context-tag">Company</span>
+                <span class="context-value" id="header-company-val">ANTI MATRIX (COMP0001)</span>
+              </div>
+              <span class="context-chevron"></span>
+            </button>
+            <div class="alpha-dropdown-menu align-left" id="dropdown-header-company"></div>
+          </div>
+
+          <!-- Branch Selector Dropdown -->
+          <div style="position:relative;">
+            <button type="button" class="context-selector-pill" id="btn-header-branch" title="Switch Operational Branch">
+              <span class="context-icon"></span>
+              <div class="context-label-box">
+                <span class="context-tag">Branch</span>
+                <span class="context-value" id="header-branch-val">Main Branch (HQ)</span>
+              </div>
+              <span class="context-chevron"></span>
+            </button>
+            <div class="alpha-dropdown-menu align-left" id="dropdown-header-branch"></div>
+          </div>
+        </div>
+
+        <!-- Right Action Group -->
+        <div class="header-right-group">
+          <!-- Global Search Trigger -->
+          <button type="button" class="global-search-btn" id="btn-trigger-global-search">
+            <span class="search-icon-wrap"></span>
+            <span>Search anything...</span>
+            <kbd class="search-shortcut-hint">Ctrl K</kbd>
+          </button>
+
+          <!-- Display Zoom Controls -->
+          <div class="header-zoom-strip">
+            <button type="button" class="btn-header-zoom" id="btn-zoom-out" title="Zoom Out (-)">-</button>
+            <span class="header-zoom-label" id="header-zoom-label">100%</span>
+            <button type="button" class="btn-header-zoom" id="btn-zoom-in" title="Zoom In (+)">+</button>
+          </div>
+
+          <!-- Compatibility quick-zoom-label -->
+          <span style="display:none;" id="quick-zoom-label">100%</span>
+          <button type="button" style="display:none;" id="quick-zoom-out">-</button>
+          <button type="button" style="display:none;" id="quick-zoom-in">+</button>
+
+          <!-- Notifications Bell -->
+          <div style="position:relative;">
+            <button type="button" class="header-icon-btn" id="btn-header-notifications" title="System Notifications">
+              <span class="notif-icon-wrap"></span>
+              <span class="notification-count-badge" id="header-notif-badge">3</span>
+            </button>
+            <div class="alpha-dropdown-menu" id="dropdown-header-notifications" style="min-width:300px;"></div>
+          </div>
+
+          <!-- Settings Shortcut -->
+          <button type="button" class="header-icon-btn" id="btn-header-settings" title="Configuration & Features">
+          </button>
+
+          <!-- User Profile Trigger -->
+          <div style="position:relative;">
+            <button type="button" class="header-user-btn" id="btn-header-user">
+              <div class="header-user-avatar">AD</div>
+              <span class="header-user-name">Admin</span>
+              <span class="user-chevron"></span>
+            </button>
+            <div class="alpha-dropdown-menu" id="dropdown-header-user"></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- C. MAIN DASHBOARD VIEWPORT (Scrollable) -->
+      <main class="alpha-main-viewport workspace-area" id="main-workspace">
+<!-- =========================================================
            VIEW 0: STANDALONE LOGIN SCREEN (Screen 1 - Launch)
       ========================================================== -->
       <section class="screen-view active" id="view-login">
@@ -290,480 +409,401 @@
         </div>
       </section>
 
+      
       <!-- =========================================================
-           VIEW 2: ACTIVE COMPANY DASHBOARD (Main Accounting Desktop)
+           VIEW: ALPHA BILLING PREMIUM DASHBOARD
       ========================================================== -->
-      <section class="screen-view" id="view-dashboard">
-        <!-- Top Menu Bar with Cascading Tree Dropdowns -->
-        <nav class="erp-menubar" id="erp-menubar">
-          
-          <!-- Company Menu -->
-          <div class="menu-item-wrapper" data-menu="company">
-            <button class="menu-btn">Company</button>
-            <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-switch-mode"><span class="tree-label">Switch Billing Mode</span></div>
-              <div class="tree-divider"></div>
-              <div class="tree-item" id="menu-close-company"><span class="tree-label">Close Company</span></div>
-              <div class="tree-item" id="menu-edit-company"><span class="tree-label">Edit Company</span></div>
-              <div class="tree-divider"></div>
-              <div class="tree-item" id="menu-new-company"><span class="tree-label">Create New Company</span></div>
+      <section class="screen-view active" id="view-dashboard">
+        <!-- 1. Welcome & Business Context Section -->
+        <div class="dashboard-welcome-banner">
+          <div class="welcome-left-col">
+            <div class="welcome-greeting-row">
+              <h2 class="welcome-heading" id="welcome-greeting-heading">Good morning, Admin</h2>
+              <span class="business-data-mode-badge" id="business-data-mode-badge">
+                <span class="mode-pulse-dot"></span>
+                Sample Business Data (Active Context)
+              </span>
+            </div>
+            <div class="welcome-context-meta">
+              <span class="meta-pill">Company: <strong id="welcome-ctx-company">ANTI MATRIX RETAIL & WHOLESALE</strong></span>
+              <span class="meta-sep">&bull;</span>
+              <span class="meta-pill">Branch: <strong id="welcome-ctx-branch">Main Branch (HQ)</strong></span>
+              <span class="meta-sep">&bull;</span>
+              <span class="meta-pill">FY: <strong id="welcome-ctx-year">2026-2027</strong></span>
+              <span class="meta-sep">&bull;</span>
+              <span class="meta-pill">Currency: <strong>INR (₹)</strong></span>
             </div>
           </div>
-
-          <!-- Administration Menu (Tree Dropdown matching Screenshot 1 & 2) -->
-          <div class="menu-item-wrapper" data-menu="administration">
-            <button class="menu-btn">Administration</button>
-            <div class="dropdown-tree">
-              
-              <!-- Masters Flyout -->
-              <div class="tree-branch">
-                <div class="tree-branch-header"><span class="tree-label">Masters</span><span class="tree-arrow">&rsaquo;</span></div>
-                <div class="tree-submenu">
-                  <!-- Account Master -->
-                  <div class="tree-branch">
-                    <div class="tree-branch-header highlight"><span class="tree-label">Account</span><span class="tree-arrow">&rsaquo;</span></div>
-                    <div class="tree-submenu">
-                      <div class="tree-item" id="menu-add-account-master"><span class="tree-label">Add (Add Account Master)</span></div>
-                      <div class="tree-item" id="menu-modify-account-master"><span class="tree-label">Modify</span></div>
-                      <div class="tree-item" id="menu-list-account-master"><span class="tree-label">List</span></div>
-                    </div>
-                  </div>
-                  <!-- Supplier Master -->
-                  <div class="tree-branch">
-                    <div class="tree-branch-header highlight" style="font-weight: 700; color: #0f766e;"><span class="tree-label">Supplier Master</span><span class="tree-arrow">&rsaquo;</span></div>
-                    <div class="tree-submenu">
-                      <div class="tree-item highlight" id="menu-list-supplier-master" style="font-weight: 700; color: #0f766e;"><span class="tree-label">Suppliers &amp; Ledgers</span></div>
-                      <div class="tree-item" id="menu-add-supplier-master"><span class="tree-label">Add New Supplier</span></div>
-                    </div>
-                  </div>
-                  <div class="tree-item"><span class="tree-label">Account Group</span></div>
-                  <div class="tree-item"><span class="tree-label">Std. Narration</span></div>
-                  <div class="tree-divider"></div>
-                  <!-- Products & Items -->
-                  <div class="tree-branch">
-                    <div class="tree-branch-header highlight"><span class="tree-label">Products &amp; Items</span><span class="tree-arrow">&rsaquo;</span></div>
-                    <div class="tree-submenu">
-                      <div class="tree-item highlight" id="menu-list-item-master" style="font-weight: 700; color: #1e40af;"><span class="tree-label">Products List (Catalogue)</span></div>
-                      <div class="tree-item" id="menu-add-item-master"><span class="tree-label">Add New Product</span></div>
-                      <div class="tree-item" id="menu-modify-item-master"><span class="tree-label">Modify / Edit Product</span></div>
-                    </div>
-                  </div>
-                  <div class="tree-item"><span class="tree-label">Item Group</span></div>
-                  <div class="tree-item"><span class="tree-label">Material Centre</span></div>
-                  <div class="tree-item"><span class="tree-label">Unit</span></div>
-                  <div class="tree-item"><span class="tree-label">Bill Sundry</span></div>
-                  <div class="tree-item"><span class="tree-label">Sale Type</span></div>
-                  <div class="tree-item"><span class="tree-label">Tax Category</span></div>
-                </div>
-              </div>
-
-              <div class="tree-item"><span class="tree-label">Bulk Updation</span></div>
-
-              <!-- Configuration Flyout (matching Screenshot 2) -->
-              <div class="tree-branch">
-                <div class="tree-branch-header highlight"><span class="tree-label">Configuration</span><span class="tree-arrow">&rsaquo;</span></div>
-                <div class="tree-submenu">
-                  <div class="tree-item highlight" id="menu-config-features"><span class="tree-label">Features / Options</span></div>
-                  <div class="tree-item highlight" id="menu-config-voucher-series"><span class="tree-label">Voucher Series Configuration</span></div>
-                  <div class="tree-item"><span class="tree-label">Masters Configuration</span></div>
-                  <div class="tree-item"><span class="tree-label">Hardware Configuration</span></div>
-                  <div class="tree-item"><span class="tree-label">Backup Configuration</span></div>
-                  <div class="tree-divider"></div>
-                  <div class="tree-item"><span class="tree-label">Invoice / Document Printing</span></div>
-                  <div class="tree-item"><span class="tree-label">Accounting Voucher Printing</span></div>
-                  <div class="tree-item"><span class="tree-label">Columnar Reports</span></div>
-                  <div class="tree-item"><span class="tree-label">Warning Alarms</span></div>
-                  <div class="tree-item"><span class="tree-label">Maximum Entries in Voucher</span></div>
-                  <div class="tree-item"><span class="tree-label">List of Holidays</span></div>
-                </div>
-              </div>
-
-              <div class="tree-item" id="menu-change-password"><span class="tree-label">Users &amp; Passwords</span></div>
-              <div class="tree-item"><span class="tree-label">Mobile App</span></div>
-              <div class="tree-item"><span class="tree-label">Utilities</span></div>
-              <div class="tree-item highlight" id="menu-data-export-import"><span class="tree-label">Data Export Import (JSON)</span></div>
-              <div class="tree-item"><span class="tree-label">Miscellaneous Data Entry</span></div>
-              <div class="tree-item"><span class="tree-label">Change Financial Year</span></div>
+          <div class="welcome-right-col">
+            <div class="current-datetime-box">
+              <span class="current-date-text" id="welcome-current-date">Thursday, 5 November 2026</span>
+              <span class="current-time-text" id="welcome-current-time">11:45:00 AM</span>
+            </div>
+            <div class="welcome-actions-row">
+              <button type="button" class="btn-alpha btn-alpha-primary" id="btn-quick-new-sale" onclick="if(window.showScreen) window.showScreen('view-sales-voucher');">
+                + New Sale
+              </button>
+              <button type="button" class="btn-alpha btn-alpha-secondary" id="btn-quick-new-purc" onclick="if(window.showScreen) window.showScreen('view-purchase-entry');">
+                + Inward Purchase
+              </button>
+              <button type="button" class="btn-alpha btn-alpha-secondary" id="btn-quick-add-item" onclick="if(window.showScreen) window.showScreen('view-add-item-master');">
+                + Add Product
+              </button>
+              <button type="button" class="btn-alpha btn-alpha-subtle" id="btn-quick-daybook" onclick="if(window.showScreen) window.showScreen('view-day-book');">
+                Day Book
+              </button>
             </div>
           </div>
-
-          <!-- Transactions Menu (matching Screenshot 3) -->
-          <div class="menu-item-wrapper" data-menu="transactions">
-            <button class="menu-btn">Transactions</button>
-            <div class="dropdown-tree">
-              <!-- Sales -->
-              <div class="tree-branch">
-                <div class="tree-branch-header highlight"><span class="tree-label">Sales</span><span class="tree-arrow">&rsaquo;</span></div>
-                <div class="tree-submenu">
-                  <div class="tree-item highlight" id="menu-fast-billing" style="color: #2563eb; font-weight: 800;"><span class="tree-label">Fast Billing (POS)</span></div>
-                  <div class="tree-item highlight" id="menu-sales-add"><span class="tree-label">Add (Billing Screen)</span></div>
-                  <div class="tree-item" id="menu-sales-modify"><span class="tree-label">Modify</span></div>
-                  <div class="tree-item highlight" id="menu-sales-list"><span class="tree-label">List (View Bills)</span></div>
-                </div>
-              </div>
-
-              <!-- Purchase -->
-              <div class="tree-branch">
-                <div class="tree-branch-header highlight"><span class="tree-label">Purchase</span><span class="tree-arrow">&rsaquo;</span></div>
-                <div class="tree-submenu">
-                  <div class="tree-item" id="menu-purchase-add"><span class="tree-label">Add</span></div>
-                  <div class="tree-item" id="menu-purchase-modify"><span class="tree-label">Modify</span></div>
-                  <div class="tree-item" id="menu-purchase-list"><span class="tree-label">List</span></div>
-                </div>
-              </div>
-
-              <div class="tree-item highlight" id="menu-sales-return"><span class="tree-label">Sales Return (Cr. Note)</span></div>
-              <div class="tree-item highlight" id="menu-purchase-return"><span class="tree-label">Purchase Return (Dr. Note)</span></div>
-              <div class="tree-divider"></div>
-              <div class="tree-item"><span class="tree-label">Payment</span></div>
-              <div class="tree-item"><span class="tree-label">Receipt</span></div>
-              <div class="tree-item"><span class="tree-label">Journal</span></div>
-              <div class="tree-item"><span class="tree-label">Contra</span></div>
-              <div class="tree-item highlight" id="menu-stock-transfer"><span class="tree-label">Stock Transfer</span></div>
-              <div class="tree-item highlight" id="menu-stock-adjustment"><span class="tree-label">Stock Adjustment (Damage / Expiry)</span></div>
-              <div class="tree-item"><span class="tree-label">GST Misc. Utilities</span></div>
-            </div>
-          </div>
-
-          <!-- Display Menu (matching Screenshot 4) -->
-          <div class="menu-item-wrapper" data-menu="display">
-            <button class="menu-btn">Display</button>
-            <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-display-bills"><span class="tree-label">Final Results / Sales Register</span></div>
-              <div class="tree-item highlight" id="menu-display-purchase-register"><span class="tree-label">Purchase Register</span></div>
-              <div class="tree-item highlight" id="menu-display-trial-balance"><span class="tree-label">Trial Balance (Double-Entry)</span></div>
-              <div class="tree-item highlight" id="menu-display-daybook"><span class="tree-label">Day Book</span></div>
-              <div class="tree-item"><span class="tree-label">Account Summary</span></div>
-              <div class="tree-item"><span class="tree-label">Outstanding Analysis</span></div>
-              <div class="tree-divider"></div>
-              <div class="tree-item highlight" id="menu-display-stock" style="font-weight: 700; color: #15803d;"><span class="tree-label">Stock Status &amp; Valuation (WAC)</span></div>
-              <div class="tree-item"><span class="tree-label">Inventory Books</span></div>
-              <div class="tree-item highlight" id="menu-gst-reports"><span class="tree-label">GST Reports &amp; Daily Summary</span></div>
-              <div class="tree-item"><span class="tree-label">Sales Analysis</span></div>
-              <div class="tree-item"><span class="tree-label">Purchase Analysis</span></div>
-            </div>
-          </div>
-
-          <div class="menu-item-wrapper" data-menu="printing">
-            <button class="menu-btn">Printing</button>
-            <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-printer-settings"><span class="tree-label">Thermal &amp; Invoice Printer Settings</span></div>
-            </div>
-          </div>
-
-          <div class="menu-item-wrapper" data-menu="housekeeping">
-            <button class="menu-btn">House-Keeping</button>
-            <div class="dropdown-tree">
-              <div class="tree-item highlight" id="menu-backup-restore"><span class="tree-label">Backup &amp; Restore Database</span></div>
-            </div>
-          </div>
-          
-          <!-- Help Menu with Zoom / Font Size controls -->
-          <div class="menu-item-wrapper" data-menu="help">
-            <button class="menu-btn highlight">Help</button>
-            <div class="dropdown-tree">
-              <div class="tree-submenu-header">Size &amp; Zoom Controls</div>
-              <div class="tree-item zoom-action" id="menu-zoom-in">
-                <span class="tree-label"><strong>+</strong> Zoom In (Increase Size)</span>
-              </div>
-              <div class="tree-item zoom-action" id="menu-zoom-out">
-                <span class="tree-label"><strong>-</strong> Zoom Out (Decrease Size)</span>
-              </div>
-              <div class="tree-item zoom-action" id="menu-zoom-reset">
-                <span class="tree-label">&bull; Reset Size (100%)</span>
-              </div>
-              <div class="tree-divider"></div>
-              <div class="tree-item" id="menu-help-shortcuts"><span class="tree-label">Keyboard Shortcuts Guide</span></div>
-              <div class="tree-item" id="menu-help-about"><span class="tree-label">About Alpha Billing</span></div>
-            </div>
-          </div>
-
-          <div class="menu-item-wrapper"><button class="menu-btn">Favourites</button></div>
-          <div class="menu-item-wrapper"><button class="menu-btn">Add-On</button></div>
-          <div class="menu-item-wrapper" style="margin-left: auto; display: flex; align-items: center; padding-right: 6px; flex-shrink: 0;">
-            <button type="button" class="btn-low-stock-pill" id="bar-low-stock-alert" style="display: none; background: #fef2f2; border: 1px solid #f87171; color: #b91c1c; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; cursor: pointer; margin-right: 6px;" title="Low Stock Products Alert">
-              Low Stock: <span id="bar-low-stock-count">0</span> items
-            </button>
-            <button type="button" class="btn-switch-mode-pill" id="bar-switch-mode" title="Switch Billing Mode (Esc)">Switch Mode (Esc)</button>
-          </div>
-        </nav>
-
-        <!-- Main Dashboard Canvas -->
-        <!-- Main Operational Dashboard Shell -->
-        <div class="dash-shell">
-          <!-- Left Sidebar Navigation -->
-          <aside class="dash-sidebar" id="dash-sidebar">
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Overview</div>
-              <button type="button" class="dash-nav-item active" id="btn-nav-overview">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                <span>Dashboard</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Sales Operations</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-pos">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                <span>Fast Billing (POS)</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-sales-add">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                <span>New Sales Voucher</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-sales-list">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                <span>Sales Invoices List</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-sales-return">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-                <span>Sales Return (Cr. Note)</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Purchases & Payables</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-purchase-add">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span>Add Purchase Entry</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-purchase-list">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                <span>Purchase Register</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-purchase-return">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
-                <span>Purchase Return (Dr. Note)</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-suppliers">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <span>Supplier Accounts</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Inventory & Stock</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-stock">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                <span>Stock Status (WAC)</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-transfer">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                <span>Stock Transfer</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-adjustments">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                <span>Stock Adjustments</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-low-stock">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span>Low Stock Alerts</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Customers</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-customers">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <span>Account Master</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-customer-categories">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                <span>Customer Categories</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Products</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-add-product">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                <span>Add New Product</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-products">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                <span>Product Catalogue</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Reports & Accounts</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-daybook">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                <span>Day Book</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-trial-balance">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                <span>Trial Balance</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-gst">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                <span>GST Reports</span>
-              </button>
-            </div>
-
-            <div class="dash-nav-section">
-              <div class="dash-nav-header">Settings & Admin</div>
-              <button type="button" class="dash-nav-item" id="btn-nav-config">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-                <span>Configuration</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-switch-mode">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-                <span>Switch Billing Mode</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-backup">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                <span>Backup & Restore</span>
-              </button>
-              <button type="button" class="dash-nav-item" id="btn-nav-printer">
-                <svg class="dash-nav-icon" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                <span>Printer Settings</span>
-              </button>
-            </div>
-          </aside>
-
-          <!-- Main Operational Workspace -->
-          <main class="dash-main" id="dash-main">
-            <!-- Page Header Container -->
-            <div class="page-header-container">
-              <div>
-                <div class="page-breadcrumb">Alpha ERP &gt; Operational Overview</div>
-                <h1 class="page-title">Operational Overview</h1>
-                <p class="page-subtitle">Real-time retail metrics, active transactions, and quick enterprise actions</p>
-              </div>
-              <div class="page-action-bar">
-                <span class="status-badge success">Live Synchronized</span>
-                <span class="status-badge info" id="dash-active-fy">F.Y. 2026-27</span>
-                <button type="button" class="btn-classic" id="dash-btn-refresh-overview" title="Refresh Live Metrics">Refresh Metrics</button>
-              </div>
-            </div>
-
-            <!-- Metric Strip (4 cards) -->
-            <div class="metric-strip">
-              <div class="metric-card">
-                <div class="metric-header">
-                  <span class="metric-title">Today's Sales</span>
-                  <span class="status-badge success">Revenue</span>
-                </div>
-                <div class="metric-value" id="dash-today-sales">&#8377;0.00</div>
-                <div class="metric-subtitle" id="dash-sales-count">0 invoices generated today</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-header">
-                  <span class="metric-title">Today's Purchases</span>
-                  <span class="status-badge info">Inward</span>
-                </div>
-                <div class="metric-value" id="dash-today-purchases">&#8377;0.00</div>
-                <div class="metric-subtitle" id="dash-purchases-count">0 purchase bills posted</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-header">
-                  <span class="metric-title">Low Stock Alerts</span>
-                  <span class="status-badge warning" id="dash-low-stock-badge">Attention</span>
-                </div>
-                <div class="metric-value" id="dash-low-stock">0 items</div>
-                <div class="metric-subtitle" id="dash-low-stock-sub">All products above minimum threshold</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-header">
-                  <span class="metric-title">Held Bills / Cart</span>
-                  <span class="status-badge info">POS</span>
-                </div>
-                <div class="metric-value" id="dash-held-bills">0 bills</div>
-                <div class="metric-subtitle">Active transactions in POS register</div>
-              </div>
-            </div>
-
-            <!-- Primary Action Bar -->
-            <div class="dash-action-bar" style="margin-bottom: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn-classic primary-action-btn" id="dash-btn-pos" style="padding: 7px 16px; font-weight: 700;">Fast Billing (POS)</button>
-              <button type="button" class="btn-classic" id="dash-btn-sales-add" style="padding: 7px 14px; font-weight: 600;">+ New Sales Voucher</button>
-              <button type="button" class="btn-classic" id="dash-btn-purchase-add" style="padding: 7px 14px; font-weight: 600;">+ Inward Purchase</button>
-              <button type="button" class="btn-classic" id="dash-btn-product-add" style="padding: 7px 14px; font-weight: 600;">+ Add Product</button>
-              <button type="button" class="btn-classic" id="dash-btn-stock-view" style="padding: 7px 14px; font-weight: 600;">Stock Valuation</button>
-              <button type="button" class="btn-classic" id="dash-btn-daybook" style="padding: 7px 14px; font-weight: 600;">Day Book</button>
-            </div>
-
-            <!-- Dashboard Tables Grid (Recent Sales & Recent Purchases) -->
-            <div class="dashboard-tables-grid">
-              <!-- Recent Sales Invoices -->
-              <div class="dash-card">
-                <div class="dash-card-header">
-                  <div class="dash-card-title">Recent Sales Invoices</div>
-                  <button type="button" class="btn-classic" id="dash-btn-view-all-sales" style="font-size: 11px; padding: 2px 8px;">View All &rarr;</button>
-                </div>
-                <div class="dash-card-body" style="padding: 0; max-height: 250px; overflow-y: auto;">
-                  <table class="data-table" id="dash-recent-sales-table" style="margin: 0; width: 100%;">
-                    <thead>
-                      <tr>
-                        <th>Invoice #</th>
-                        <th>Date</th>
-                        <th>Customer</th>
-                        <th style="text-align: right;">Total (&#8377;)</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody id="dash-recent-sales-tbody">
-                      <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">No sales invoices posted yet today.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- Recent Inward Purchases -->
-              <div class="dash-card">
-                <div class="dash-card-header">
-                  <div class="dash-card-title">Recent Inward Purchases</div>
-                  <button type="button" class="btn-classic" id="dash-btn-view-all-purchases" style="font-size: 11px; padding: 2px 8px;">View All &rarr;</button>
-                </div>
-                <div class="dash-card-body" style="padding: 0; max-height: 250px; overflow-y: auto;">
-                  <table class="data-table" id="dash-recent-purchases-table" style="margin: 0; width: 100%;">
-                    <thead>
-                      <tr>
-                        <th>Bill #</th>
-                        <th>Date</th>
-                        <th>Supplier</th>
-                        <th style="text-align: right;">Total (&#8377;)</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody id="dash-recent-purchases-tbody">
-                      <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">No inward purchases recorded yet today.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <!-- Hidden compatibility elements for existing script references -->
-            <div class="company-watermark-center" id="dashboard-center-watermark" style="display: none;">
-              ANTI MATRIX (F.Y. 2026-27)
-            </div>
-            <div class="dashboard-breadcrumb" id="dashboard-breadcrumb" style="display: none;">
-              Transactions &rarr; Sales &rarr; Add (Vch 001)
-            </div>
-          </main>
         </div>
-        <!-- Bottom ERP Status Strip -->
-        <footer class="erp-statusbar" id="erp-statusbar">
-          <div class="status-left">
-            <span class="status-brand">Alpha</span>
-            <span class="status-company-name" id="status-comp-name">ANTI MATRIX (COMP0001)</span>
-          </div>
-          <div class="status-center">
-            <span class="status-pill">F.Y. : <strong id="status-fy">2026-27</strong></span>
-            <span class="status-pill">GSTIN : <strong id="status-gstin">33AAAPL1234F1Z1</strong></span>
-            <span class="status-pill">User : <strong id="status-user">A</strong></span>
-            <span class="status-pill">State : <strong id="status-state">Tamilnadu</strong></span>
-            <span class="status-pill">Listening Port : <strong>981</strong></span>
-          </div>
-          <div class="status-right">
-            <span id="dashboard-datetime">Tuesday 22-09-2026 17:00</span>
-          </div>
-        </footer>
-      </section>
 
-      <!-- =========================================================
+        <!-- 2. Business Overview - 6 KPI Metric Cards -->
+        <div class="kpi-grid">
+          <!-- Card 1: Today's Sales -->
+          <div class="kpi-card" id="kpi-card-sales">
+            <div class="kpi-header">
+              <span class="kpi-title">Today's Sales</span>
+              <div class="kpi-icon-wrap sales" id="kpi-icon-sales"></div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="dash-today-sales">₹ 48,250.00</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-delta positive" id="dash-sales-delta">&uarr; +14.8%</span>
+              <span class="kpi-subtext" id="dash-sales-count">34 Invoices</span>
+            </div>
+          </div>
+
+          <!-- Card 2: Today's Purchases -->
+          <div class="kpi-card" id="kpi-card-purchases">
+            <div class="kpi-header">
+              <span class="kpi-title">Today's Purchases</span>
+              <div class="kpi-icon-wrap purchases" id="kpi-icon-purchases"></div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="dash-today-purchases">₹ 24,180.00</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-delta negative" id="dash-purchases-delta">&darr; -4.2%</span>
+              <span class="kpi-subtext" id="dash-purchases-count">5 Bills</span>
+            </div>
+          </div>
+
+          <!-- Card 3: Total Stock Value -->
+          <div class="kpi-card" id="kpi-card-stock">
+            <div class="kpi-header">
+              <span class="kpi-title">Total Stock Value</span>
+              <div class="kpi-icon-wrap stock" id="kpi-icon-stock"></div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="dash-total-stock-value">₹ 4,82,600.00</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="status-pill status-pill-warning" style="font-size:10px;" id="dash-low-stock">3 items low</span>
+              <span class="kpi-subtext" id="dash-stock-count">142 Active SKUs</span>
+            </div>
+          </div>
+
+          <!-- Card 4: Outstanding Receivables -->
+          <div class="kpi-card" id="kpi-card-receivables">
+            <div class="kpi-header">
+              <span class="kpi-title">Outstanding Receivables</span>
+              <div class="kpi-icon-wrap receivables" id="kpi-icon-receivables"></div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="dash-receivables">₹ 62,400.00</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-delta positive">92% Collected</span>
+              <span class="kpi-subtext" id="dash-receivables-count">8 Overdue</span>
+            </div>
+          </div>
+
+          <!-- Card 5: Outstanding Payables -->
+          <div class="kpi-card" id="kpi-card-payables">
+            <div class="kpi-header">
+              <span class="kpi-title">Outstanding Payables</span>
+              <div class="kpi-icon-wrap payables" id="kpi-icon-payables"></div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="dash-payables">₹ 38,900.00</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="status-pill status-pill-neutral" style="font-size:10px;">Scheduled</span>
+              <span class="kpi-subtext" id="dash-payables-count">4 Suppliers Due</span>
+            </div>
+          </div>
+
+          <!-- Card 6: Today's Expenses -->
+          <div class="kpi-card" id="kpi-card-expenses">
+            <div class="kpi-header">
+              <span class="kpi-title">Today's Expenses</span>
+              <div class="kpi-icon-wrap expenses" id="kpi-icon-expenses"></div>
+            </div>
+            <div class="kpi-value-row">
+              <span class="kpi-value" id="dash-today-expenses">₹ 3,450.00</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-subtext" id="dash-held-bills">0 held bills</span>
+              <span class="kpi-subtext">Operating & Sundry</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Analytics Section (4 Charts Grid) -->
+        <div class="analytics-grid">
+          <!-- Chart 1 & 2: Sales & Purchase 7-Day Trend Chart -->
+          <div class="alpha-card chart-card">
+            <div class="card-header-clean">
+              <div class="card-title-group">
+                <h3 class="card-title">Sales & Procurement Trend</h3>
+                <p class="card-subtitle">Daily turnover vs procurement cost (7-Day Rolling)</p>
+              </div>
+              <div class="chart-filter-pills">
+                <button type="button" class="btn-chart-filter active">Last 7 Days</button>
+                <button type="button" class="btn-chart-filter" onclick="if(window.showToast) window.showToast('Monthly aggregation ready.');">Month</button>
+                <button type="button" class="btn-chart-filter" onclick="if(window.showToast) window.showToast('FY Quarterly aggregation ready.');">Quarter</button>
+              </div>
+            </div>
+            <div class="card-body-clean">
+              <div class="chart-canvas-wrapper" id="chart-sales-trend-container">
+                <!-- Dynamically drawn SVG chart -->
+              </div>
+              <div style="display:flex; justify-content:center; gap:24px; padding-top:8px; font-size:12px; color:var(--alpha-text-muted);">
+                <span style="display:flex; align-items:center; gap:6px;">
+                  <span style="width:12px; height:12px; background:#2563eb; border-radius:3px;"></span> Daily Sales (Turnover)
+                </span>
+                <span style="display:flex; align-items:center; gap:6px;">
+                  <span style="width:12px; height:12px; background:#93c5fd; border-radius:3px;"></span> Inward Purchases (Cost)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 3: Payment Summary Breakdown -->
+          <div class="alpha-card chart-card">
+            <div class="card-header-clean">
+              <div class="card-title-group">
+                <h3 class="card-title">Payment Settlement Breakdown</h3>
+                <p class="card-subtitle">Collection breakdown by settlement channel</p>
+              </div>
+              <button type="button" class="btn-alpha btn-alpha-subtle btn-alpha-sm" onclick="if(window.showScreen) window.showScreen('view-day-book');">
+                View Ledger
+              </button>
+            </div>
+            <div class="card-body-clean" id="chart-payment-summary-container">
+              <!-- Rendered by js/dashboard.js -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Revenue & Expense Comparison Chart -->
+        <div class="alpha-card">
+          <div class="card-header-clean">
+            <div class="card-title-group">
+              <h3 class="card-title">Revenue vs. Cost of Goods & Operating Expenses</h3>
+              <p class="card-subtitle">Monthly financial comparison demonstrating operational gross margins</p>
+            </div>
+            <span class="status-pill status-pill-success">Gross Margin: 32.4%</span>
+          </div>
+          <div class="card-body-clean">
+            <div class="chart-canvas-wrapper" id="chart-revenue-expense-container">
+              <!-- Dynamically drawn SVG chart -->
+            </div>
+            <div style="display:flex; justify-content:center; gap:24px; padding-top:8px; font-size:12px; color:var(--alpha-text-muted);">
+              <span style="display:flex; align-items:center; gap:6px;">
+                <span style="width:12px; height:12px; background:#10b981; border-radius:3px;"></span> Gross Invoiced Revenue
+              </span>
+              <span style="display:flex; align-items:center; gap:6px;">
+                <span style="width:12px; height:12px; background:#f59e0b; border-radius:3px;"></span> Procurement & Cost of Sales
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Recent Activities & Quick Actions Grid -->
+        <div class="activity-quick-grid">
+          <!-- Structured Recent Activities Tabs -->
+          <div class="alpha-card">
+            <div class="card-header-clean" style="padding-bottom: 0; border-bottom: none;">
+              <div class="card-title-group">
+                <h3 class="card-title">Recent Business Activities</h3>
+                <p class="card-subtitle">Real-time audit log of postings, invoices and inward vouchers</p>
+              </div>
+            </div>
+            
+            <!-- Tab Navigation -->
+            <div class="activity-tabs-header">
+              <button type="button" class="btn-activity-tab active" data-tab-target="invoices">Recent Invoices</button>
+              <button type="button" class="btn-activity-tab" data-tab-target="purchases">Inward Purchases</button>
+              <button type="button" class="btn-activity-tab" data-tab-target="payments">Collections & Payments</button>
+              <button type="button" class="btn-activity-tab" data-tab-target="adjustments">Stock Adjustments</button>
+            </div>
+
+            <!-- Tab Panes -->
+            <div style="padding: 16px;">
+              <!-- Tab 1: Invoices -->
+              <div class="activity-tab-pane active" id="tab-pane-invoices">
+                <div class="alpha-table-container">
+                  <table class="alpha-table">
+                    <thead>
+                      <tr>
+                        <th>Voucher #</th>
+                        <th>Customer / Party</th>
+                        <th>Amount (₹)</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-recent-sales-tbody"></tbody>
+                  </table>
+                </div>
+                <div style="margin-top: 12px; text-align: right;">
+                  <button type="button" class="btn-alpha btn-alpha-subtle btn-alpha-sm" id="dash-btn-view-all-sales" onclick="if(window.showScreen) window.showScreen('view-sales-list');">
+                    View All Invoices &rarr;
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tab 2: Purchases -->
+              <div class="activity-tab-pane" id="tab-pane-purchases">
+                <div class="alpha-table-container">
+                  <table class="alpha-table">
+                    <thead>
+                      <tr>
+                        <th>PO / Purc #</th>
+                        <th>Supplier Head</th>
+                        <th>Total Amount</th>
+                        <th>GST Amount</th>
+                        <th>Status</th>
+                        <th>Received</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-recent-purchases-tbody"></tbody>
+                  </table>
+                </div>
+                <div style="margin-top: 12px; text-align: right;">
+                  <button type="button" class="btn-alpha btn-alpha-subtle btn-alpha-sm" id="dash-btn-view-all-purchases" onclick="if(window.showScreen) window.showScreen('view-purchase-list');">
+                    View Purchase Register &rarr;
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tab 3: Payments -->
+              <div class="activity-tab-pane" id="tab-pane-payments">
+                <div class="alpha-table-container">
+                  <table class="alpha-table">
+                    <thead>
+                      <tr>
+                        <th>Voucher</th>
+                        <th>Account Head / Party</th>
+                        <th>Amount</th>
+                        <th>Mode</th>
+                        <th>Type</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-recent-payments-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Tab 4: Stock Adjustments -->
+              <div class="activity-tab-pane" id="tab-pane-adjustments">
+                <div class="alpha-table-container">
+                  <table class="alpha-table">
+                    <thead>
+                      <tr>
+                        <th>Item SKU</th>
+                        <th>Type</th>
+                        <th>Quantity</th>
+                        <th>Reason / Particulars</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-recent-stock-adjustments-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions Panel -->
+          <div class="alpha-card">
+            <div class="card-header-clean">
+              <div class="card-title-group">
+                <h3 class="card-title">Quick Operations</h3>
+                <p class="card-subtitle">Common enterprise workflows</p>
+              </div>
+              <button type="button" class="btn-alpha btn-alpha-subtle btn-alpha-sm" id="dash-btn-refresh-overview" title="Refresh Dashboard KPIs">
+                Refresh
+              </button>
+            </div>
+            <div class="card-body-clean">
+              <div class="quick-actions-panel" id="dashboard-quick-actions-panel">
+                <button type="button" class="quick-action-tile" id="dash-btn-pos" onclick="if(window.showScreen) window.showScreen('view-fast-billing');">
+                  <div class="tile-icon-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                  </div>
+                  <div>
+                    <div class="tile-label">Fast Billing (POS)</div>
+                    <div class="tile-desc">Quick barcode retail counter</div>
+                  </div>
+                </button>
+                <button type="button" class="quick-action-tile" id="dash-btn-sales-add" onclick="if(window.showScreen) window.showScreen('view-sales-voucher');">
+                  <div class="tile-icon-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                  </div>
+                  <div>
+                    <div class="tile-label">New Sales Invoice</div>
+                    <div class="tile-desc">Detailed tax invoice entry</div>
+                  </div>
+                </button>
+                <button type="button" class="quick-action-tile" id="dash-btn-purchase-add" onclick="if(window.showScreen) window.showScreen('view-purchase-entry');">
+                  <div class="tile-icon-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                  </div>
+                  <div>
+                    <div class="tile-label">Inward Purchase Entry</div>
+                    <div class="tile-desc">Record vendor supplier bill</div>
+                  </div>
+                </button>
+                <button type="button" class="quick-action-tile" id="dash-btn-product-add" onclick="if(window.showScreen) window.showScreen('view-add-item-master');">
+                  <div class="tile-icon-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+                  </div>
+                  <div>
+                    <div class="tile-label">Add Product SKU</div>
+                    <div class="tile-desc">Create new inventory item</div>
+                  </div>
+                </button>
+                <button type="button" class="quick-action-tile" id="dash-btn-stock-view" onclick="if(window.showScreen) window.showScreen('view-stock-summary');">
+                  <div class="tile-icon-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                  </div>
+                  <div>
+                    <div class="tile-label">Stock Valuation</div>
+                    <div class="tile-desc">Real-time WAC status</div>
+                  </div>
+                </button>
+                <button type="button" class="quick-action-tile" id="dash-btn-daybook" onclick="if(window.showScreen) window.showScreen('view-day-book');">
+                  <div class="tile-icon-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                  </div>
+                  <div>
+                    <div class="tile-label">Financial Day Book</div>
+                    <div class="tile-desc">Audit daily transactions</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compatibility Watermark container for tests -->
+        <div id="dashboard-center-watermark" style="display:none;"></div>
+      </section>
+<!-- =========================================================
            VIEW 3: ADD ACCOUNT MASTER (Image 5)
       ========================================================== -->
       <section class="screen-view erp-form-screen" id="view-add-account-master">
@@ -2446,6 +2486,99 @@
     </div>
 
     <!-- =========================================================
+         POPUP MODAL: EDIT COMPANY PROFILE
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-edit-company" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box">
+        <div class="create-comp-header">
+          <h2>Edit Company Profile</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-edit-company-modal">&times;</button>
+        </div>
+        <form class="create-comp-form" id="form-edit-company" onsubmit="return false;">
+          <div class="comp-field-row">
+            <label for="edit-comp-name">Company Name *</label>
+            <input type="text" id="edit-comp-name" required placeholder="Company Name" />
+          </div>
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="edit-comp-code">Code (Permanent ID)</label>
+              <input type="text" id="edit-comp-code" readonly style="background: var(--alpha-bg-surface-subtle, #f8fafc); cursor: not-allowed;" />
+            </div>
+            <div class="split-item">
+              <label for="edit-comp-finyear">Financial Year</label>
+              <input type="text" id="edit-comp-finyear" placeholder="e.g. 2026-2027" />
+            </div>
+          </div>
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="edit-comp-gstin">GSTIN / Tax ID</label>
+              <input type="text" id="edit-comp-gstin" placeholder="33AAAAA0000A1Z5" class="input-uppercase" />
+            </div>
+            <div class="split-item">
+              <label for="edit-comp-state">State / Province</label>
+              <input type="text" id="edit-comp-state" placeholder="Tamilnadu" />
+            </div>
+          </div>
+          <div class="comp-field-row">
+            <label for="edit-comp-address">Registered Business Address</label>
+            <input type="text" id="edit-comp-address" placeholder="Address, City, Pincode" />
+          </div>
+
+          <div class="comp-btn-row">
+            <button type="submit" class="btn-action primary-btn" id="btn-save-edit-company">Update Company</button>
+            <button type="button" class="btn-action" id="btn-cancel-edit-company">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: CLOSE COMPANY CONFIRMATION
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-close-company-confirm" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="max-width: 440px;">
+        <div class="create-comp-header">
+          <h2>Close Company Workspace</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-company-confirm-x">&times;</button>
+        </div>
+        <div style="padding: 20px 24px; font-size: 14px; color: var(--alpha-text-secondary, #475569); line-height: 1.5;">
+          <p style="margin-bottom: 12px;">Are you sure you want to close the active workspace for <strong id="close-company-name-display" style="color: var(--alpha-text, #0f172a);">ANTI MATRIX</strong>?</p>
+          <p style="font-size: 12px; color: var(--alpha-text-muted, #64748b);">All business transactions, stock valuation, and accounting entries remain safe. You will be returned to the company selection screen.</p>
+        </div>
+        <div class="comp-btn-row" style="padding: 16px 24px; background: var(--alpha-bg-surface-subtle, #f8fafc); border-top: 1px solid var(--alpha-border-default, #e2e8f0); display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn-action" id="btn-cancel-close-company">Cancel</button>
+          <button type="button" class="btn-action" id="btn-confirm-close-company" style="background: var(--alpha-danger, #ef4444); color: #fff; border-color: var(--alpha-danger, #ef4444);">Close Company</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: MODULAR FEATURE PLACEHOLDER
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-feature-placeholder" role="dialog" aria-modal="true">
+      <div class="create-comp-dialog-box" style="max-width: 480px;">
+        <div class="create-comp-header">
+          <h2 id="placeholder-modal-title">Feature Title</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-placeholder-modal">&times;</button>
+        </div>
+        <div style="padding: 28px 24px; text-align: center;">
+          <div id="placeholder-modal-icon" style="display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 12px; background: var(--alpha-brand-primary-light, #eff6ff); color: var(--alpha-brand-primary, #2563eb); margin-bottom: 16px;">
+          </div>
+          <h3 id="placeholder-modal-heading" style="font-size: 17px; font-weight: 700; color: var(--alpha-text, #0f172a); margin-bottom: 8px;">Planned Module</h3>
+          <p id="placeholder-modal-desc" style="font-size: 13.5px; color: var(--alpha-text-muted, #64748b); line-height: 1.5; margin-bottom: 20px;">
+            This module is part of the Alpha Billing enterprise roadmap. The navigation architecture and routing endpoints have been established.
+          </p>
+          <div style="display: inline-block; padding: 4px 12px; background: var(--alpha-bg-surface-subtle, #f1f5f9); border: 1px solid var(--alpha-border-default, #e2e8f0); border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--alpha-text-secondary, #475569);">
+            Status: Ready for Implementation
+          </div>
+        </div>
+        <div class="comp-btn-row" style="padding: 14px 24px; background: var(--alpha-bg-surface-subtle, #f8fafc); border-top: 1px solid var(--alpha-border-default, #e2e8f0); display: flex; justify-content: flex-end;">
+          <button type="button" class="btn-action primary-btn" id="btn-ok-placeholder-modal">Back to Dashboard</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
          POPUP MODAL: POS CASH CHECKOUT (Amount Tendered / Change)
     ========================================================== -->
     <div class="modal-overlay" id="modal-pos-cash" role="dialog" aria-modal="true">
@@ -3338,13 +3471,38 @@
         </div>
       </div>
     </div>
-
+    </main>
   </div>
+</div>
 
-  <div id="app-toast" class="app-toast"></div>
+<!-- Modal: Global Quick Search (Ctrl+K) -->
+<div class="modal-overlay" id="modal-global-search">
+  <div class="search-modal-box">
+    <div class="search-input-header">
+      <span class="search-input-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </span>
+      <input type="text" id="input-global-search" class="search-main-input" placeholder="Search invoices, products, reports, accounts or actions... (Esc to close)" autocomplete="off" />
+      <button type="button" class="btn-close-search" id="btn-close-global-search">ESC</button>
+    </div>
+    <div class="search-results-list" id="global-search-results">
+      <!-- Rendered by js/global_search.js -->
+    </div>
+  </div>
+</div>
 
-  <script src="qwebchannel.js"></script>
-  <script src="desktop/static/qrcode.js"></script>
-  <script src="app.js"></script>
+<div id="app-toast" class="app-toast"></div>
+
+<!-- Scripts -->
+<script src="qwebchannel.js"></script>
+<script src="desktop/static/qrcode.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/business_context.js"></script>
+<script src="js/navigation.js"></script>
+<script src="js/header.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/global_search.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
+
