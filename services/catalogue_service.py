@@ -13,19 +13,22 @@ class CatalogueService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company."""
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company if empty."""
         cid = str(company_id or "").strip()
+        if not cid:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
+                c_default = cursor.fetchone()
+                return c_default["id"] if c_default else ""
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            if cid:
-                cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-                c_row = cursor.fetchone()
-                if c_row:
-                    return c_row["id"]
-            # Fallback to default/first company
-            cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-            c_default = cursor.fetchone()
-            return c_default["id"] if c_default else cid
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+            c_row = cursor.fetchone()
+            if c_row:
+                return c_row["id"]
+            return cid
 
     def _compute_is_verified(self, res: Dict[str, Any]) -> int:
         """Determines if product is verified and safe for checkout."""
@@ -84,6 +87,118 @@ class CatalogueService:
                 return res2
 
         return None
+
+    def get_cashier_item_by_barcode(self, company_id: str, barcode: str) -> Optional[Dict[str, Any]]:
+        """
+        Fast lookup by barcode for Fast Billing Cashier counter with strictly restricted fields.
+        Does NOT expose stock balances, valuation, purchase cost, or inventory metrics.
+        """
+        code_str = str(barcode).strip().upper()
+        if not code_str:
+            return None
+
+        actual_company_id = self._resolve_company_id(company_id)
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. Match from item_barcodes table
+            cursor.execute("""
+                SELECT i.id, i.name, i.alias, i.unit, i.tax_category, i.sales_price, i.mrp,
+                       b.barcode as matched_barcode, i.description
+                FROM item_barcodes b
+                JOIN items i ON i.id = b.item_id
+                WHERE b.company_id = ? AND UPPER(b.barcode) = ? AND i.is_active = 1
+                LIMIT 1;
+            """, (actual_company_id, code_str))
+            row = cursor.fetchone()
+
+            if not row:
+                # 2. Fallback: match from items table (alias or name)
+                cursor.execute("""
+                    SELECT i.id, i.name, i.alias, i.unit, i.tax_category, i.sales_price, i.mrp,
+                           i.alias as matched_barcode, i.description
+                    FROM items i
+                    WHERE i.company_id = ? AND (UPPER(i.alias) = ? OR UPPER(i.name) = ?) AND i.is_active = 1
+                    LIMIT 1;
+                """, (actual_company_id, code_str, code_str))
+                row = cursor.fetchone()
+
+            if row:
+                res = dict(row)
+                tax_rate = 18.0
+                tax_cat = res.get("tax_category") or ""
+                if "28%" in tax_cat: tax_rate = 28.0
+                elif "12%" in tax_cat: tax_rate = 12.0
+                elif "5%" in tax_cat: tax_rate = 5.0
+                elif "0%" in tax_cat: tax_rate = 0.0
+
+                return {
+                    "id": res["id"],
+                    "name": res["name"],
+                    "barcode": res.get("matched_barcode") or res.get("alias") or code_str,
+                    "sales_price": float(res.get("sales_price") or 0.0),
+                    "mrp": float(res.get("mrp") or 0.0),
+                    "tax_rate": tax_rate,
+                    "tax_category": res.get("tax_category") or "GST 18%",
+                    "unit": res.get("unit") or "Pcs.",
+                    "discount_percent": 0.0,
+                    "is_verified": self._compute_is_verified(res)
+                }
+        return None
+
+    def search_cashier_items(self, company_id: str, query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Search items strictly for Fast Billing / Cashier counter.
+        Exposes ONLY billing attributes (name, barcode, sales_price, tax_rate, unit, discount).
+        Completely hides stock quantities, inventory valuation, cost rate, and supplier pricing.
+        """
+        actual_company_id = self._resolve_company_id(company_id)
+        q = f"%{query.strip().upper()}%"
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT i.id, i.name, i.alias, i.unit, i.tax_category, i.sales_price, i.mrp,
+                       i.description,
+                       COALESCE(i.alias, '') as barcode,
+                       (SELECT barcode FROM item_barcodes ib WHERE ib.item_id = i.id LIMIT 1) as matched_barcode
+                FROM items i
+                WHERE i.company_id = ? AND i.is_active = 1 AND (
+                    UPPER(i.name) LIKE ? OR 
+                    UPPER(i.alias) LIKE ? OR 
+                    UPPER(i.hsn) LIKE ? OR
+                    EXISTS (
+                        SELECT 1 FROM item_barcodes ib 
+                        WHERE ib.item_id = i.id AND UPPER(ib.barcode) LIKE ?
+                    )
+                )
+                ORDER BY i.name ASC
+                LIMIT ?;
+            """, (actual_company_id, q, q, q, q, limit))
+            rows = cursor.fetchall()
+
+        results = []
+        for r in rows:
+            it = dict(r)
+            tax_rate = 18.0
+            tax_cat = it.get("tax_category") or ""
+            if "28%" in tax_cat: tax_rate = 28.0
+            elif "12%" in tax_cat: tax_rate = 12.0
+            elif "5%" in tax_cat: tax_rate = 5.0
+            elif "0%" in tax_cat: tax_rate = 0.0
+
+            results.append({
+                "id": it["id"],
+                "name": it["name"],
+                "barcode": it.get("matched_barcode") or it.get("barcode") or it.get("alias") or "",
+                "sales_price": float(it.get("sales_price") or 0.0),
+                "mrp": float(it.get("mrp") or 0.0),
+                "tax_rate": tax_rate,
+                "tax_category": it.get("tax_category") or "GST 18%",
+                "unit": it.get("unit") or "Pcs.",
+                "discount_percent": 0.0,
+                "is_verified": self._compute_is_verified(it)
+            })
+        return results
 
     def search_items(self, company_id: str, query: str = "", limit: int = 100) -> List[Dict[str, Any]]:
         """Search items by name, alias, HSN, group, or barcode."""

@@ -142,6 +142,30 @@
         </div>
       </header>
 
+      <!-- DUAL BILLING MODE INTERNAL APPLICATION TABS BAR -->
+      <nav class="alpha-app-tabs-bar" id="app-tabs-bar" style="display: none;" aria-label="Internal Billing Workspaces">
+        <div class="alpha-tabs-list" id="alpha-tabs-list">
+          <button type="button" class="alpha-tab-btn active" id="tab-btn-traditional" data-tab="traditional" title="Switch to Traditional Billing Workspace">
+            <span class="tab-icon">🏢</span>
+            <span class="tab-title">Traditional Billing</span>
+            <span class="tab-badge" id="tab-trad-badge">Dashboard</span>
+            <span class="tab-close" id="btn-close-trad-tab" title="Close Tab">&times;</span>
+          </button>
+          <button type="button" class="alpha-tab-btn" id="tab-btn-fast-billing" data-tab="fast_billing" title="Switch to Fast Billing Cashier Workspace">
+            <span class="tab-icon">⚡</span>
+            <span class="tab-title">Fast Billing</span>
+            <span class="tab-badge" id="tab-fast-badge">Cashier POS</span>
+            <span class="tab-close" id="btn-close-fast-tab" title="Close Tab">&times;</span>
+          </button>
+        </div>
+        <div class="alpha-tabs-actions">
+          <span class="tab-mode-indicator" id="tab-mode-indicator">Mode: Traditional Billing</span>
+          <button type="button" class="btn-tab-switch-mode" id="btn-tab-switch-mode" title="Open Billing Mode Selection">
+            <span>+ Switch Mode</span>
+          </button>
+        </div>
+      </nav>
+
       <!-- C. MAIN DASHBOARD VIEWPORT (Scrollable) -->
       <main class="alpha-main-viewport workspace-area" id="main-workspace">
 <!-- =========================================================
@@ -1427,9 +1451,9 @@
             <span class="screen-badge-title">FAST BILLING (POS)</span>
             <span class="pos-company-badge" id="pos-header-company">ANTI MATRIX</span>
             <span class="pos-branch-badge" id="pos-header-branch">Branch: Main | Reg: 01</span>
-            <button type="button" class="btn-pos-erp-pill" id="btn-pos-quick-stock" title="View Stock Summary & Inventory Valuation">Stock Summary</button>
-            <button type="button" class="btn-pos-erp-pill" id="btn-pos-quick-purchase" title="Add Purchase Inward Voucher">Inward Purchase</button>
-            <button type="button" class="btn-pos-erp-pill warning" id="btn-pos-low-stock-pill" style="display: none;" title="Low-Stock Alerts">Low Stock (<span id="pos-low-stock-count">0</span>)</button>
+            <button type="button" class="btn-pos-cashier-tab active" id="btn-pos-tab-new-sale" title="New Bill (F4)">⚡ New Bill</button>
+            <button type="button" class="btn-pos-cashier-tab" id="btn-pos-tab-today-sales" title="Today's Sales History (F5)">📅 Today's Sales</button>
+            <button type="button" class="btn-pos-cashier-tab" id="btn-pos-tab-reprint" title="Print / Reprint Last Invoice (F7)">🖨️ Print / Reprint</button>
           </div>
           <div class="ribbon-center">
             <span class="pos-cashier-badge">Cashier: <strong id="pos-header-cashier">A</strong></span>
@@ -1621,6 +1645,7 @@
         <div class="pos-cashier-action-bar">
           <button type="button" class="btn-cashier-bar" id="btn-pos-bar-new-sale"><span class="bar-key">F4</span> New Sale</button>
           <button type="button" class="btn-cashier-bar" id="btn-pos-bar-search"><span class="bar-key">F1</span> Search Product</button>
+          <button type="button" class="btn-cashier-bar" id="btn-pos-bar-today-history"><span class="bar-key">F5</span> Today's Sales</button>
           <button type="button" class="btn-cashier-bar" id="btn-pos-bar-hold"><span class="bar-key">F2</span> Hold Sale</button>
           <button type="button" class="btn-cashier-bar" id="btn-pos-bar-resume"><span class="bar-key">F3</span> Resume Sale</button>
           <button type="button" class="btn-cashier-bar" id="btn-pos-bar-remove"><span class="bar-key">Del</span> Remove Item</button>
@@ -1636,11 +1661,200 @@
           <span>[ F2 - Hold Bill ]</span>
           <span>[ F3 - Resume Bill ]</span>
           <span>[ F4 - New Sale ]</span>
+          <span>[ F5 - Today's Sales History ]</span>
           <span>[ F7 - Reprint Receipt ]</span>
           <span>[ F9 - Cash Pay ]</span>
           <span>[ F10 - UPI Pay ]</span>
           <span>[ F12 - Complete & Print ]</span>
           <span>[ Esc - Switch Mode / Cancel ]</span>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW: FAST BILLING - TODAY'S SALES HISTORY
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-fast-billing-history">
+        <div class="form-screen-ribbon pos-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-pos-history-back" title="Back to POS New Bill (F4)">&larr; New Bill (F4)</button>
+            <span class="screen-badge-title">TODAY'S SALES HISTORY</span>
+            <span class="pos-company-badge" id="pos-history-company">ANTI MATRIX</span>
+            <span class="pos-branch-badge" id="pos-history-branch">Branch: Main</span>
+          </div>
+          <div class="ribbon-center">
+            <span class="pos-cashier-badge">Cashier: <strong id="pos-history-cashier">Admin</strong></span>
+            <span class="pos-date-badge" id="pos-history-date">Today's Invoices</span>
+          </div>
+          <div class="ribbon-right">
+            <button type="button" class="btn-pos-action" id="btn-pos-history-refresh" title="Refresh Today's Sales">Refresh (F5)</button>
+            <button class="ribbon-btn-close" id="btn-pos-history-close" title="Close History">&times;</button>
+          </div>
+        </div>
+
+        <div class="pos-history-workspace">
+          <!-- Today's Sales Summary KPI cards -->
+          <div class="pos-history-kpis">
+            <div class="pos-kpi-card">
+              <span class="pos-kpi-label">Today's Invoices</span>
+              <span class="pos-kpi-value" id="pos-history-count">0 Bills</span>
+            </div>
+            <div class="pos-kpi-card highlight">
+              <span class="pos-kpi-label">Today's Total Sales</span>
+              <span class="pos-kpi-value" id="pos-history-total-amt">₹ 0.00</span>
+            </div>
+            <div class="pos-kpi-card">
+              <span class="pos-kpi-label">Cash Collected</span>
+              <span class="pos-kpi-value" id="pos-history-cash-amt">₹ 0.00</span>
+            </div>
+            <div class="pos-kpi-card">
+              <span class="pos-kpi-label">Digital / UPI / Card</span>
+              <span class="pos-kpi-value" id="pos-history-digital-amt">₹ 0.00</span>
+            </div>
+          </div>
+
+          <!-- Search bar for today's sales -->
+          <div class="pos-history-toolbar">
+            <input type="text" id="pos-history-search" class="pos-history-search-input" placeholder="Search today's invoices by Bill No or Customer..." />
+            <div class="pos-history-info-badge">
+              🔒 Restricted to current business date. Historical dates are not accessible from cashier workspace.
+            </div>
+          </div>
+
+          <!-- Today's Invoices Table -->
+          <div class="pos-history-table-wrapper">
+            <table class="alpha-table pos-history-table">
+              <thead>
+                <tr>
+                  <th style="width: 120px;">Voucher No</th>
+                  <th style="width: 150px;">Date &amp; Time</th>
+                  <th>Customer</th>
+                  <th style="width: 100px; text-align: center;">Payment Method</th>
+                  <th style="width: 110px; text-align: right;">Total Amount</th>
+                  <th style="width: 90px; text-align: center;">Status</th>
+                  <th style="width: 130px; text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pos-history-tbody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Bottom shortcuts -->
+        <div class="form-bottom-shortcuts pos-shortcuts">
+          <span>[ F4 - Return to New Bill ]</span>
+          <span>[ F5 - Refresh History ]</span>
+          <span>[ Esc - Back to POS ]</span>
+          <span>[ Click Action - View &amp; Reprint ]</span>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           VIEW: FAST BILLING - AUTOMATIC PRINT & PREVIEW
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-fast-billing-print">
+        <div class="form-screen-ribbon pos-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-pos-print-back" title="Back to POS New Bill (F4)">&larr; New Bill (F4)</button>
+            <span class="screen-badge-title">INVOICE PRINT &amp; PREVIEW</span>
+            <span class="pos-company-badge" id="pos-print-company">ANTI MATRIX</span>
+            <span class="pos-vch-no-display">Bill No: <strong id="pos-print-vch-no">POS-001</strong></span>
+          </div>
+          <div class="ribbon-center">
+            <span class="pos-print-saved-badge">✅ Invoice Saved &amp; Committed</span>
+          </div>
+          <div class="ribbon-right">
+            <button type="button" class="btn-cashier-bar primary" id="btn-print-screen-new-bill">📄 Start New Bill (F4)</button>
+            <button class="ribbon-btn-close" id="btn-pos-print-close" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="pos-print-workspace">
+          <!-- Left Settings Panel -->
+          <div class="pos-print-settings-panel">
+            <h3 class="pos-print-settings-title">Print Settings</h3>
+
+            <!-- Paper Format Selection -->
+            <div class="print-setting-group">
+              <label class="print-setting-label">Paper Format</label>
+              <div class="paper-format-buttons" role="group" aria-label="Paper Format">
+                <button type="button" class="btn-paper-format" data-format="a4">A4 Full Page</button>
+                <button type="button" class="btn-paper-format" data-format="a5">A5 Half Sheet</button>
+                <button type="button" class="btn-paper-format active" data-format="thermal-80">Thermal 80mm</button>
+                <button type="button" class="btn-paper-format" data-format="thermal-58">Thermal 58mm</button>
+                <button type="button" class="btn-paper-format" data-format="custom">Custom</button>
+              </div>
+              <div id="custom-paper-dimensions" class="custom-paper-row" style="display: none; margin-top: 8px;">
+                <input type="number" id="custom-paper-width" placeholder="Width (mm)" value="80" style="width: 80px;" />
+                <span>&times;</span>
+                <input type="number" id="custom-paper-height" placeholder="Height (mm)" value="150" style="width: 80px;" />
+                <span>mm</span>
+              </div>
+            </div>
+
+            <!-- Installed Printer Selection -->
+            <div class="print-setting-group">
+              <label class="print-setting-label" for="pos-printer-select">Installed Printer</label>
+              <select id="pos-printer-select" class="select-box">
+                <option value="Default POS Thermal Printer (80mm)">Default POS Thermal Printer (80mm)</option>
+              </select>
+            </div>
+
+            <!-- Number of Copies -->
+            <div class="print-setting-group">
+              <label class="print-setting-label">Number of Copies</label>
+              <div class="copies-stepper">
+                <button type="button" class="btn-copy-step" id="btn-copy-dec">−</button>
+                <input type="number" id="pos-print-copies" class="input-copy-val" value="1" min="1" max="10" />
+                <button type="button" class="btn-copy-step" id="btn-copy-inc">+</button>
+                <span class="copies-hint">Single transaction; duplicates prevented</span>
+              </div>
+            </div>
+
+            <!-- Print Orientation -->
+            <div class="print-setting-group">
+              <label class="print-setting-label">Orientation</label>
+              <div class="orientation-buttons">
+                <button type="button" class="btn-orientation active" data-orientation="portrait">Portrait</button>
+                <button type="button" class="btn-orientation" data-orientation="landscape">Landscape</button>
+              </div>
+            </div>
+
+            <!-- Primary Print Trigger Buttons -->
+            <div class="print-actions-box">
+              <button type="button" class="btn-big-print" id="btn-trigger-print">
+                🖨️ Print Invoice (Ctrl+P)
+              </button>
+              <button type="button" class="btn-sub-action" id="btn-refresh-preview" style="width: 100%; margin-top: 6px;">
+                👁️ Refresh Preview
+              </button>
+              <button type="button" class="btn-sub-action" id="btn-download-pdf-print" style="width: 100%; margin-top: 6px;">
+                📥 Download PDF
+              </button>
+              <button type="button" class="btn-cashier-bar primary" id="btn-print-next-bill" style="width: 100%; margin-top: 12px; height: 38px;">
+                📄 Start New Bill (F4)
+              </button>
+            </div>
+
+            <div id="print-status-msg" class="print-status-box" style="display: none;"></div>
+          </div>
+
+          <!-- Right Live Invoice Preview Frame -->
+          <div class="pos-print-preview-panel">
+            <div class="preview-scroll-container">
+              <div id="pos-invoice-preview-sheet" class="pos-invoice-sheet sheet-thermal-80">
+                <!-- Dynamically rendered invoice preview -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom shortcuts -->
+        <div class="form-bottom-shortcuts pos-shortcuts">
+          <span>[ Enter / Ctrl+P - Print Invoice ]</span>
+          <span>[ F4 - Next New Bill ]</span>
+          <span>[ Esc - Return to POS ]</span>
         </div>
       </section>
 

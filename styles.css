@@ -4579,3 +4579,595 @@ html, body {
   opacity: 0;
   transition: opacity 0.2s ease;
 }
+
+/* =============================================================
+   DUAL BILLING MODE INTERNAL APPLICATION TABS BAR
+   ============================================================= */
+.alpha-app-tabs-bar {
+  height: 38px;
+  min-height: 38px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  user-select: none;
+  z-index: 100;
+}
+
+.alpha-tabs-list {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 100%;
+}
+
+.alpha-tab-btn {
+  height: 30px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.alpha-tab-btn:hover:not(.active) {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.alpha-tab-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.alpha-tab-btn .tab-icon {
+  font-size: 13px;
+}
+
+.alpha-tab-btn .tab-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.alpha-tab-btn.active .tab-badge {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.alpha-tab-btn .tab-close {
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.1s ease, background 0.1s ease;
+}
+
+.alpha-tab-btn .tab-close:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.alpha-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tab-mode-indicator {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.btn-tab-switch-mode {
+  height: 26px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s ease;
+}
+
+.btn-tab-switch-mode:hover {
+  background: #1d4ed8;
+}
+
+/* Fast Billing Cashier Tabs in Ribbon */
+.btn-pos-cashier-tab {
+  height: 26px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-pos-cashier-tab:hover:not(.active) {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-pos-cashier-tab.active {
+  background: #059669;
+  color: #ffffff;
+  border-color: #047857;
+}
+
+/* =============================================================
+   FAST BILLING: TODAY'S SALES HISTORY SCREEN
+   ============================================================= */
+.pos-history-workspace {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.pos-history-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.pos-kpi-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.pos-kpi-card.highlight {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.pos-kpi-card.highlight .pos-kpi-value {
+  color: #047857;
+}
+
+.pos-kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pos-kpi-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 4px;
+}
+
+.pos-history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pos-history-search-input {
+  flex: 1;
+  max-width: 440px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+.pos-history-search-input:focus {
+  border-color: #059669;
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
+}
+
+.pos-history-info-badge {
+  font-size: 11px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.pos-history-table-wrapper {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.pos-history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pos-history-table th {
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 2px solid #cbd5e1;
+}
+
+.pos-history-table td {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pos-history-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.btn-table-action.reprint-btn {
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-table-action.reprint-btn:hover {
+  background: #0369a1;
+}
+
+/* =============================================================
+   FAST BILLING: DEDICATED PRINT & PREVIEW SCREEN
+   ============================================================= */
+.pos-print-workspace {
+  display: flex;
+  height: calc(100vh - 84px);
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.pos-print-settings-panel {
+  width: 320px;
+  min-width: 300px;
+  background: #f8fafc;
+  border-right: 1px solid #cbd5e1;
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pos-print-settings-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.print-setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.print-setting-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+.paper-format-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.btn-paper-format {
+  height: 32px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-paper-format:hover:not(.active) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.btn-paper-format.active {
+  background: #059669;
+  color: #ffffff;
+  border-color: #047857;
+}
+
+.copies-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-copy-step {
+  width: 32px;
+  height: 32px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-copy-step:hover {
+  background: #e2e8f0;
+}
+
+.input-copy-val {
+  width: 50px;
+  height: 32px;
+  text-align: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.copies-hint {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.orientation-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-orientation {
+  flex: 1;
+  height: 30px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+}
+
+.btn-orientation.active {
+  background: #1e293b;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.print-actions-box {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.btn-big-print {
+  width: 100%;
+  height: 44px;
+  background: #059669;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+  transition: all 0.15s ease;
+}
+
+.btn-big-print:hover {
+  background: #047857;
+}
+
+.pos-print-preview-panel {
+  flex: 1;
+  background: #cbd5e1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.preview-scroll-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Invoice Sheet Layouts */
+.pos-invoice-sheet {
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+/* A4 Page Layout */
+.pos-invoice-sheet.sheet-a4 {
+  width: 720px;
+  min-height: 980px;
+  padding: 36px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+}
+
+/* A5 Half Page Layout */
+.pos-invoice-sheet.sheet-a5 {
+  width: 520px;
+  min-height: 700px;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+}
+
+/* Thermal 80mm Layout */
+.pos-invoice-sheet.sheet-thermal-80 {
+  width: 320px;
+  padding: 16px 14px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #000000;
+}
+
+/* Thermal 58mm Layout */
+.pos-invoice-sheet.sheet-thermal-58 {
+  width: 240px;
+  padding: 12px 10px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #000000;
+}
+
+/* Thermal Receipt Styling within preview */
+.thermal-receipt-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.thermal-receipt-view .t-center {
+  text-align: center;
+}
+
+.thermal-receipt-view .t-title {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.thermal-receipt-view .t-sub {
+  font-size: 11px;
+  color: #333333;
+}
+
+.thermal-receipt-view .t-divider {
+  border-top: 1px dashed #444444;
+  margin: 8px 0;
+}
+
+.thermal-receipt-view .t-double-divider {
+  border-top: 2px dashed #000000;
+  margin: 8px 0;
+}
+
+.thermal-receipt-view .t-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.thermal-receipt-view .t-bold {
+  font-weight: 700;
+}
+
+.thermal-receipt-view .t-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.thermal-receipt-view .t-table th {
+  text-align: left;
+  border-bottom: 1px dashed #444444;
+  padding: 4px 0;
+}
+
+.thermal-receipt-view .t-table td {
+  padding: 4px 0;
+}
+
+.thermal-receipt-view .t-grand-total {
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.pos-print-saved-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #065f46;
+  background: #d1fae5;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+

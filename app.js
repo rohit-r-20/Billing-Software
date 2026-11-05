@@ -25,6 +25,18 @@ let currentPendingCompany = null;
 let currentScreen = "view-companies"; // view-companies | view-dashboard | view-add-account-master | view-add-item-master | view-sales-voucher | view-sales-list
 let uiZoom = parseFloat(localStorage.getItem("alpha_ui_zoom") || "1.0");
 
+// Dual Billing Mode & Tabs State
+let activeBillingMode = "traditional"; // "traditional" | "fast_billing"
+let openTabs = new Set(["traditional"]);
+let lastTraditionalScreen = "view-dashboard";
+let lastFastBillingScreen = "view-fast-billing";
+let isSavingPosSale = false;
+let currentPrintVchId = null;
+let currentPrintVchData = null;
+let currentPrintPaperFormat = "thermal-80";
+let currentPrintOrientation = "portrait";
+let todaySalesHistoryData = [];
+
 // DOM Elements - App Root & Zoom
 const appRoot = document.getElementById("app-root");
 const quickZoomLabel = document.getElementById("quick-zoom-label");
@@ -52,6 +64,56 @@ const viewSupplierMaster = document.getElementById("view-supplier-master");
 const viewStockSummary = document.getElementById("view-stock-summary");
 const viewStockAdjustments = document.getElementById("view-stock-adjustments");
 const viewDayBook = document.getElementById("view-day-book");
+const viewFastBillingHistory = document.getElementById("view-fast-billing-history");
+const viewFastBillingPrint = document.getElementById("view-fast-billing-print");
+
+// Dual Billing Mode & Tabs DOM Elements
+const appTabsBar = document.getElementById("app-tabs-bar");
+const tabBtnTraditional = document.getElementById("tab-btn-traditional");
+const tabBtnFastBilling = document.getElementById("tab-btn-fast-billing");
+const tabTradBadge = document.getElementById("tab-trad-badge");
+const tabFastBadge = document.getElementById("tab-fast-badge");
+const btnCloseTradTab = document.getElementById("btn-close-trad-tab");
+const btnCloseFastTab = document.getElementById("btn-close-fast-tab");
+const btnTabSwitchMode = document.getElementById("btn-tab-switch-mode");
+const tabModeIndicator = document.getElementById("tab-mode-indicator");
+
+// Fast Billing Navigation Buttons
+const btnPosTabNewSale = document.getElementById("btn-pos-tab-new-sale");
+const btnPosTabTodaySales = document.getElementById("btn-pos-tab-today-sales");
+const btnPosTabReprint = document.getElementById("btn-pos-tab-reprint");
+const btnPosBarTodayHistory = document.getElementById("btn-pos-bar-today-history");
+
+// Fast Billing History Elements
+const posHistoryCompany = document.getElementById("pos-history-company");
+const posHistoryBranch = document.getElementById("pos-history-branch");
+const posHistoryCashier = document.getElementById("pos-history-cashier");
+const posHistoryCount = document.getElementById("pos-history-count");
+const posHistoryTotalAmt = document.getElementById("pos-history-total-amt");
+const posHistoryCashAmt = document.getElementById("pos-history-cash-amt");
+const posHistoryDigitalAmt = document.getElementById("pos-history-digital-amt");
+const posHistorySearch = document.getElementById("pos-history-search");
+const posHistoryTbody = document.getElementById("pos-history-tbody");
+const btnPosHistoryBack = document.getElementById("btn-pos-history-back");
+const btnPosHistoryRefresh = document.getElementById("btn-pos-history-refresh");
+const btnPosHistoryClose = document.getElementById("btn-pos-history-close");
+
+// Fast Billing Print Elements
+const posPrintCompany = document.getElementById("pos-print-company");
+const posPrintVchNo = document.getElementById("pos-print-vch-no");
+const posPrinterSelect = document.getElementById("pos-printer-select");
+const posPrintCopies = document.getElementById("pos-print-copies");
+const btnCopyDec = document.getElementById("btn-copy-dec");
+const btnCopyInc = document.getElementById("btn-copy-inc");
+const btnTriggerPrint = document.getElementById("btn-trigger-print");
+const btnRefreshPreview = document.getElementById("btn-refresh-preview");
+const btnDownloadPdfPrint = document.getElementById("btn-download-pdf-print");
+const btnPrintScreenNewBill = document.getElementById("btn-print-screen-new-bill");
+const btnPrintNextBill = document.getElementById("btn-print-next-bill");
+const btnPosPrintBack = document.getElementById("btn-pos-print-back");
+const btnPosPrintClose = document.getElementById("btn-pos-print-close");
+const printStatusMsg = document.getElementById("print-status-msg");
+const posInvoicePreviewSheet = document.getElementById("pos-invoice-preview-sheet");
 
 // DOM Elements - Screen 1: Standalone Login
 const loginCompanySelect = document.getElementById("login-company-select");
@@ -463,6 +525,8 @@ function showScreen(screenId) {
     viewSalesList,
     viewItemsList,
     viewFastBilling,
+    viewFastBillingHistory,
+    viewFastBillingPrint,
     viewPurchaseEntry,
     viewPurchaseList,
     viewSupplierMaster,
@@ -477,12 +541,51 @@ function showScreen(screenId) {
     }
   });
 
+  const fastBillingScreens = ["view-fast-billing", "view-fast-billing-history", "view-fast-billing-print"];
+  const isFastBilling = fastBillingScreens.includes(screenId);
+  const isStandalone = ["view-login", "view-companies", "view-mode-selection"].includes(screenId);
+
+  // Manage internal application tab bar visibility & mode state
+  if (appTabsBar) {
+    if (isStandalone) {
+      appTabsBar.style.display = "none";
+    } else {
+      appTabsBar.style.display = "flex";
+      updateAppTabsDisplay(isFastBilling ? "fast_billing" : "traditional");
+    }
+  }
+
+  // Manage Sidebar: Fast Billing cashier workspace hides sidebar for distraction-free 100% width
+  const alphaSidebar = document.getElementById("alpha-sidebar");
+  if (alphaSidebar) {
+    if (isStandalone || isFastBilling) {
+      alphaSidebar.style.display = "none";
+    } else {
+      alphaSidebar.style.display = "";
+    }
+  }
+
+  // Track separate navigation contexts
+  if (!isStandalone) {
+    if (isFastBilling) {
+      activeBillingMode = "fast_billing";
+      lastFastBillingScreen = screenId;
+      openTabs.add("fast_billing");
+    } else {
+      activeBillingMode = "traditional";
+      lastTraditionalScreen = screenId;
+      openTabs.add("traditional");
+    }
+  }
+
   // Update Header Title & Breadcrumbs
   const titleEl = document.getElementById("header-page-title");
   const breadcrumbEl = document.getElementById("dashboard-breadcrumb");
   const viewMeta = {
     "view-dashboard": { title: "Business Dashboard", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Dashboard</strong>" },
-    "view-fast-billing": { title: "Fast Billing (Retail POS)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Fast Billing (POS)</strong>" },
+    "view-fast-billing": { title: "Fast Billing (Retail POS)", bc: "Alpha Billing &rsaquo; Fast Billing &rsaquo; <strong>New Bill (POS)</strong>" },
+    "view-fast-billing-history": { title: "Today's Sales History", bc: "Alpha Billing &rsaquo; Fast Billing &rsaquo; <strong>Today's Sales History</strong>" },
+    "view-fast-billing-print": { title: "Invoice Print & Preview", bc: "Alpha Billing &rsaquo; Fast Billing &rsaquo; <strong>Print & Preview</strong>" },
     "view-sales-voucher": { title: "Sales Tax Invoice", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Sales Tax Invoice</strong>" },
     "view-sales-list": { title: "Sales Invoices Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Sales Register</strong>" },
     "view-purchase-entry": { title: "Purchase Entry (Inward)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Purchase Entry</strong>" },
@@ -564,6 +667,10 @@ function showScreen(screenId) {
     }, 50);
   } else if (screenId === "view-fast-billing") {
     initFastBillingScreen();
+  } else if (screenId === "view-fast-billing-history") {
+    renderFastBillingHistory();
+  } else if (screenId === "view-fast-billing-print") {
+    renderInvoicePrintPreview();
   } else if (screenId === "view-purchase-entry") {
     initPurchaseEntryScreen();
   } else if (screenId === "view-purchase-list") {
@@ -871,10 +978,10 @@ function handleLoginSubmit() {
 }
 
 // =============================================================
-// DUAL BILLING MODE SELECTION
+// DUAL BILLING MODE & INTERNAL TABS WORKFLOW
 // =============================================================
 function openBillingModeSelection(comp) {
-  activeCompany = comp;
+  if (comp) activeCompany = comp;
   showScreen("view-mode-selection");
 }
 
@@ -887,12 +994,533 @@ function renderModeSelection() {
   showNotification(`Logged in to ${activeCompany.name}`);
 }
 
+function activateBillingTab(tabKey) {
+  activeBillingMode = tabKey;
+  openTabs.add(tabKey);
+
+  if (tabKey === "traditional") {
+    if (tabModeIndicator) tabModeIndicator.textContent = "Mode: Traditional Billing";
+    if (activeCompany) {
+      if (dashboardWatermark) dashboardWatermark.textContent = `${activeCompany.name} (F.Y. ${activeCompany.finYear})`;
+      if (statusCompName) statusCompName.textContent = `${activeCompany.name} (${activeCompany.code})`;
+      if (statusFy) statusFy.textContent = (activeCompany.finYear || "2026-27").split(" ")[0];
+      if (statusGstin) statusGstin.textContent = activeCompany.taxNo || "N/A";
+      if (statusUser) statusUser.textContent = activeCompany.username || "A";
+      if (statusState) statusState.textContent = activeCompany.state || "Tamilnadu";
+    }
+    showScreen(lastTraditionalScreen || "view-dashboard");
+  } else if (tabKey === "fast_billing") {
+    if (tabModeIndicator) tabModeIndicator.textContent = "Mode: Fast Billing (Cashier)";
+    if (activeCompany) {
+      if (posHeaderCompany) posHeaderCompany.textContent = activeCompany.name;
+      if (posHeaderBranch) posHeaderBranch.textContent = "Branch: Main Branch | Reg: 01";
+      if (posHeaderCashier) posHeaderCashier.textContent = `${activeCompany.username || "A"}`;
+    }
+    showScreen(lastFastBillingScreen || "view-fast-billing");
+  }
+  updateAppTabsDisplay(tabKey);
+}
+
+function updateAppTabsDisplay(activeKey) {
+  if (tabBtnTraditional) {
+    tabBtnTraditional.classList.toggle("active", activeKey === "traditional");
+    tabBtnTraditional.style.display = openTabs.has("traditional") ? "inline-flex" : "none";
+  }
+  if (tabBtnFastBilling) {
+    tabBtnFastBilling.classList.toggle("active", activeKey === "fast_billing");
+    tabBtnFastBilling.style.display = openTabs.has("fast_billing") ? "inline-flex" : "none";
+  }
+  if (tabModeIndicator) {
+    tabModeIndicator.textContent = activeKey === "traditional" ? "Mode: Traditional Billing" : "Mode: Fast Billing (Cashier)";
+  }
+}
+
+function closeBillingTab(tabKey) {
+  openTabs.delete(tabKey);
+  if (openTabs.size === 0) {
+    showScreen("view-mode-selection");
+  } else {
+    const remaining = [...openTabs][0];
+    activateBillingTab(remaining);
+  }
+}
+
+function enterCompanyDashboard(comp) {
+  if (comp) activeCompany = comp;
+  openTabs.add("traditional");
+  lastTraditionalScreen = "view-dashboard";
+  activateBillingTab("traditional");
+  fetchCustomerCategoryDiscounts();
+  checkLowStockAlerts(true);
+  showNotification(`Traditional Billing: ${activeCompany.name}`);
+}
+
 function openFastBillingPos() {
   if (!activeCompany) return;
-  if (posHeaderCompany) posHeaderCompany.textContent = activeCompany.name;
-  if (posHeaderBranch) posHeaderBranch.textContent = "Branch: Main Branch | Reg: 01";
-  if (posHeaderCashier) posHeaderCashier.textContent = `${activeCompany.username || "A"}`;
+  openTabs.add("fast_billing");
+  lastFastBillingScreen = "view-fast-billing";
+  activateBillingTab("fast_billing");
+  showNotification(`Fast Billing (POS): ${activeCompany.name}`);
+}
+
+function openFastBillingNewBill() {
+  lastFastBillingScreen = "view-fast-billing";
+  posCart = [];
+  if (posTenderReceived) posTenderReceived.value = "";
+  renderPosCart();
+  initFastBillingScreen();
   showScreen("view-fast-billing");
+  if (posBarcodeInput) {
+    setTimeout(() => posBarcodeInput.focus(), 60);
+  }
+}
+
+function openFastBillingHistory() {
+  lastFastBillingScreen = "view-fast-billing-history";
+  showScreen("view-fast-billing-history");
+}
+
+function openFastBillingReprint() {
+  if (lastCompletedVoucherData) {
+    openFastBillingPrint(lastCompletedVoucherData.voucher_id || lastCompletedVoucherData.id, lastCompletedVoucherData);
+  } else if (todaySalesHistoryData && todaySalesHistoryData.length > 0) {
+    const first = todaySalesHistoryData[0];
+    openFastBillingPrint(first.id, first);
+  } else {
+    showNotification("No recent invoice found to reprint. Please select an invoice from Today's Sales History.");
+    openFastBillingHistory();
+  }
+}
+
+function openFastBillingPrint(vchId, vchData = null) {
+  currentPrintVchId = vchId;
+  currentPrintVchData = vchData;
+  lastFastBillingScreen = "view-fast-billing-print";
+
+  if (posPrintCompany && activeCompany) {
+    posPrintCompany.textContent = activeCompany.name;
+  }
+
+  // Populate installed system printers via bridge
+  if (posPrinterSelect) {
+    if (window.backend && window.backend.getAvailablePrinters) {
+      window.backend.getAvailablePrinters((resp) => {
+        try {
+          const res = JSON.parse(resp);
+          if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+            posPrinterSelect.innerHTML = res.data.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+          }
+        } catch (e) {}
+      });
+    }
+  }
+
+  // If full details not passed, fetch from backend
+  if (!currentPrintVchData || !currentPrintVchData.items) {
+    const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+    if (window.backend && window.backend.getVoucherDetails && vchId) {
+      window.backend.getVoucherDetails(compId, vchId, (resp) => {
+        try {
+          const res = JSON.parse(resp);
+          if (res.success && res.data) {
+            currentPrintVchData = res.data;
+            if (posPrintVchNo) posPrintVchNo.textContent = res.data.vch_no || "POS-001";
+            renderInvoicePrintPreview();
+          }
+        } catch (e) {}
+      });
+    }
+  } else {
+    if (posPrintVchNo) posPrintVchNo.textContent = currentPrintVchData.vch_no || "POS-001";
+    renderInvoicePrintPreview();
+  }
+
+  showScreen("view-fast-billing-print");
+}
+
+function renderInvoicePrintPreview() {
+  if (!posInvoicePreviewSheet) return;
+  const vch = currentPrintVchData || {
+    vch_no: "POS-001",
+    vch_date: new Date().toLocaleDateString("en-IN"),
+    created_at: new Date().toISOString(),
+    party_name: "CASH",
+    payment_method: "CASH",
+    items: [],
+    subtotal: 0,
+    cgst_amount: 0,
+    sgst_amount: 0,
+    igst_amount: 0,
+    round_off: 0,
+    grand_total: 0
+  };
+
+  const comp = activeCompany || {
+    name: "ANTI MATRIX",
+    taxNo: "33AAAPL1234F1Z1",
+    state: "Tamilnadu",
+    username: "Admin"
+  };
+
+  const format = currentPrintPaperFormat || "thermal-80";
+  posInvoicePreviewSheet.className = `pos-invoice-sheet sheet-${format}`;
+
+  if (format === "thermal-80" || format === "thermal-58") {
+    renderThermalReceiptPreview(posInvoicePreviewSheet, comp, vch, format);
+  } else if (format === "a4" || format === "a5") {
+    renderTaxInvoiceSheetPreview(posInvoicePreviewSheet, comp, vch, format);
+  } else {
+    // Custom dimensions
+    const w = document.getElementById("custom-paper-width") ? document.getElementById("custom-paper-width").value : "80";
+    posInvoicePreviewSheet.style.width = `${w}mm`;
+    renderThermalReceiptPreview(posInvoicePreviewSheet, comp, vch, "thermal-80");
+  }
+}
+
+function renderThermalReceiptPreview(container, comp, vch, format) {
+  const is58 = format === "thermal-58";
+  const items = vch.items || [];
+  const vchNo = vch.vch_no || "POS-001";
+  const dateStr = vch.vch_date || new Date().toLocaleDateString("en-IN");
+  const timeStr = vch.created_at ? vch.created_at.substring(11, 16) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const party = vch.party_name || "CASH";
+  const subtotal = parseFloat(vch.subtotal || 0).toFixed(2);
+  const cgst = parseFloat(vch.cgst_amount || 0).toFixed(2);
+  const sgst = parseFloat(vch.sgst_amount || 0).toFixed(2);
+  const igst = parseFloat(vch.igst_amount || 0).toFixed(2);
+  const roundOff = parseFloat(vch.round_off || 0).toFixed(2);
+  const grandTotal = parseFloat(vch.grand_total || 0).toFixed(2);
+  const payMethod = vch.payment_method || "CASH";
+  const discTotal = parseFloat(vch.discount_total || 0);
+
+  let itemsHtml = items.map((it) => {
+    const name = it.item_name || it.name || "Item";
+    const qty = parseFloat(it.qty || 0);
+    const unit = it.unit || "Pcs.";
+    const price = parseFloat(it.price || 0).toFixed(2);
+    const total = parseFloat(it.line_total || it.amount || (qty * price)).toFixed(2);
+    if (is58) {
+      return `
+        <tr>
+          <td colspan="3">${escapeHtml(name)}</td>
+        </tr>
+        <tr>
+          <td style="padding-left: 8px;">${qty} ${unit}</td>
+          <td style="text-align: right;">@ ₹${price}</td>
+          <td style="text-align: right; font-weight: 700;">₹${total}</td>
+        </tr>
+      `;
+    }
+    return `
+      <tr>
+        <td>${escapeHtml(name)}</td>
+        <td style="text-align: center;">${qty} ${unit}</td>
+        <td style="text-align: right;">${price}</td>
+        <td style="text-align: right; font-weight: 700;">${total}</td>
+      </tr>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="thermal-receipt-view">
+      <div class="t-center t-title">${escapeHtml(comp.name.toUpperCase())}</div>
+      <div class="t-center t-sub">RETAIL CASH RECEIPT / TAX INVOICE</div>
+      ${comp.taxNo ? `<div class="t-center t-sub">GSTIN: ${escapeHtml(comp.taxNo)}</div>` : ""}
+      <div class="t-divider"></div>
+      <div class="t-row"><span>Bill No: <strong>${escapeHtml(vchNo)}</strong></span><span>Date: ${escapeHtml(dateStr)} ${escapeHtml(timeStr)}</span></div>
+      <div class="t-row"><span>Customer: ${escapeHtml(party)}</span><span>Cashier: ${escapeHtml(comp.username || "Admin")}</span></div>
+      <div class="t-divider"></div>
+      <table class="t-table">
+        <thead>
+          ${is58 ? `<tr><th>Item</th><th style="text-align:right;">Qty/Rate</th><th style="text-align:right;">Total</th></tr>` :
+                   `<tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr>`}
+        </thead>
+        <tbody>
+          ${itemsHtml || '<tr><td colspan="4" style="text-align:center; padding:10px;">No items</td></tr>'}
+        </tbody>
+      </table>
+      <div class="t-divider"></div>
+      <div class="t-row"><span>Subtotal:</span><span>₹ ${subtotal}</span></div>
+      ${discTotal > 0 ? `<div class="t-row" style="color: #047857;"><span>Discount:</span><span>- ₹ ${discTotal.toFixed(2)}</span></div>` : ""}
+      ${parseFloat(cgst) > 0 ? `<div class="t-row"><span>CGST:</span><span>₹ ${cgst}</span></div>` : ""}
+      ${parseFloat(sgst) > 0 ? `<div class="t-row"><span>SGST:</span><span>₹ ${sgst}</span></div>` : ""}
+      ${parseFloat(igst) > 0 ? `<div class="t-row"><span>IGST:</span><span>₹ ${igst}</span></div>` : ""}
+      ${parseFloat(roundOff) !== 0 ? `<div class="t-row"><span>Round Off:</span><span>₹ ${roundOff}</span></div>` : ""}
+      <div class="t-double-divider"></div>
+      <div class="t-grand-total"><span>PAYABLE:</span><span>₹ ${grandTotal}</span></div>
+      <div class="t-double-divider"></div>
+      <div class="t-row"><span>Paid By: <strong>${escapeHtml(payMethod)}</strong></span><span>Status: PAID</span></div>
+      <div class="t-divider"></div>
+      <div class="t-center t-sub" style="margin-top: 6px;">*** THANK YOU FOR SHOPPING! ***</div>
+      <div class="t-center t-sub">Goods once sold cannot be returned.</div>
+      <div class="t-center t-sub" style="font-size: 9px; color: #666; margin-top: 4px;">Powered by Alpha Billing ERP</div>
+    </div>
+  `;
+}
+
+function renderTaxInvoiceSheetPreview(container, comp, vch, format) {
+  const isA5 = format === "a5";
+  const items = vch.items || [];
+  const vchNo = vch.vch_no || "POS-001";
+  const dateStr = vch.vch_date || new Date().toLocaleDateString("en-IN");
+  const party = vch.party_name || "CASH";
+  const subtotal = parseFloat(vch.subtotal || 0).toFixed(2);
+  const cgst = parseFloat(vch.cgst_amount || 0).toFixed(2);
+  const sgst = parseFloat(vch.sgst_amount || 0).toFixed(2);
+  const igst = parseFloat(vch.igst_amount || 0).toFixed(2);
+  const roundOff = parseFloat(vch.round_off || 0).toFixed(2);
+  const grandTotal = parseFloat(vch.grand_total || 0).toFixed(2);
+  const payMethod = vch.payment_method || "CASH";
+  const discTotal = parseFloat(vch.discount_total || 0);
+
+  let itemsHtml = items.map((it, idx) => {
+    const name = it.item_name || it.name || "Item";
+    const qty = parseFloat(it.qty || 0);
+    const unit = it.unit || "Pcs.";
+    const price = parseFloat(it.price || 0).toFixed(2);
+    const taxRate = parseFloat(it.tax_rate || 18);
+    const discPct = parseFloat(it.discount_percent || 0);
+    const total = parseFloat(it.line_total || it.amount || (qty * price)).toFixed(2);
+
+    return `
+      <tr>
+        <td style="text-align: center;">${idx + 1}</td>
+        <td><strong>${escapeHtml(name)}</strong></td>
+        <td style="text-align: center;">${qty} ${unit}</td>
+        <td style="text-align: right;">₹ ${price}</td>
+        <td style="text-align: center;">${discPct > 0 ? `${discPct}%` : '-'}</td>
+        <td style="text-align: center;">${taxRate}%</td>
+        <td style="text-align: right; font-weight: 700;">₹ ${total}</td>
+      </tr>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 14px; font-size: ${isA5 ? '11px' : '12px'};">
+      <!-- Invoice Header -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px;">
+        <div>
+          <h1 style="margin: 0; font-size: ${isA5 ? '16px' : '20px'}; color: #1e3a8a; font-weight: 900;">${escapeHtml(comp.name)}</h1>
+          <div style="color: #475569; margin-top: 4px;">State: ${escapeHtml(comp.state || "Tamilnadu")} | Reg. Business Entity</div>
+          <div style="color: #1e293b; font-weight: 700; margin-top: 2px;">GSTIN: ${escapeHtml(comp.taxNo || "N/A")}</div>
+        </div>
+        <div style="text-align: right;">
+          <span style="display: inline-block; background: #1e3a8a; color: #fff; padding: 4px 14px; font-weight: 800; font-size: ${isA5 ? '11px' : '13px'}; border-radius: 4px;">TAX INVOICE</span>
+          <div style="margin-top: 6px; font-weight: 700;">Invoice No: <span style="color: #047857;">${escapeHtml(vchNo)}</span></div>
+          <div style="color: #64748b;">Date: ${escapeHtml(dateStr)}</div>
+        </div>
+      </div>
+
+      <!-- Bill To & Details -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div>
+          <div style="font-weight: 700; color: #64748b; font-size: 10px; text-transform: uppercase;">Billed To Customer:</div>
+          <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">${escapeHtml(party)}</div>
+          <div style="color: #475569; font-size: 11px;">Payment Method: <strong>${escapeHtml(payMethod)}</strong></div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; color: #64748b; font-size: 10px; text-transform: uppercase;">Counter Details:</div>
+          <div style="color: #0f172a; font-weight: 600;">Cashier: ${escapeHtml(comp.username || "Admin")}</div>
+          <div style="color: #64748b; font-size: 11px;">Place of Supply: ${escapeHtml(comp.state || "Tamilnadu")}</div>
+        </div>
+      </div>
+
+      <!-- Table of items -->
+      <table style="width: 100%; border-collapse: collapse; margin-top: 6px;">
+        <thead>
+          <tr style="background: #1e40af; color: #ffffff; font-size: 11px;">
+            <th style="padding: 6px 8px; width: 30px; text-align: center;">#</th>
+            <th style="padding: 6px 8px; text-align: left;">Item Description</th>
+            <th style="padding: 6px 8px; width: 70px; text-align: center;">Qty</th>
+            <th style="padding: 6px 8px; width: 80px; text-align: right;">Price</th>
+            <th style="padding: 6px 8px; width: 60px; text-align: center;">Disc</th>
+            <th style="padding: 6px 8px; width: 60px; text-align: center;">Tax %</th>
+            <th style="padding: 6px 8px; width: 90px; text-align: right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody style="border-bottom: 1px solid #cbd5e1;">
+          ${itemsHtml || '<tr><td colspan="7" style="text-align:center; padding:16px;">No items</td></tr>'}
+        </tbody>
+      </table>
+
+      <!-- Totals Grid -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px;">
+        <div style="max-width: 50%; font-size: 10px; color: #64748b;">
+          <strong>Terms &amp; Conditions:</strong><br />
+          1. Goods once sold will not be taken back or exchanged.<br />
+          2. All disputes are subject to local jurisdiction.<br />
+          3. This is a computer-generated tax invoice.
+        </div>
+        <div style="width: 220px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; justify-content: space-between;"><span>Taxable Subtotal:</span><span>₹ ${subtotal}</span></div>
+          ${discTotal > 0 ? `<div style="display: flex; justify-content: space-between; color: #047857;"><span>Discount:</span><span>- ₹ ${discTotal.toFixed(2)}</span></div>` : ""}
+          ${parseFloat(cgst) > 0 ? `<div style="display: flex; justify-content: space-between;"><span>CGST:</span><span>₹ ${cgst}</span></div>` : ""}
+          ${parseFloat(sgst) > 0 ? `<div style="display: flex; justify-content: space-between;"><span>SGST:</span><span>₹ ${sgst}</span></div>` : ""}
+          ${parseFloat(igst) > 0 ? `<div style="display: flex; justify-content: space-between;"><span>IGST:</span><span>₹ ${igst}</span></div>` : ""}
+          ${parseFloat(roundOff) !== 0 ? `<div style="display: flex; justify-content: space-between;"><span>Round Off:</span><span>₹ ${roundOff}</span></div>` : ""}
+          <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; color: #047857; border-top: 2px solid #047857; padding-top: 6px; margin-top: 4px;">
+            <span>GRAND TOTAL:</span><span>₹ ${grandTotal}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signature Box -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: ${isA5 ? '16px' : '36px'};">
+        <div style="font-size: 10px; color: #94a3b8;">E. &amp; O.E.</div>
+        <div style="text-align: center; border-top: 1px dashed #64748b; width: 180px; padding-top: 6px; font-size: 11px; font-weight: 700;">
+          Authorized Signatory<br />
+          <span style="font-size: 9px; color: #64748b; font-weight: normal;">For ${escapeHtml(comp.name)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function triggerInvoicePrint() {
+  if (!currentPrintVchId && (!currentPrintVchData || !currentPrintVchData.vch_no)) {
+    showNotification("No invoice loaded to print.");
+    return;
+  }
+  const copiesInput = document.getElementById("pos-print-copies");
+  const copies = parseInt(copiesInput ? copiesInput.value : 1) || 1;
+  const printerSelect = document.getElementById("pos-printer-select");
+  const printerName = printerSelect ? printerSelect.value : "Default Printer";
+  const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+  const vchId = currentPrintVchId || (currentPrintVchData ? currentPrintVchData.id : "");
+
+  if (printStatusMsg) {
+    printStatusMsg.style.display = "block";
+    printStatusMsg.className = "print-status-box info";
+    printStatusMsg.textContent = `Printing ${copies} cop${copies === 1 ? 'y' : 'ies'} to ${printerName}...`;
+  }
+
+  if (window.backend && window.backend.printInvoice) {
+    window.backend.printInvoice(compId, vchId, currentPrintPaperFormat, printerName, copies, (resp) => {
+      try {
+        const res = JSON.parse(resp);
+        if (res.success) {
+          if (printStatusMsg) {
+            printStatusMsg.className = "print-status-box success";
+            printStatusMsg.textContent = `✅ Successfully printed ${copies} cop${copies === 1 ? 'y' : 'ies'} of Bill #${res.data.vch_no} to ${printerName}.`;
+          }
+          showNotification(`Printed ${copies} copy of Bill #${res.data.vch_no}`);
+        } else {
+          if (printStatusMsg) {
+            printStatusMsg.className = "print-status-box error";
+            printStatusMsg.textContent = `Printer Notice: ${res.error}. Transaction is safely preserved. You can retry printing anytime.`;
+          }
+        }
+      } catch (e) {
+        if (printStatusMsg) {
+          printStatusMsg.className = "print-status-box success";
+          printStatusMsg.textContent = `✅ Printed ${copies} copy to ${printerName}. (Simulated)`;
+        }
+      }
+    });
+  } else {
+    // Local fallback
+    if (printStatusMsg) {
+      printStatusMsg.className = "print-status-box success";
+      printStatusMsg.textContent = `✅ Successfully printed ${copies} cop${copies === 1 ? 'y' : 'ies'} of Bill #${currentPrintVchData ? currentPrintVchData.vch_no : 'POS-001'} to ${printerName}.`;
+    }
+    showNotification(`Printed ${copies} copy to ${printerName}`);
+  }
+}
+
+function renderFastBillingHistory() {
+  const tbody = document.getElementById("pos-history-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: #64748b;">Loading today's sales invoices...</td></tr>`;
+
+  const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+  const branchId = (activeCompany ? activeCompany.branchId : "") || "";
+
+  if (posHistoryCompany && activeCompany) posHistoryCompany.textContent = activeCompany.name;
+  if (posHistoryBranch && activeCompany) posHistoryBranch.textContent = `Branch: ${activeCompany.branch || "Main"}`;
+  if (posHistoryCashier && activeCompany) posHistoryCashier.textContent = activeCompany.username || "Admin";
+
+  const onDataLoaded = (vouchers) => {
+    todaySalesHistoryData = vouchers || [];
+    renderTodaySalesTable(todaySalesHistoryData);
+  };
+
+  if (window.backend && window.backend.getTodaySalesHistory) {
+    window.backend.getTodaySalesHistory(compId, branchId, (resp) => {
+      try {
+        const res = JSON.parse(resp);
+        if (res.success) {
+          onDataLoaded(res.data);
+        } else {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #ef4444;">Failed to load today's sales: ${res.error}</td></tr>`;
+        }
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #ef4444;">Error: ${e}</td></tr>`;
+      }
+    });
+  } else {
+    // Local storage fallback for dev/offline
+    const saved = JSON.parse(localStorage.getItem(`alpha_sales_${activeCompany ? activeCompany.code : 'COMP0001'}`) || "[]");
+    onDataLoaded(saved);
+  }
+}
+
+function renderTodaySalesTable(vouchers) {
+  const tbody = document.getElementById("pos-history-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  // Update summary KPIs
+  let totalAmt = 0;
+  let cashAmt = 0;
+  let digitalAmt = 0;
+
+  vouchers.forEach((vch) => {
+    const amt = parseFloat(vch.grand_total || 0);
+    totalAmt += amt;
+    const method = (vch.payment_method || "CASH").toUpperCase();
+    if (method === "CASH") cashAmt += amt;
+    else digitalAmt += amt;
+  });
+
+  if (posHistoryCount) posHistoryCount.textContent = `${vouchers.length} Bill${vouchers.length === 1 ? '' : 's'}`;
+  if (posHistoryTotalAmt) posHistoryTotalAmt.textContent = `₹ ${totalAmt.toFixed(2)}`;
+  if (posHistoryCashAmt) posHistoryCashAmt.textContent = `₹ ${cashAmt.toFixed(2)}`;
+  if (posHistoryDigitalAmt) posHistoryDigitalAmt.textContent = `₹ ${digitalAmt.toFixed(2)}`;
+
+  if (vouchers.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 32px; color: #64748b; font-size: 13px;">No sales invoices created today yet. Click <strong>New Bill (F4)</strong> to start your first checkout.</td></tr>`;
+    return;
+  }
+
+  vouchers.forEach((vch) => {
+    const tr = document.createElement("tr");
+    const dateFormatted = vch.created_at ? vch.created_at.substring(0, 16) : (vch.vch_date || "Today");
+    const method = vch.payment_method || "CASH";
+    const status = vch.payment_status || "PAID";
+
+    tr.innerHTML = `
+      <td><strong style="color: #1e40af;">#${escapeHtml(vch.vch_no || "-")}</strong></td>
+      <td style="color: #475569;">${escapeHtml(dateFormatted)}</td>
+      <td><strong>${escapeHtml(vch.party_name || "CASH")}</strong></td>
+      <td style="text-align: center;"><span class="badge-payment-method ${method.toLowerCase()}">${escapeHtml(method)}</span></td>
+      <td style="text-align: right; font-weight: 800; color: #047857;">₹ ${parseFloat(vch.grand_total || 0).toFixed(2)}</td>
+      <td style="text-align: center;"><span class="badge-status success">${escapeHtml(status)}</span></td>
+      <td style="text-align: center;">
+        <button type="button" class="btn-table-action reprint-btn btn-history-reprint" data-id="${escapeHtml(vch.id)}" data-vchno="${escapeHtml(vch.vch_no || '')}">
+          🖨️ View &amp; Reprint
+        </button>
+      </td>
+    `;
+
+    const btnReprint = tr.querySelector(".btn-history-reprint");
+    if (btnReprint) {
+      btnReprint.addEventListener("click", () => {
+        openFastBillingPrint(vch.id, vch);
+      });
+    }
+
+    tbody.appendChild(tr);
+  });
 }
 
 function navigateAwayFromPos(targetScreen = "view-mode-selection") {
@@ -908,25 +1536,6 @@ function navigateAwayFromPos(targetScreen = "view-mode-selection") {
     return;
   }
   showScreen(targetScreen);
-}
-
-// =============================================================
-// COMPANY DASHBOARD
-// =============================================================
-function enterCompanyDashboard(comp) {
-  dashboardWatermark.textContent = `${comp.name} (F.Y. ${comp.finYear})`;
-  statusCompName.textContent = `${comp.name} (${comp.code})`;
-  statusFy.textContent = comp.finYear.split(" ")[0] || "2026-27";
-  statusGstin.textContent = comp.taxNo || "N/A";
-  statusUser.textContent = comp.username || "A";
-  statusState.textContent = comp.state || "Tamilnadu";
-  dashboardBreadcrumb.textContent = `Transactions -> Sales -> Add (Billing)`;
-
-  fetchCustomerCategoryDiscounts();
-  checkLowStockAlerts(true);
-
-  showScreen("view-dashboard");
-  showNotification(`Billing & Accounting: ${comp.name}`);
 }
 
 function closeCompany() {
@@ -3273,8 +3882,12 @@ function handleBarcodeScan(barcodeStr, isSimulated = false) {
 
   const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
 
-  if (window.backend && window.backend.findByBarcode) {
-    window.backend.findByBarcode(compId, code, (resp) => {
+  const lookupFn = (window.backend && window.backend.getCashierProductByBarcode) 
+    ? window.backend.getCashierProductByBarcode 
+    : (window.backend && window.backend.findByBarcode ? window.backend.findByBarcode : null);
+
+  if (lookupFn) {
+    lookupFn(compId, code, (resp) => {
       try {
         const res = JSON.parse(resp);
         if (res.success && res.data) {
@@ -3444,6 +4057,13 @@ function triggerPosCheckout(method) {
 
 function finalizePosSale(method, amountPaid, changeDue) {
   if (posCart.length === 0) return;
+  if (isSavingPosSale) {
+    showNotification("Sale is already being processed. Please wait...");
+    return;
+  }
+  isSavingPosSale = true;
+  if (btnPosCheckoutPrint) btnPosCheckoutPrint.disabled = true;
+  if (btnPosBarCheckout) btnPosBarCheckout.disabled = true;
 
   const vchNum = posVchNo.textContent.trim() || getNextVoucherNumber();
   const now = new Date();
@@ -3488,20 +4108,44 @@ function finalizePosSale(method, amountPaid, changeDue) {
     narration: `POS Checkout (${method}) - ${activePosCustomerCategory || "Direct Customer"}`
   };
 
+  const calculatedTotals = {
+    items: itemsPayload,
+    vch_no: vchNum,
+    vch_date: dateStr,
+    party_name: activePosCustomerName || "CASH",
+    payment_method: method,
+    gross_subtotal: parseFloat(posGrossSubtotal ? posGrossSubtotal.textContent.replace(/[^\d.]/g, "") : 0) || 0,
+    discount_total: parseFloat(posDiscountTotal ? posDiscountTotal.textContent.replace(/[^\d.]/g, "") : 0) || 0,
+    subtotal: parseFloat(posSubtotal ? posSubtotal.textContent.replace(/[^\d.]/g, "") : 0) || 0,
+    cgst_amount: parseFloat(posTaxTotal ? posTaxTotal.textContent.replace(/[^\d.]/g, "") : 0) / 2 || 0,
+    sgst_amount: parseFloat(posTaxTotal ? posTaxTotal.textContent.replace(/[^\d.]/g, "") : 0) / 2 || 0,
+    round_off: parseFloat(posRoundOff ? posRoundOff.textContent.replace(/[^\d.-]/g, "") : 0) || 0,
+    grand_total: parseFloat(posPayableAmount ? posPayableAmount.textContent.replace(/[^\d.]/g, "") : 0) || 0,
+    amount_paid: amountPaid,
+    change_due: changeDue
+  };
+
   if (window.backend && activeCompany) {
     window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
+      isSavingPosSale = false;
+      if (btnPosCheckoutPrint) btnPosCheckoutPrint.disabled = false;
+      if (btnPosBarCheckout) btnPosBarCheckout.disabled = false;
+
       try {
         const res = JSON.parse(resp);
         if (res.success) {
           lastCompletedVoucher = res.data.vch_no;
+          lastCompletedVoucherData = { ...calculatedTotals, ...res.data };
           showNotification(`Sale #${res.data.vch_no} completed successfully!`);
           checkLowStockAlerts(false);
-          // Display Thermal Receipt
-          showReceiptModal(res.data.voucher_id);
+
           posCart = [];
           if (posTenderReceived) posTenderReceived.value = "";
           renderPosCart();
-          initFastBillingScreen();
+
+          // AUTOMATIC POST-SAVE PRINT SCREEN NAVIGATION:
+          // Immediately navigate to dedicated Print screen (do not return to blank billing screen)
+          openFastBillingPrint(res.data.voucher_id || res.data.id, lastCompletedVoucherData);
         } else {
           alert(`Checkout failed: ${res.error}`);
         }
@@ -3511,29 +4155,25 @@ function finalizePosSale(method, amountPaid, changeDue) {
     });
   } else {
     // Local fallback
+    isSavingPosSale = false;
+    if (btnPosCheckoutPrint) btnPosCheckoutPrint.disabled = false;
+    if (btnPosBarCheckout) btnPosBarCheckout.disabled = false;
+
     const voucherRecord = {
+      ...calculatedTotals,
+      id: vchNum,
       vchNo: vchNum,
       series: "POS",
-      date: dateStr,
-      saleType: "L/GST-18%",
-      party: "CASH",
-      matCentre: "Main Store",
-      narration: `POS (${method})`,
-      items: itemsPayload,
-      grossSubtotal: parseFloat(posGrossSubtotal ? posGrossSubtotal.textContent.replace(/[^\d.]/g, "") : 0) || 0,
-      discountTotal: parseFloat(posDiscountTotal ? posDiscountTotal.textContent.replace(/[^\d.]/g, "") : 0) || 0,
-      subtotal: parseFloat(posSubtotal.textContent.replace(/[^\d.]/g, "")) || 0,
-      grandTotal: posPayableAmount.textContent.replace(/[^\d.]/g, "").trim(),
-      amountPaid: amountPaid,
-      changeDue: changeDue,
       createdAt: new Date().toISOString()
     };
     saveSalesVoucherRecord(voucherRecord);
+    lastCompletedVoucherData = voucherRecord;
+    lastCompletedVoucher = vchNum;
     showNotification(`Sale #${vchNum} completed successfully!`);
     posCart = [];
     if (posTenderReceived) posTenderReceived.value = "";
     renderPosCart();
-    initFastBillingScreen();
+    openFastBillingPrint(vchNum, voucherRecord);
   }
 }
 
@@ -3991,6 +4631,159 @@ if (barSwitchMode) {
   barSwitchMode.addEventListener("click", () => showScreen("view-mode-selection"));
 }
 
+// =============================================================
+// INTERNAL TABS & FAST BILLING NAVIGATION EVENT BINDINGS
+// =============================================================
+if (tabBtnTraditional) {
+  tabBtnTraditional.addEventListener("click", () => activateBillingTab("traditional"));
+}
+if (tabBtnFastBilling) {
+  tabBtnFastBilling.addEventListener("click", () => activateBillingTab("fast_billing"));
+}
+if (btnCloseTradTab) {
+  btnCloseTradTab.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeBillingTab("traditional");
+  });
+}
+if (btnCloseFastTab) {
+  btnCloseFastTab.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeBillingTab("fast_billing");
+  });
+}
+if (btnTabSwitchMode) {
+  btnTabSwitchMode.addEventListener("click", () => showScreen("view-mode-selection"));
+}
+
+// Fast Billing Ribbon Navigation Tabs
+if (btnPosTabNewSale) {
+  btnPosTabNewSale.addEventListener("click", () => openFastBillingNewBill());
+}
+if (btnPosTabTodaySales) {
+  btnPosTabTodaySales.addEventListener("click", () => openFastBillingHistory());
+}
+if (btnPosTabReprint) {
+  btnPosTabReprint.addEventListener("click", () => openFastBillingReprint());
+}
+if (btnPosBarTodayHistory) {
+  btnPosBarTodayHistory.addEventListener("click", () => openFastBillingHistory());
+}
+
+// Today's Sales History Event Listeners
+if (btnPosHistoryBack) {
+  btnPosHistoryBack.addEventListener("click", () => openFastBillingNewBill());
+}
+if (btnPosHistoryRefresh) {
+  btnPosHistoryRefresh.addEventListener("click", () => renderFastBillingHistory());
+}
+if (btnPosHistoryClose) {
+  btnPosHistoryClose.addEventListener("click", () => openFastBillingNewBill());
+}
+if (posHistorySearch) {
+  posHistorySearch.addEventListener("input", () => {
+    const q = posHistorySearch.value.trim().toUpperCase();
+    if (!q) {
+      renderTodaySalesTable(todaySalesHistoryData);
+    } else {
+      const filtered = todaySalesHistoryData.filter((v) => {
+        const no = String(v.vch_no || "").toUpperCase();
+        const party = String(v.party_name || "").toUpperCase();
+        const method = String(v.payment_method || "").toUpperCase();
+        return no.includes(q) || party.includes(q) || method.includes(q);
+      });
+      renderTodaySalesTable(filtered);
+    }
+  });
+}
+
+// Dedicated Print Screen Event Listeners
+document.querySelectorAll(".btn-paper-format").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".btn-paper-format").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentPrintPaperFormat = btn.dataset.format || "thermal-80";
+
+    const customRow = document.getElementById("custom-paper-dimensions");
+    if (customRow) {
+      customRow.style.display = currentPrintPaperFormat === "custom" ? "flex" : "none";
+    }
+    renderInvoicePrintPreview();
+  });
+});
+
+document.querySelectorAll(".btn-orientation").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".btn-orientation").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentPrintOrientation = btn.dataset.orientation || "portrait";
+    renderInvoicePrintPreview();
+  });
+});
+
+if (btnCopyDec) {
+  btnCopyDec.addEventListener("click", () => {
+    if (posPrintCopies) {
+      const val = Math.max(1, (parseInt(posPrintCopies.value) || 1) - 1);
+      posPrintCopies.value = val;
+    }
+  });
+}
+if (btnCopyInc) {
+  btnCopyInc.addEventListener("click", () => {
+    if (posPrintCopies) {
+      const val = Math.min(10, (parseInt(posPrintCopies.value) || 1) + 1);
+      posPrintCopies.value = val;
+    }
+  });
+}
+
+if (btnTriggerPrint) {
+  btnTriggerPrint.addEventListener("click", () => triggerInvoicePrint());
+}
+if (btnRefreshPreview) {
+  btnRefreshPreview.addEventListener("click", () => renderInvoicePrintPreview());
+}
+if (btnDownloadPdfPrint) {
+  btnDownloadPdfPrint.addEventListener("click", () => {
+    const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+    const vchId = currentPrintVchId || (currentPrintVchData ? currentPrintVchData.id : "");
+    if (window.backend && window.backend.generatePdfInvoice && vchId) {
+      window.backend.generatePdfInvoice(compId, vchId, (resp) => {
+        try {
+          const res = JSON.parse(resp);
+          if (res.success) {
+            showNotification(`PDF Invoice generated: ${res.filepath}`);
+          } else {
+            alert(`PDF generation failed: ${res.error}`);
+          }
+        } catch (e) {
+          alert(`PDF error: ${e}`);
+        }
+      });
+    } else {
+      showNotification("PDF download simulated (voucher saved).");
+    }
+  });
+}
+if (btnPrintScreenNewBill) {
+  btnPrintScreenNewBill.addEventListener("click", () => openFastBillingNewBill());
+}
+if (btnPrintNextBill) {
+  btnPrintNextBill.addEventListener("click", () => openFastBillingNewBill());
+}
+if (btnPosPrintBack) {
+  btnPosPrintBack.addEventListener("click", () => openFastBillingNewBill());
+}
+if (btnPosPrintClose) {
+  btnPosPrintClose.addEventListener("click", () => openFastBillingNewBill());
+}
+
+const customWidthInput = document.getElementById("custom-paper-width");
+const customHeightInput = document.getElementById("custom-paper-height");
+if (customWidthInput) customWidthInput.addEventListener("input", () => renderInvoicePrintPreview());
+if (customHeightInput) customHeightInput.addEventListener("input", () => renderInvoicePrintPreview());
+
 // Fast Billing Header Navigation
 if (menuFastBilling) menuFastBilling.addEventListener("click", () => openFastBillingPos());
 if (btnPosBackMode) {
@@ -4160,7 +4953,7 @@ function renderModalProductSearch(query = "") {
   if (!posSearchModalTbody) return;
   posSearchModalTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: #64748b;">Searching products...</td></tr>`;
 
-  fetchAllItems(query, (items) => {
+  const onItemsLoaded = (items) => {
     modalProductItems = items || [];
     posSearchModalTbody.innerHTML = "";
     modalActiveIndex = -1;
@@ -4181,7 +4974,7 @@ function renderModalProductSearch(query = "") {
       tr.dataset.index = idx;
 
       const price = parseFloat(it.sales_price ?? it.salesPrice ?? 0).toFixed(2);
-      const barcode = it.barcodes || it.alias || "-";
+      const barcode = it.barcodes || it.alias || it.matched_barcode || it.barcode || "-";
       const group = it.item_group || it.group || "General";
 
       tr.innerHTML = `
@@ -4210,7 +5003,21 @@ function renderModalProductSearch(query = "") {
 
       posSearchModalTbody.appendChild(tr);
     });
-  });
+  };
+
+  const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+  if (modalSearchTarget === "POS" && window.backend && window.backend.searchCashierProducts) {
+    window.backend.searchCashierProducts(compId, query, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        onItemsLoaded(r.success ? r.data : []);
+      } catch (e) {
+        onItemsLoaded([]);
+      }
+    });
+  } else {
+    fetchAllItems(query, onItemsLoaded);
+  }
 }
 
 function selectProductFromModal(item) {
@@ -4278,18 +5085,37 @@ function setupPosBarcodeAutocomplete() {
     }
 
     debounceTimer = setTimeout(() => {
-      fetchAllItems(text, (items) => {
-        if (!items || items.length === 0) {
-          posBarcodeSuggestions.style.display = "none";
-          currentPosSuggestions = [];
+      const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+      if (window.backend && window.backend.searchCashierProducts) {
+        window.backend.searchCashierProducts(compId, text, (resp) => {
+          try {
+            const r = JSON.parse(resp);
+            if (!r.success || !r.data || r.data.length === 0) {
+              posBarcodeSuggestions.style.display = "none";
+              currentPosSuggestions = [];
+              activePosSuggestionIndex = -1;
+              return;
+            }
+            currentPosSuggestions = r.data.slice(0, 10);
+            activePosSuggestionIndex = -1;
+            renderPosBarcodeSuggestions(currentPosSuggestions);
+          } catch (e) {
+            posBarcodeSuggestions.style.display = "none";
+          }
+        });
+      } else {
+        fetchAllItems(text, (items) => {
+          if (!items || items.length === 0) {
+            posBarcodeSuggestions.style.display = "none";
+            currentPosSuggestions = [];
+            activePosSuggestionIndex = -1;
+            return;
+          }
+          currentPosSuggestions = items.slice(0, 10);
           activePosSuggestionIndex = -1;
-          return;
-        }
-
-        currentPosSuggestions = items.slice(0, 10);
-        activePosSuggestionIndex = -1;
-        renderPosBarcodeSuggestions(currentPosSuggestions);
-      });
+          renderPosBarcodeSuggestions(currentPosSuggestions);
+        });
+      }
     }, 150);
   });
 
@@ -4345,9 +5171,8 @@ function renderPosBarcodeSuggestions(items) {
     div.dataset.index = index;
 
     const price = parseFloat(item.sales_price ?? item.salesPrice ?? 0).toFixed(2);
-    const barcode = item.barcodes || item.alias || item.matched_barcode || "";
+    const barcode = item.barcodes || item.alias || item.matched_barcode || item.barcode || "";
     const group = item.item_group || item.group || "General";
-    const stock = parseFloat(item.current_stock ?? item.op_stock_qty ?? 0);
 
     div.innerHTML = `
       <div class="pos-suggestion-left">
@@ -4355,7 +5180,7 @@ function renderPosBarcodeSuggestions(items) {
         <div class="pos-suggestion-meta">
           <span>${escapeHtml(group)}</span>
           ${barcode ? `<span>• Barcode: <strong>${escapeHtml(barcode)}</strong></span>` : ""}
-          <span>• Stock: ${stock} ${escapeHtml(item.unit || "Pcs.")}</span>
+          <span>• Unit: ${escapeHtml(item.unit || "Pcs.")}</span>
         </div>
       </div>
       <div class="pos-suggestion-right">
@@ -5129,10 +5954,13 @@ window.addEventListener("keydown", (e) => {
       if (btnPosResume) btnPosResume.click();
     } else if (e.key === "F4") {
       e.preventDefault();
-      if (btnPosBarNewSale) btnPosBarNewSale.click();
+      openFastBillingNewBill();
+    } else if (e.key === "F5") {
+      e.preventDefault();
+      openFastBillingHistory();
     } else if (e.key === "F7") {
       e.preventDefault();
-      if (btnPosBarReprint) btnPosBarReprint.click();
+      openFastBillingReprint();
     } else if (e.key === "F8") {
       e.preventDefault();
       if (btnPosPaySplit) btnPosPaySplit.click();
@@ -5148,6 +5976,28 @@ window.addEventListener("keydown", (e) => {
     } else if (e.key === "Escape") {
       e.preventDefault();
       navigateAwayFromPos("view-mode-selection");
+    }
+  } else if (currentScreen === "view-fast-billing-history") {
+    if (e.key === "F4") {
+      e.preventDefault();
+      openFastBillingNewBill();
+    } else if (e.key === "F5") {
+      e.preventDefault();
+      renderFastBillingHistory();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      openFastBillingNewBill();
+    }
+  } else if (currentScreen === "view-fast-billing-print") {
+    if (e.key === "F4") {
+      e.preventDefault();
+      openFastBillingNewBill();
+    } else if (e.key === "Enter" || (e.ctrlKey && (e.key === "p" || e.key === "P"))) {
+      e.preventDefault();
+      triggerInvoicePrint();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      openFastBillingNewBill();
     }
   } else if (currentScreen === "view-add-account-master") {
     if (e.key === "F2") {

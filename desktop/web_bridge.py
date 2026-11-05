@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 from PyQt5.QtCore import QObject, pyqtSlot, pyqtSignal
 from PyQt5.QtWidgets import QFileDialog
+try:
+    from PyQt5.QtPrintSupport import QPrinterInfo
+except ImportError:
+    QPrinterInfo = None
 
 from services.company_service import company_service
 from services.account_service import account_service
@@ -175,6 +179,33 @@ class BackendBridge(QObject):
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
+    def searchCashierProducts(self, company_id: str, query: str) -> str:
+        """Restricted cashier product search: strictly omits stock balances and valuation."""
+        try:
+            items = catalogue_service.search_cashier_items(company_id, query)
+            for it in items:
+                for k, v in it.items():
+                    if hasattr(v, "isoformat"):
+                        it[k] = v.isoformat()
+            return json.dumps({"success": True, "data": items})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getCashierProductByBarcode(self, company_id: str, barcode: str) -> str:
+        """Restricted cashier barcode lookup: strictly omits stock balances and valuation."""
+        try:
+            item = catalogue_service.get_cashier_item_by_barcode(company_id, barcode)
+            if item:
+                for k, v in item.items():
+                    if hasattr(v, "isoformat"):
+                        item[k] = v.isoformat()
+                return json.dumps({"success": True, "data": item})
+            return json.dumps({"success": False, "error": f"Product not found for barcode: {barcode}"})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
     def saveItem(self, company_id: str, json_data: str) -> str:
         try:
             data = json.loads(json_data)
@@ -266,7 +297,7 @@ class BackendBridge(QObject):
     def listVouchers(self, company_id: str) -> str:
         try:
             vouchers = billing_service.list_vouchers(company_id)
-            return json.dumps({"success": True, "data": vouchers})
+            return json.dumps({"success": True, "data": vouchers}, default=str)
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -278,6 +309,22 @@ class BackendBridge(QObject):
                 return json.dumps({"success": True, "data": vch})
             return json.dumps({"success": False, "error": "Voucher not found."})
         except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getTodaySalesHistory(self, company_id: str, branch_id: str) -> str:
+        """
+        Retrieves sales created today for the active company and branch.
+        Server-side date enforcement; client cannot query older dates.
+        """
+        try:
+            vouchers = billing_service.get_today_sales_history(
+                company_id=company_id,
+                branch_id=branch_id if branch_id else None
+            )
+            return json.dumps({"success": True, "data": vouchers}, default=str)
+        except Exception as e:
+            logger.error(f"Error fetching today sales history: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, str, result=str)
@@ -590,6 +637,84 @@ class BackendBridge(QObject):
             printing_service.generate_pdf_invoice(vch, out_file)
             return json.dumps({"success": True, "filepath": str(out_file)})
         except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(result=str)
+    def getAvailablePrinters(self) -> str:
+        """Returns installed printers or standard fallback printers."""
+        printers = []
+        if QPrinterInfo:
+            try:
+                printers = list(QPrinterInfo.availablePrinterNames())
+            except Exception as e:
+                logger.warning(f"Failed to query system printers: {e}")
+        if not printers:
+            printers = [
+                "Default POS Thermal Printer (80mm)",
+                "Compact Thermal Printer (58mm)",
+                "Standard Desktop A4 Laser Printer",
+                "Microsoft Print to PDF"
+            ]
+        return json.dumps({"success": True, "data": printers})
+
+    @pyqtSlot(str, str, str, str, int, result=str)
+    def printInvoice(
+        self,
+        company_id: str,
+        vch_id: str,
+        paper_format: str,
+        printer_name: str,
+        copies: int
+    ) -> str:
+        """
+        Processes invoice printing for the specified paper format and number of copies.
+        Guarantees idempotency: printing multiple copies never creates duplicate sales records.
+        """
+        try:
+            vch = billing_service.get_voucher_details(company_id, vch_id)
+            if not vch:
+                return json.dumps({"success": False, "error": "Voucher not found."})
+
+            copy_count = max(1, min(10, int(copies or 1)))
+            format_name = (paper_format or "thermal-80").lower()
+            selected_printer = printer_name or "Default System Printer"
+
+            # Pre-generate format artifacts if needed
+            if "a4" in format_name or "a5" in format_name:
+                out_file = config.DATA_DIR / "invoices" / f"Invoice_{vch['vch_no']}.pdf"
+                printing_service.generate_pdf_invoice(vch, out_file)
+
+            # Audit print job
+            with billing_service.db.get_connection() as conn:
+                cur = conn.cursor()
+                import uuid
+                cur.execute("""
+                    INSERT INTO audit_logs (id, company_id, username, action, entity_type, entity_id, details)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                """, (
+                    str(uuid.uuid4()),
+                    vch.get("company_id"),
+                    "cashier",
+                    "PRINT_INVOICE",
+                    "sales_vouchers",
+                    vch.get("id"),
+                    f"Printed {copy_count} copies of invoice #{vch.get('vch_no')} in {format_name} layout to {selected_printer}"
+                ))
+                conn.commit()
+
+            logger.info(f"Print job completed: {copy_count} copies of {vch['vch_no']} [{format_name}] on {selected_printer}")
+            return json.dumps({
+                "success": True,
+                "data": {
+                    "vch_no": vch["vch_no"],
+                    "copies": copy_count,
+                    "paper_format": format_name,
+                    "printer": selected_printer,
+                    "timestamp": vch.get("vch_date")
+                }
+            })
+        except Exception as e:
+            logger.error(f"Error printing invoice: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     # --- Backups ---

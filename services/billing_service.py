@@ -16,6 +16,24 @@ class BillingService:
     def __init__(self, db: Optional[DatabaseManager] = None):
         self.db = db or db_manager
 
+    def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company if empty."""
+        cid = str(company_id or "").strip()
+        if not cid:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
+                c_default = cursor.fetchone()
+                return c_default["id"] if c_default else ""
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+            c_row = cursor.fetchone()
+            if c_row:
+                return c_row["id"]
+            return cid
+
     def get_next_voucher_number(self, company_id: str, series: str = "Main") -> str:
         """
         Calculates the next sequential unique invoice number for the active company.
@@ -1057,6 +1075,62 @@ class BillingService:
 
         effective_rate = max(cat_rate, daily_rate)
         return round(min(100.0, max(0.0, effective_rate)), 2)
+
+    def get_today_sales_history(
+        self,
+        company_id: str,
+        branch_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves sales invoices created for the active company and branch ONLY on the current business date.
+        Date restriction is enforced server-side.
+        No previous-date or arbitrary historical date access permitted.
+        """
+        actual_comp_id = self._resolve_company_id(company_id)
+        now = datetime.now()
+        today_dash = now.strftime("%d-%m-%Y")
+        today_iso = now.strftime("%Y-%m-%d")
+
+        query = """
+            SELECT sv.id, sv.vch_no, sv.vch_date, sv.created_at, sv.party_name, sv.grand_total,
+                   COALESCE(sv.payment_method, 'CASH') as payment_method,
+                   COALESCE(sv.payment_status, 'PAID') as payment_status,
+                   sv.subtotal, sv.taxable_amount, sv.cgst_amount, sv.sgst_amount, sv.round_off,
+                   sv.discount_total, sv.customer_category
+            FROM sales_vouchers sv
+            WHERE sv.company_id = ?
+              AND (
+                  sv.vch_date = ? 
+                  OR sv.vch_date = ? 
+                  OR substr(sv.created_at, 1, 10) = ?
+              )
+        """
+        params = [actual_comp_id, today_dash, today_iso, today_iso]
+        if branch_id and str(branch_id).strip():
+            query += " AND (sv.branch_id = ? OR sv.branch_id IS NULL)"
+            params.append(str(branch_id).strip())
+
+        query += " ORDER BY sv.created_at DESC;"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(params))
+            rows = cursor.fetchall()
+
+        results = []
+        for r in rows:
+            row_dict = dict(r)
+            # Fetch item count for summary
+            with self.db.get_connection() as conn2:
+                c2 = conn2.cursor()
+                c2.execute("SELECT COUNT(*), SUM(qty) FROM sales_voucher_items WHERE voucher_id = ?;", (row_dict["id"],))
+                cnt_row = c2.fetchone()
+                row_dict["item_count"] = cnt_row[0] if cnt_row else 0
+                row_dict["total_qty"] = float(cnt_row[1] or 0.0) if cnt_row else 0.0
+            results.append(row_dict)
+
+        logger.info(f"Retrieved {len(results)} today's sales invoices for company {company_id} on {today_iso}")
+        return results
 
 
 billing_service = BillingService()
