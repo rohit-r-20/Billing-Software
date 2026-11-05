@@ -61,10 +61,10 @@ def main():
         logger.error(f"Database initialization failure: {e}")
         sys.exit(1)
 
-    # 2. Launch Main Desktop Window
+    # 2. Launch Main Desktop Window in Maximized State
     try:
         window = MainWindow()
-        window.show()
+        window.showMaximized()
         sys.exit(app.exec_())
     except Exception as e:
         logger.critical(f"Unhandled desktop error: {e}", exc_info=True)
