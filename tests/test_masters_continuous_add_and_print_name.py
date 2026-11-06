@@ -365,7 +365,7 @@ def test_req9_failed_save_preserves_entered_information(web_view):
 
 
 def test_req10_item_master_remains_completely_unaffected(web_view):
-    """Req 10: Item Master Name, Print Name, and save workflow remain completely unaffected."""
+    """Req 10: Item Master has its own synchronised Print Name according to Item Master specs."""
     # 1. Inspect DOM of Item Master
     item_props = eval_js(web_view, """
         (function() {
@@ -378,11 +378,11 @@ def test_req10_item_master_remains_completely_unaffected(web_view):
             };
         })()
     """)
-    # Item print name must NOT be readonly
-    assert item_props["printIsReadOnly"] is False
-    assert item_props["printHasAttr"] is False
+    # Item print name is readonly
+    assert item_props["printIsReadOnly"] is True
+    assert item_props["printHasAttr"] is True
 
-    # 2. Verify independent editability of Item Name and Item Print Name
+    # 2. Verify auto-synchronisation of Item Name and Item Print Name
     vals = eval_js(web_view, """
         (function() {
             if (typeof resetProductMasterForm === 'function') resetProductMasterForm();
@@ -392,38 +392,29 @@ def test_req10_item_master_remains_completely_unaffected(web_view):
             itemNameEl.value = 'BRITANNIA MILK BIKIS 100G';
             itemNameEl.dispatchEvent(new Event('input', { bubbles: true }));
 
-            // Item Print Name remains empty or can be set independently
-            const printAfterName = itemPrintEl.value;
-
-            itemPrintEl.value = 'MILK BIKIS';
-            itemPrintEl.dispatchEvent(new Event('input', { bubbles: true }));
-
             return {
-                printAfterName: printAfterName,
-                finalPrintName: itemPrintEl.value,
+                printAfterName: itemPrintEl.value,
                 finalName: itemNameEl.value
             };
         })()
     """)
 
-    # Item Master does NOT auto-populate Print Name
-    assert vals["printAfterName"] == ""
-    assert vals["finalPrintName"] == "MILK BIKIS"
+    assert vals["printAfterName"] == "BRITANNIA MILK BIKIS 100G"
     assert vals["finalName"] == "BRITANNIA MILK BIKIS 100G"
 
-    # 3. Verify Item Master save workflow still functions via service
+    # 3. Verify Item Master save workflow still functions via service with synced print name
     uid = uuid.uuid4().hex[:6]
     item = catalogue_service.save_item(COMPANY_ID, {
         "name": f"UNAFFECTED PRODUCT {uid}",
         "alias": f"SKU-{uid}",
-        "print_name": "DIFFERENT PRINT NAME",
         "sales_price": 45.0
     })
     assert item["name"] == f"UNAFFECTED PRODUCT {uid}".upper()
+    assert item["print_name"] == f"UNAFFECTED PRODUCT {uid}".upper()
 
     with db_manager.get_connection() as conn:
         row = conn.execute("SELECT name, print_name FROM items WHERE id = ?;", (item["id"],)).fetchone()
         assert row is not None
         assert row[0] == f"UNAFFECTED PRODUCT {uid}".upper()
-        # Item print name preserved its own independent value
-        assert row[1] == "DIFFERENT PRINT NAME"
+        # Item print name matches name
+        assert row[1] == f"UNAFFECTED PRODUCT {uid}".upper()

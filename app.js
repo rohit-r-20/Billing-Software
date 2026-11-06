@@ -217,6 +217,7 @@ const btnItemOpenList = document.getElementById("btn-item-open-list");
 const btnItemViewListBottom = document.getElementById("btn-item-view-list-bottom");
 const btnItemBackList = document.getElementById("btn-item-back-list");
 const itemName = document.getElementById("item-name");
+const itemPrintName = document.getElementById("item-print-name");
 
 // DOM Elements - Products & Inventory Catalogue (View 7)
 const itemsListSearch = document.getElementById("items-list-search");
@@ -2623,10 +2624,21 @@ function executeBarcodeLabelPrint() {
 // ITEM MASTER & PRODUCTS CATALOGUE MANAGEMENT
 // =============================================================
 
+function syncItemPrintName() {
+  const nameEl = document.getElementById("item-name");
+  const printEl = document.getElementById("item-print-name");
+  if (nameEl && printEl) {
+    printEl.value = nameEl.value;
+  }
+}
+
 function resetProductMasterForm() {
   if (formItemMaster) formItemMaster.reset();
   const idEl = document.getElementById("item-id");
   if (idEl) idEl.value = "";
+  if (itemName) itemName.value = "";
+  if (itemPrintName) itemPrintName.value = "";
+  syncItemPrintName();
   const minStockEl = document.getElementById("item-min-stock-level");
   if (minStockEl) minStockEl.value = "";
   const reorderLvlEl = document.getElementById("item-reorder-level");
@@ -2647,8 +2659,8 @@ function resetProductMasterForm() {
   renderAlternateBarcodesList();
 }
 
-function loadProductForEditing(itemId) {
-  fetchItemById(itemId, (item) => {
+function loadProductForEditing(itemOrId) {
+  function applyItem(item) {
     if (!item) {
       alert("Product not found.");
       return;
@@ -2677,7 +2689,8 @@ function loadProductForEditing(itemId) {
       if (prev) prev.style.display = "none";
     }
     const printEl = document.getElementById("item-print-name");
-    if (printEl) printEl.value = item.print_name || item.printName || item.name || "";
+    if (printEl) printEl.value = item.name || item.print_name || item.printName || "";
+    syncItemPrintName();
     const groupEl = document.getElementById("item-group");
     if (groupEl) groupEl.value = item.item_group || item.group || "General";
     const unitEl = document.getElementById("item-unit");
@@ -2727,7 +2740,14 @@ function loadProductForEditing(itemId) {
 
     showScreen("view-add-item-master");
     if (itemName) itemName.focus();
-  });
+  }
+
+  if (typeof itemOrId === "object" && itemOrId !== null) {
+    applyItem(itemOrId);
+    return;
+  }
+
+  fetchItemById(itemOrId, applyItem);
 }
 
 function handleSaveItemMaster() {
@@ -2737,6 +2757,9 @@ function handleSaveItemMaster() {
     itemName.focus();
     return;
   }
+
+  // Ensure Receipt Print Name is synchronized and matches Product Name
+  syncItemPrintName();
 
   const existingId = document.getElementById("item-id")?.value.trim() || undefined;
 
@@ -2772,8 +2795,8 @@ function handleSaveItemMaster() {
     alias: primaryBarcode,
     barcodes: allBarcodes,
     alternate_barcodes: currentAlternateBarcodes,
-    printName: document.getElementById("item-print-name").value.trim(),
-    print_name: document.getElementById("item-print-name").value.trim(),
+    printName: name,
+    print_name: name,
     group: document.getElementById("item-group").value,
     item_group: document.getElementById("item-group").value,
     unit: document.getElementById("item-unit").value,
@@ -2882,8 +2905,10 @@ function fallbackLocalItems(query, callback) {
 }
 
 function fetchItemById(itemId, callback) {
-  if (window.backend && activeCompany) {
-    window.backend.getItemById(activeCompany.id, itemId, (resp) => {
+  const comp = activeCompany || window.activeCompany;
+  if (!activeCompany && comp) activeCompany = comp;
+  if (window.backend && comp) {
+    window.backend.getItemById(comp.id, itemId, (resp) => {
       try {
         const res = JSON.parse(resp);
         if (res.success && res.data) {
@@ -5440,6 +5465,24 @@ if (accPrintName) {
 }
 
 // Item Master (Add / Edit Product)
+if (itemName) {
+  itemName.addEventListener("input", syncItemPrintName);
+  itemName.addEventListener("change", syncItemPrintName);
+  itemName.addEventListener("keyup", syncItemPrintName);
+  itemName.addEventListener("paste", () => setTimeout(syncItemPrintName, 0));
+}
+
+if (itemPrintName) {
+  itemPrintName.readOnly = true;
+  itemPrintName.setAttribute("readonly", "readonly");
+  itemPrintName.addEventListener("keydown", (e) => {
+    e.preventDefault();
+  });
+  itemPrintName.addEventListener("paste", (e) => {
+    e.preventDefault();
+  });
+}
+
 btnItemSave.addEventListener("click", handleSaveItemMaster);
 btnItemQuit.addEventListener("click", () => showScreen("view-items-list"));
 btnItemCloseTop.addEventListener("click", () => showScreen("view-dashboard"));
@@ -9334,6 +9377,9 @@ if (!window.activeCompany) {
     fin_year: "2026-2027"
   };
 }
+if (!activeCompany) {
+  activeCompany = window.activeCompany;
+}
 
 renderCompanyTable();
 populateLoginCompanies();
@@ -9733,6 +9779,8 @@ function setupThreeOptionWorkflowListeners() {
 }
 
 // Global Exports
+window.syncItemPrintName = syncItemPrintName;
+window.loadProductForEditing = loadProductForEditing;
 window.renderSelectAccountModifyModal = renderSelectAccountModifyModal;
 window.renderSelectItemModifyModal = renderSelectItemModifyModal;
 window.renderSelectSalesModifyModal = renderSelectSalesModifyModal;

@@ -1239,7 +1239,9 @@ html, body {
 
 .input-readonly,
 #acc-print-name,
-#acc-print-name[readonly] {
+#acc-print-name[readonly],
+#item-print-name,
+#item-print-name[readonly] {
   background-color: #f1f5f9 !important;
   color: #334155 !important;
   border: 1px dashed #94a3b8 !important;

@@ -318,10 +318,15 @@ class CatalogueService:
         if not name:
             raise ValueError("Item name cannot be empty.")
 
+        raw_print_name = (item_data.get("print_name") or item_data.get("printName") or "").strip()
+        if raw_print_name and raw_print_name.upper() != name:
+            raise ValueError("Receipt Print Name must match Product Name.")
+
+        # In Item Master, Receipt Print Name is automatically synchronised with Product Name
+        print_name = name
         actual_company_id = self._resolve_company_id(company_id)
         item_id = item_data.get("id") or str(uuid.uuid4())
         alias = (item_data.get("alias") or "").strip()
-        print_name = item_data.get("print_name") or item_data.get("printName") or name
         group = item_data.get("item_group") or item_data.get("group") or "General"
         unit = item_data.get("unit") or "Pcs."
         op_qty = float(item_data.get("op_stock_qty") or item_data.get("opStockQty") or 0.0)
@@ -425,6 +430,8 @@ class CatalogueService:
                 """, (actual_company_id, bcode, item_id))
                 dup_bar = cursor.fetchone()
                 if dup_bar:
+                    if alias and bcode == alias.strip().upper() and bcode not in [str(x).strip().upper() for x in raw_barcodes_check]:
+                        raise ValueError(f"Item code / SKU '{bcode}' is already assigned to item '{dup_bar['name']}'.")
                     raise ValueError(f"Conflicting barcode '{bcode}' is already registered to item '{dup_bar['name']}'.")
 
                 # 2. Check items.alias across different items
@@ -563,6 +570,8 @@ class CatalogueService:
         return {
             "id": actual_id,
             "name": name,
+            "print_name": print_name,
+            "printName": print_name,
             "alias": alias,
             "sales_price": sales_price,
             "unit": unit,
