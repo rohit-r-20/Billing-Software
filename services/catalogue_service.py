@@ -208,7 +208,7 @@ class CatalogueService:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT i.*, 
-                       COALESCE(sb.current_qty, 0.0) as current_stock,
+                       COALESCE(MAX(sb.current_qty), 0.0) as current_stock,
                        GROUP_CONCAT(b.barcode, ', ') as barcodes
                 FROM items i
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
@@ -243,7 +243,7 @@ class CatalogueService:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT i.*, 
-                       COALESCE(sb.current_qty, 0.0) as current_stock,
+                       COALESCE(MAX(sb.current_qty), 0.0) as current_stock,
                        GROUP_CONCAT(b.barcode, ', ') as barcodes
                 FROM items i
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
@@ -335,10 +335,17 @@ class CatalogueService:
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            # Check default branch
-            cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (actual_company_id,))
-            branch_row = cursor.fetchone()
-            branch_id = branch_row["id"] if branch_row else None
+            # Check branch: explicit branch_id > default branch > first branch in company
+            branch_id = item_data.get("branch_id")
+            if not branch_id:
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (actual_company_id,))
+                branch_row = cursor.fetchone()
+                branch_id = branch_row["id"] if branch_row else None
+            if not branch_id:
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? ORDER BY is_default DESC, id ASC LIMIT 1;", (actual_company_id,))
+                first_branch = cursor.fetchone()
+                if first_branch:
+                    branch_id = first_branch["id"]
 
             # Validate: Prevent duplicate item codes across different items
             if alias:
@@ -461,7 +468,7 @@ class CatalogueService:
                     INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                        current_qty = CASE WHEN current_qty = 0 THEN ? ELSE current_qty END;
+                        current_qty = CASE WHEN stock_balances.current_qty = 0 THEN ? ELSE stock_balances.current_qty END;
                 """, (str(uuid.uuid4()), actual_company_id, branch_id, actual_id, op_qty, op_qty))
 
             conn.commit()
@@ -469,7 +476,7 @@ class CatalogueService:
         # Trigger automatic low-stock evaluation after item configuration change
         try:
             from services.inventory_service import inventory_service
-            inventory_service.evaluate_low_stock_alerts(actual_company_id)
+            inventory_service.evaluate_low_stock_alerts(actual_company_id, branch_id=branch_id, item_id=actual_id)
         except Exception as e:
             logger.debug(f"evaluate_low_stock_alerts after save_item: {e}")
 

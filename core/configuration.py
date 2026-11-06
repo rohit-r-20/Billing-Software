@@ -5,6 +5,11 @@ Centralizes paths, database settings, and operational flags.
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Automatically load environment variables from .env if present
+_BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(_BASE_DIR / ".env")
 
 
 class AppConfig:
@@ -14,7 +19,7 @@ class AppConfig:
     VERSION = "2.5.0"
     
     # Base directory of the application
-    BASE_DIR = Path(__file__).resolve().parent.parent
+    BASE_DIR = _BASE_DIR
     
     # User data directory: defaults to local data/ for development/portable, or AppData
     DATA_DIR = BASE_DIR / "data"
@@ -44,11 +49,42 @@ class AppConfig:
     
     @classmethod
     def get_database_url(cls) -> str:
-        # SQLite URL or custom PostgreSQL URL if configured via env
-        env_url = os.getenv("ANTI_MATRIX_DATABASE_URL")
-        if env_url:
-            return env_url
+        """
+        Retrieves the canonical database connection string.
+        Prioritizes DATABASE_URL (12-factor / Supabase / standard PostgreSQL),
+        then ANTI_MATRIX_DATABASE_URL, falling back to local SQLite.
+        """
+        # 1. Standard DATABASE_URL
+        url = os.getenv("DATABASE_URL")
+        if url and url.strip():
+            return url.strip()
+
+        # 2. Legacy ANTI_MATRIX_DATABASE_URL
+        legacy_url = os.getenv("ANTI_MATRIX_DATABASE_URL")
+        if legacy_url and legacy_url.strip():
+            return legacy_url.strip()
+
+        # 3. Default SQLite fallback
         return f"sqlite:///{cls.DATABASE_PATH}"
+
+    @classmethod
+    def is_postgres(cls) -> bool:
+        """Returns True if the active database URL targets PostgreSQL."""
+        url = cls.get_database_url().lower()
+        return url.startswith("postgres://") or url.startswith("postgresql://") or url.startswith("postgresql+")
+
+    @classmethod
+    def is_sqlite(cls) -> bool:
+        """Returns True if the active database URL targets SQLite."""
+        url = cls.get_database_url().lower()
+        return url.startswith("sqlite://") or url.startswith("sqlite:")
+
+    @classmethod
+    def get_database_dialect(cls) -> str:
+        """Returns the active database dialect name ('postgresql' or 'sqlite')."""
+        if cls.is_postgres():
+            return "postgresql"
+        return "sqlite"
 
 
 config = AppConfig

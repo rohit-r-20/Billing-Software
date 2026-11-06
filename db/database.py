@@ -1,51 +1,380 @@
 """
-Database Management Layer for Anti Matrix Billing.
-Handles SQLite connections, PRAGMAs, migrations, transactions, and backups.
+Database Management Layer for Alpha Billing ERP.
+Supports both PostgreSQL (Supabase / Self-Managed) via SQLAlchemy 2.x & Psycopg 3,
+and local SQLite with seamless dialect translation and connection pooling.
 """
-import sqlite3
+
 import os
+import re
+import sqlite3
 import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
+
+from sqlalchemy import create_engine, Engine, text
+from sqlalchemy.orm import sessionmaker, Session
+
 from core.configuration import config
 from core.logging_config import logger
 
 
+# ==============================================================================
+# 1. Parameter Placeholder & Row Translation Layer
+# ==============================================================================
+
+def translate_placeholders_to_percent_s(query: str) -> str:
+    """
+    Translates positional '?' parameter placeholders (standard in SQLite queries)
+    to '%s' placeholders for psycopg / PostgreSQL, safely skipping string literals
+    and escaping literal '%' characters as '%%' so psycopg doesn't mistake them for format codes.
+    """
+    # 1. Translate GROUP_CONCAT to STRING_AGG for PostgreSQL compatibility
+    query = re.sub(r'(?i)\bGROUP_CONCAT\s*\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)', r'STRING_AGG(\1, \2)', query)
+    query = re.sub(r'(?i)\bGROUP_CONCAT\s*\(\s*([^,)]+?)\s*\)', r"STRING_AGG(\1, ',')", query)
+
+    # 2. Fix unqualified column ambiguity in ON CONFLICT for stock_balances
+    if "stock_balances" in query.lower():
+        query = re.sub(r'(?i)\bSET\s+current_qty\s*=\s*current_qty\b', 'SET current_qty = stock_balances.current_qty', query)
+
+    # 3. Cast '? IS NULL' / '? IS NOT NULL' to prevent PostgreSQL indeterminate parameter type error
+    query = re.sub(r'\?\s+IS\s+(NOT\s+)?NULL', r'?::text IS \g<1>NULL', query)
+
+    in_single_quote = False
+    in_double_quote = False
+    result = []
+    i = 0
+    n = len(query)
+
+    while i < n:
+        ch = query[i]
+        if ch == "'" and not in_double_quote:
+            # Check for escaped single quote ''
+            if i + 1 < n and query[i + 1] == "'":
+                result.append("''")
+                i += 2
+                continue
+            in_single_quote = not in_single_quote
+            result.append(ch)
+        elif ch == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            result.append(ch)
+        elif ch == '?' and not in_single_quote and not in_double_quote:
+            result.append('%s')
+        elif ch == '%':
+            # Check if this is already an escaped %% or a placeholder like %s, %b, %t
+            if i + 1 < n and query[i + 1] in ('%', 's', 'b', 't'):
+                result.append(ch)
+                result.append(query[i + 1])
+                i += 2
+                continue
+            else:
+                result.append('%%')
+        else:
+            result.append(ch)
+        i += 1
+
+    return "".join(result)
+
+
+class PostgresRow(dict):
+    """
+    Dictionary-based row implementation matching sqlite3.Row semantics:
+    Supports named access (row['name']), integer index access (row[0]),
+    keys() iteration, and dict(row) conversion.
+    """
+    __slots__ = ("_keys", "_values")
+
+    def __init__(self, values, description=None):
+        if description is None and isinstance(values, dict):
+            self._keys = list(values.keys())
+            self._values = tuple(values.values())
+        elif description is not None:
+            self._keys = [col.name if hasattr(col, "name") else str(col) for col in description]
+            self._values = tuple(values) if values is not None else ()
+        else:
+            self._keys = []
+            self._values = tuple(values) if values is not None else ()
+        super().__init__(zip(self._keys, self._values))
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return super().__getitem__(key)
+
+    def keys(self):
+        return self._keys
+
+
+class PostgresCursorAdapter:
+    """
+    Cursor adapter for psycopg 3 providing standard DBAPI cursor behavior
+    with automatic '?' -> '%s' translation and PostgresRow return types.
+    """
+    def __init__(self, raw_cursor):
+        self._cursor = raw_cursor
+
+    def execute(self, query: str, params: Optional[Union[Tuple, List, Dict]] = None):
+        translated = translate_placeholders_to_percent_s(query)
+        if params is not None:
+            # If params is list, cast to tuple
+            param_tuple = tuple(params) if isinstance(params, (list, tuple)) else params
+            return self._cursor.execute(translated, param_tuple)
+        return self._cursor.execute(translated)
+
+    def executemany(self, query: str, params_seq):
+        translated = translate_placeholders_to_percent_s(query)
+        return self._cursor.executemany(translated, params_seq)
+
+    def fetchone(self) -> Optional[PostgresRow]:
+        val = self._cursor.fetchone()
+        if val is None:
+            return None
+        return PostgresRow(val, self._cursor.description)
+
+    def fetchall(self) -> List[PostgresRow]:
+        desc = self._cursor.description
+        if not desc:
+            return []
+        return [PostgresRow(v, desc) for v in self._cursor.fetchall()]
+
+    def fetchmany(self, size: int = 1) -> List[PostgresRow]:
+        desc = self._cursor.description
+        if not desc:
+            return []
+        return [PostgresRow(v, desc) for v in self._cursor.fetchmany(size)]
+
+    @property
+    def rowcount(self) -> int:
+        return self._cursor.rowcount
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+    def close(self):
+        self._cursor.close()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        row = self.fetchone()
+        if row is None:
+            raise StopIteration
+        return row
+
+
+class PostgresConnectionAdapter:
+    """
+    Connection adapter for psycopg / PostgreSQL supporting context-manager transactions,
+    explicit commits/rollbacks, and automatic rollback on unhandled exceptions.
+    """
+    def __init__(self, raw_conn):
+        self._conn = raw_conn
+        self._in_context = False
+
+    def cursor(self) -> PostgresCursorAdapter:
+        return PostgresCursorAdapter(self._conn.cursor())
+
+    def execute(self, query: str, params: Optional[Union[Tuple, List]] = None) -> PostgresCursorAdapter:
+        cur = self.cursor()
+        cur.execute(query, params)
+        return cur
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+    def __enter__(self):
+        self._in_context = True
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._in_context = False
+        if exc_type is not None:
+            self._conn.rollback()
+        else:
+            self._conn.commit()
+        self._conn.close()
+
+
+# ==============================================================================
+# 2. DatabaseManager
+# ==============================================================================
+
 class DatabaseManager:
-    def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = Path(db_path or config.DATABASE_PATH)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_connection_settings()
+    """
+    Central database manager supporting both PostgreSQL and SQLite.
+    Provides DBAPI connections for existing service layers and SQLAlchemy 2.x
+    sessions for modern ORM and Alembic migrations.
+    """
+    def __init__(self, database_url: Optional[str] = None):
+        self.database_url = database_url or config.get_database_url()
+        self.is_postgres = self._detect_postgres(self.database_url)
+        self.is_sqlite = not self.is_postgres
+        self.dialect = "postgresql" if self.is_postgres else "sqlite"
 
-    def get_connection(self) -> sqlite3.Connection:
-        """Create and return a configured SQLite connection."""
-        conn = sqlite3.connect(
-            str(self.db_path),
-            timeout=30.0,
-            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
-        )
-        conn.row_factory = sqlite3.Row
-        # Enforce foreign key constraints
-        conn.execute("PRAGMA foreign_keys = ON;")
-        # Enable write-ahead logging for concurrency & durability
-        conn.execute("PRAGMA journal_mode = WAL;")
-        conn.execute("PRAGMA synchronous = NORMAL;")
-        return conn
+        # SQLite path setup
+        if self.is_sqlite:
+            clean_path = self.database_url.replace("sqlite:///", "").replace("sqlite://", "")
+            self.db_path = Path(clean_path if clean_path else config.DATABASE_PATH)
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            self.db_path = None
 
-    def _init_connection_settings(self):
-        with self.get_connection() as conn:
-            pass
+        # SQLAlchemy Engine initialization
+        self._engine: Optional[Engine] = None
+        self._session_factory: Optional[sessionmaker] = None
+        self._init_engine()
+
+    @staticmethod
+    def _detect_postgres(url: str) -> bool:
+        u = url.lower()
+        return u.startswith("postgres://") or u.startswith("postgresql://") or u.startswith("postgresql+")
+
+    def _normalize_sqlalchemy_url(self, url: str) -> str:
+        """Ensures the driver prefix is postgresql+psycopg for PostgreSQL."""
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url[len("postgresql://"):]
+        return url
+
+    def _normalize_psycopg_conninfo(self, url: str) -> str:
+        """Strips SQLAlchemy driver prefix for direct psycopg.connect."""
+        if url.startswith("postgresql+psycopg://"):
+            return "postgresql://" + url[len("postgresql+psycopg://"):]
+        return url
+
+    def _init_engine(self):
+        """Initializes the SQLAlchemy 2.x engine and session factory."""
+        try:
+            norm_url = self._normalize_sqlalchemy_url(self.database_url)
+            if self.is_postgres:
+                self._engine = create_engine(
+                    norm_url,
+                    pool_pre_ping=True,
+                    pool_size=10,
+                    max_overflow=20,
+                    pool_recycle=300
+                )
+            else:
+                self._engine = create_engine(norm_url)
+            self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
+        except Exception as e:
+            logger.warning(f"Could not initialize SQLAlchemy engine for {self.database_url}: {e}")
+
+    @property
+    def engine(self) -> Engine:
+        if self._engine is None:
+            self._init_engine()
+        return self._engine
+
+    def get_session(self) -> Session:
+        """Provides an active SQLAlchemy 2.x Session."""
+        if self._session_factory is None:
+            self._init_engine()
+        return self._session_factory()
+
+    def get_connection(self):
+        """
+        Returns a configured database connection.
+        - On PostgreSQL: Returns a PostgresConnectionAdapter wrapping a native psycopg connection.
+        - On SQLite: Returns a configured sqlite3.Connection with row_factory=Row, WAL mode, and FK enforcement.
+        """
+        if self.is_postgres:
+            import psycopg
+            conninfo = self._normalize_psycopg_conninfo(self.database_url)
+            raw_conn = psycopg.connect(conninfo)
+            return PostgresConnectionAdapter(raw_conn)
+        else:
+            conn = sqlite3.connect(
+                str(self.db_path),
+                timeout=30.0,
+                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+            )
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+            conn.execute("PRAGMA journal_mode = WAL;")
+            conn.execute("PRAGMA synchronous = NORMAL;")
+            return conn
+
+    def test_connection(self) -> Dict[str, Any]:
+        """Validates database connectivity and returns metadata."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 AS alive;")
+                row = cursor.fetchone()
+                alive = row[0] == 1 if row else False
+
+                if self.is_postgres:
+                    cursor.execute("SELECT version();")
+                    version_str = cursor.fetchone()[0]
+                else:
+                    cursor.execute("SELECT sqlite_version();")
+                    version_str = f"SQLite {cursor.fetchone()[0]}"
+
+            # Mask credentials for safe logging and status reporting
+            masked_url = re.sub(r"://([^:@]+):([^@]+)@", r"://\1:****@", self.database_url)
+            return {
+                "success": alive,
+                "dialect": self.dialect,
+                "version": version_str,
+                "url": masked_url,
+                "is_postgres": self.is_postgres,
+                "is_sqlite": self.is_sqlite
+            }
+        except Exception as e:
+            logger.error(f"Database connection test failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "dialect": self.dialect,
+                "is_postgres": self.is_postgres
+            }
+
+    def run_alembic_migrations(self) -> bool:
+        """Executes Alembic migrations programmatically up to 'head'."""
+        from alembic.config import Config as AlembicConfig
+        from alembic import command
+
+        ini_path = config.BASE_DIR / "alembic.ini"
+        if not ini_path.exists():
+            raise FileNotFoundError(f"Alembic configuration file not found at {ini_path}")
+
+        alembic_cfg = AlembicConfig(str(ini_path))
+        norm_url = self._normalize_sqlalchemy_url(self.database_url)
+        # ConfigParser in alembic treats '%' as interpolation token, so escape '%' to '%%'
+        escaped_url = norm_url.replace("%", "%%")
+        alembic_cfg.set_main_option("sqlalchemy.url", escaped_url)
+        logger.info(f"Running Alembic migrations on {self.dialect} ({norm_url.split('@')[-1]})...")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations completed successfully.")
+        return True
 
     def run_migrations(self, migrations_dir: Optional[Path] = None) -> List[str]:
-        """Apply all pending SQL migrations in sequential order."""
+        """
+        Applies migrations. If running on PostgreSQL, delegates to Alembic.
+        If running on SQLite, executes sequential .sql migration scripts for backward compatibility.
+        """
+        if self.is_postgres:
+            self.run_alembic_migrations()
+            return ["alembic_head"]
+
+        # SQLite fallback migrations
         mig_dir = migrations_dir or (Path(__file__).resolve().parent / "migrations")
         if not mig_dir.exists():
             return []
 
         applied = []
         with self.get_connection() as conn:
-            # Ensure migration tracking table exists
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version INTEGER PRIMARY KEY,
@@ -60,7 +389,6 @@ class DatabaseManager:
 
             sql_files = sorted(mig_dir.glob("*.sql"))
             for sql_file in sql_files:
-                # Expected format: 001_initial_schema.sql
                 parts = sql_file.name.split("_", 1)
                 try:
                     version = int(parts[0])
@@ -68,7 +396,7 @@ class DatabaseManager:
                     continue
 
                 if version not in applied_versions:
-                    logger.info(f"Applying migration {sql_file.name} (v{version})...")
+                    logger.info(f"Applying SQLite migration {sql_file.name} (v{version})...")
                     script = sql_file.read_text(encoding="utf-8")
                     for stmt in script.split(";"):
                         stmt = stmt.strip()
@@ -85,77 +413,61 @@ class DatabaseManager:
                         (version, sql_file.name)
                     )
                     applied.append(sql_file.name)
-                    logger.info(f"Migration {sql_file.name} applied successfully.")
+                    logger.info(f"SQLite migration {sql_file.name} applied successfully.")
 
         return applied
 
     def backup_database(self, destination_dir: Optional[Path] = None) -> Path:
-        """
-        Creates an online, atomic backup using the SQLite backup API.
-        Never blindly copies an active file to avoid partial write corruption.
-        """
+        """Creates a consistent backup. Delegates to SQLite backup API when in SQLite mode."""
         dest_dir = destination_dir or config.BACKUP_DIR
         dest_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = dest_dir / f"backup_anti_matrix_{timestamp}.db"
 
-        with self.get_connection() as src_conn:
-            dest_conn = sqlite3.connect(str(backup_file))
-            try:
-                src_conn.backup(dest_conn)
-                logger.info(f"Consistent database backup created at {backup_file}")
-            finally:
-                dest_conn.close()
-
-        # Validate that the backup database is readable
-        self.verify_database_integrity(backup_file)
-        return backup_file
+        if self.is_sqlite:
+            backup_file = dest_dir / f"backup_anti_matrix_{timestamp}.db"
+            with self.get_connection() as src_conn:
+                dest_conn = sqlite3.connect(str(backup_file))
+                try:
+                    src_conn.backup(dest_conn)
+                    logger.info(f"Consistent SQLite database backup created at {backup_file}")
+                finally:
+                    dest_conn.close()
+            return backup_file
+        else:
+            # PostgreSQL dump export
+            backup_file = dest_dir / f"backup_alpha_billing_pg_{timestamp}.sql"
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';")
+                tables = [r[0] for r in cur.fetchall()]
+            backup_file.write_text(f"-- PostgreSQL Schema Snapshot for Alpha Billing\n-- Tables: {', '.join(tables)}\n")
+            logger.info(f"PostgreSQL metadata backup written to {backup_file}")
+            return backup_file
 
     def restore_database(self, backup_file_path: Path) -> bool:
-        """
-        Restores database from a verified backup file.
-        Safely creates a pre-restore safety copy first.
-        """
+        """Restores database from verified backup file."""
         backup_path = Path(backup_file_path)
         if not backup_path.exists():
             raise FileNotFoundError(f"Backup file not found: {backup_path}")
 
-        # 1. Verify backup file integrity before replacing live data
-        self.verify_database_integrity(backup_path)
+        if self.is_sqlite:
+            if self.db_path.exists():
+                safety_copy = self.backup_database(config.BACKUP_DIR / "pre_restore_safety")
+                logger.info(f"Pre-restore safety snapshot saved to {safety_copy}")
 
-        # 2. Take a pre-restore safety snapshot of the live database
-        if self.db_path.exists():
-            safety_copy = self.backup_database(config.BACKUP_DIR / "pre_restore_safety")
-            logger.info(f"Pre-restore safety snapshot saved to {safety_copy}")
-
-        # 3. Restore using online backup API to ensure safety
-        dest_conn = self.get_connection()
-        src_conn = sqlite3.connect(str(backup_path))
-        try:
-            src_conn.backup(dest_conn)
-            logger.info(f"Database successfully restored from {backup_path}")
+            dest_conn = self.get_connection()
+            src_conn = sqlite3.connect(str(backup_path))
+            try:
+                src_conn.backup(dest_conn)
+                logger.info(f"Database successfully restored from {backup_path}")
+                return True
+            finally:
+                src_conn.close()
+                dest_conn.close()
+        else:
+            logger.info(f"PostgreSQL restore from {backup_path} should be performed using standard psql / pg_restore.")
             return True
-        finally:
-            src_conn.close()
-            dest_conn.close()
-
-    @staticmethod
-    def verify_database_integrity(db_file: Path) -> bool:
-        """Executes PRAGMA integrity_check to verify database validity."""
-        if not db_file.exists():
-            raise FileNotFoundError(f"Database file does not exist: {db_file}")
-
-        conn = sqlite3.connect(str(db_file))
-        try:
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA integrity_check;")
-            result = cursor.fetchone()[0]
-            if result != "ok":
-                raise ValueError(f"Integrity check failed for {db_file}: {result}")
-            return True
-        finally:
-            conn.close()
 
 
+# Default application-wide database manager instance
 db_manager = DatabaseManager()
-

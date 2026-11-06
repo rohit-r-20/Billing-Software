@@ -429,10 +429,11 @@ class BillingService:
 
             conn.commit()
 
-        # Authoritatively evaluate low-stock alerts after real-time inventory deduction
+        # Authoritatively evaluate low-stock alerts for the sold items after real-time inventory deduction
         try:
             from services.inventory_service import inventory_service
-            inventory_service.evaluate_low_stock_alerts(company_id)
+            for it_id in needed_quantities.keys():
+                inventory_service.evaluate_low_stock_alerts(company_id, branch_id=branch_id, item_id=it_id)
         except Exception as e:
             logger.debug(f"evaluate_low_stock_alerts after sale checkout: {e}")
 
@@ -725,7 +726,7 @@ class BillingService:
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty - excluded.current_qty,
+                            current_qty = stock_balances.current_qty - excluded.current_qty,
                             last_updated = CURRENT_TIMESTAMP;
                     """, (str(uuid.uuid4()), company_id, actual_branch_id, item_id, qty))
 
@@ -967,7 +968,7 @@ class BillingService:
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty + excluded.current_qty,
+                            current_qty = stock_balances.current_qty + excluded.current_qty,
                             last_updated = CURRENT_TIMESTAMP;
                     """, (str(uuid.uuid4()), company_id, branch_id, it["item_id"], it["qty"]))
 

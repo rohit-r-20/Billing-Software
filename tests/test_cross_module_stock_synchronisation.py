@@ -61,6 +61,7 @@ def _create_item(company_id: str, branch_id: str, op_qty: float = 100.0, reorder
         "id": item_id,
         "name": unique_name,
         "alias": barcode,
+        "branch_id": branch_id,
         "op_stock_qty": op_qty,
         "reorder_level": reorder_lvl,
         "min_stock_alert_level": min_lvl,

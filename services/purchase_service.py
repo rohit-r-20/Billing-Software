@@ -214,7 +214,7 @@ class PurchaseService:
             supplier_id = supp_obj["id"]
 
         supplier_gstin = data.get("supplier_gstin") or (supp_obj.get("gstin") if supp_obj else "")
-        supplier_state = data.get("supplier_state") or (supp_obj.get("state") if supp_obj else "Tamilnadu")
+        supplier_state = (data.get("supplier_state") or (supp_obj.get("state") if supp_obj and supp_obj.get("state") else "Tamilnadu") or "Tamilnadu").strip()
         place_of_supply = data.get("place_of_supply") or supplier_state
 
         # Calculate Items & Taxes
@@ -222,9 +222,9 @@ class PurchaseService:
             cursor = conn.cursor()
             cursor.execute("SELECT state FROM companies WHERE id = ?;", (actual_comp_id,))
             comp_state_row = cursor.fetchone()
-            company_state = comp_state_row["state"] if comp_state_row else "Tamilnadu"
+            company_state = (comp_state_row["state"] if comp_state_row and comp_state_row["state"] else "Tamilnadu").strip()
 
-        is_interstate = (company_state.strip().lower() != supplier_state.strip().lower())
+        is_interstate = (company_state.lower() != supplier_state.lower())
 
         calculated_items = []
         gross_subtotal = Decimal("0")
@@ -363,7 +363,7 @@ class PurchaseService:
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty + excluded.current_qty,
+                            current_qty = stock_balances.current_qty + excluded.current_qty,
                             last_updated = CURRENT_TIMESTAMP;
                     """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, total_inward))
 
@@ -477,7 +477,10 @@ class PurchaseService:
 
         if not is_draft:
             try:
-                self.inventory_service.evaluate_low_stock_alerts(actual_comp_id)
+                for line in valid_items:
+                    it_id = line.get("item_id")
+                    if it_id:
+                        self.inventory_service.evaluate_low_stock_alerts(actual_comp_id, branch_id=actual_branch, item_id=it_id)
             except Exception as e:
                 logger.debug(f"evaluate_low_stock_alerts after purchase: {e}")
 
@@ -788,7 +791,7 @@ class PurchaseService:
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty + excluded.current_qty,
+                            current_qty = stock_balances.current_qty + excluded.current_qty,
                             last_updated = CURRENT_TIMESTAMP;
                     """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, total_inward))
 
