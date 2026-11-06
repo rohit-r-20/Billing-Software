@@ -468,30 +468,144 @@ function saveCompanyConfig(companyCode, config) {
 }
 
 // =============================================================
-// ZOOM / FONT & ELEMENT RESIZING ENGINE
+// GLOBAL APPLICATION ZOOM CONTROLLER
+// One central application-wide zoom mechanism across every screen
 // =============================================================
+const ZoomController = {
+  MIN_ZOOM: 0.70, // 70%
+  MAX_ZOOM: 1.50, // 150%
+  STEP: 0.10,     // 10% increments
+  STORAGE_KEY: "alpha_ui_zoom",
+
+  getZoom() {
+    if (typeof uiZoom !== "undefined" && !isNaN(uiZoom) && uiZoom > 0) {
+      return uiZoom;
+    }
+    const saved = parseFloat(localStorage.getItem(this.STORAGE_KEY) || "1.0");
+    return isNaN(saved) ? 1.0 : saved;
+  },
+
+  clamp(scale) {
+    let target = Math.round(scale * 10) / 10;
+    return Math.min(this.MAX_ZOOM, Math.max(this.MIN_ZOOM, target));
+  },
+
+  applyZoom(newScale, showToast = true) {
+    const clamped = this.clamp(newScale);
+    uiZoom = Math.round(clamped * 100) / 100;
+    window.uiZoom = uiZoom;
+
+    if (appRoot) {
+      appRoot.style.zoom = uiZoom;
+      appRoot.style.width = `calc(100vw / ${uiZoom})`;
+      appRoot.style.height = `calc(100vh / ${uiZoom})`;
+      appRoot.style.maxWidth = `calc(100vw / ${uiZoom})`;
+      appRoot.style.maxHeight = `calc(100vh / ${uiZoom})`;
+    }
+    document.documentElement.style.setProperty("--ui-scale", uiZoom.toString());
+
+    const percentage = Math.round(uiZoom * 100) + "%";
+    
+    // Update visible header display and compatibility elements immediately
+    const headerLabel = document.getElementById("header-zoom-label");
+    if (headerLabel) {
+      headerLabel.textContent = percentage;
+    }
+    if (quickZoomLabel) {
+      quickZoomLabel.textContent = percentage;
+    }
+
+    // Boundary button states (disable - at 70%, + at 150%)
+    const btnIn = document.getElementById("btn-zoom-in");
+    const btnOut = document.getElementById("btn-zoom-out");
+    if (btnIn) {
+      btnIn.disabled = (uiZoom >= this.MAX_ZOOM);
+    }
+    if (btnOut) {
+      btnOut.disabled = (uiZoom <= this.MIN_ZOOM);
+    }
+
+    const qIn = document.getElementById("quick-zoom-in");
+    const qOut = document.getElementById("quick-zoom-out");
+    if (qIn) qIn.disabled = (uiZoom >= this.MAX_ZOOM);
+    if (qOut) qOut.disabled = (uiZoom <= this.MIN_ZOOM);
+
+    try {
+      localStorage.setItem(this.STORAGE_KEY, uiZoom.toString());
+    } catch (e) {}
+
+    if (showToast && typeof showNotification === "function") {
+      showNotification(`Interface Scale: ${percentage}`);
+    }
+
+    return uiZoom;
+  },
+
+  zoomIn() {
+    return this.applyZoom(this.getZoom() + this.STEP);
+  },
+
+  zoomOut() {
+    return this.applyZoom(this.getZoom() - this.STEP);
+  },
+
+  resetZoom() {
+    return this.applyZoom(1.0);
+  },
+
+  bindControls() {
+    const btnIn = document.getElementById("btn-zoom-in");
+    const btnOut = document.getElementById("btn-zoom-out");
+
+    if (btnIn && !btnIn.dataset.zoomBound) {
+      btnIn.dataset.zoomBound = "true";
+      btnIn.addEventListener("click", () => this.zoomIn());
+    }
+    if (btnOut && !btnOut.dataset.zoomBound) {
+      btnOut.dataset.zoomBound = "true";
+      btnOut.addEventListener("click", () => this.zoomOut());
+    }
+
+    const qIn = document.getElementById("quick-zoom-in");
+    const qOut = document.getElementById("quick-zoom-out");
+    if (qIn && !qIn.dataset.zoomBound) {
+      qIn.dataset.zoomBound = "true";
+      qIn.addEventListener("click", () => this.zoomIn());
+    }
+    if (qOut && !qOut.dataset.zoomBound) {
+      qOut.dataset.zoomBound = "true";
+      qOut.addEventListener("click", () => this.zoomOut());
+    }
+
+    const menuIn = document.getElementById("menu-zoom-in");
+    const menuOut = document.getElementById("menu-zoom-out");
+    const menuReset = document.getElementById("menu-zoom-reset");
+    if (menuIn && !menuIn.dataset.zoomBound) {
+      menuIn.dataset.zoomBound = "true";
+      menuIn.addEventListener("click", () => this.zoomIn());
+    }
+    if (menuOut && !menuOut.dataset.zoomBound) {
+      menuOut.dataset.zoomBound = "true";
+      menuOut.addEventListener("click", () => this.zoomOut());
+    }
+    if (menuReset && !menuReset.dataset.zoomBound) {
+      menuReset.dataset.zoomBound = "true";
+      menuReset.addEventListener("click", () => this.resetZoom());
+    }
+  },
+
+  init() {
+    this.bindControls();
+    const initial = this.getZoom();
+    this.applyZoom(initial, false);
+  }
+};
+window.ZoomController = ZoomController;
+
 function applyZoom(newScale) {
-  // Clamp scale between 0.75 and 1.50
-  uiZoom = Math.min(Math.max(newScale, 0.75), 1.5);
-  uiZoom = Math.round(uiZoom * 100) / 100;
-
-  if (appRoot) {
-    appRoot.style.zoom = uiZoom;
-    appRoot.style.width = `calc(100vw / ${uiZoom})`;
-    appRoot.style.height = `calc(100vh / ${uiZoom})`;
-    appRoot.style.maxWidth = `calc(100vw / ${uiZoom})`;
-    appRoot.style.maxHeight = `calc(100vh / ${uiZoom})`;
-  }
-  document.documentElement.style.setProperty("--ui-scale", uiZoom);
-
-  const percentage = Math.round(uiZoom * 100) + "%";
-  if (quickZoomLabel) {
-    quickZoomLabel.textContent = percentage;
-  }
-
-  localStorage.setItem("alpha_ui_zoom", uiZoom.toString());
-  showNotification(`Interface Scale: ${percentage}`);
+  return ZoomController.applyZoom(newScale);
 }
+window.applyZoom = applyZoom;
 
 window.addEventListener("resize", () => {
   if (appRoot && uiZoom) {
@@ -502,11 +616,7 @@ window.addEventListener("resize", () => {
   }
 });
 
-if (quickZoomIn) quickZoomIn.addEventListener("click", () => applyZoom(uiZoom + 0.05));
-if (quickZoomOut) quickZoomOut.addEventListener("click", () => applyZoom(uiZoom - 0.05));
-if (menuZoomIn) menuZoomIn.addEventListener("click", () => applyZoom(uiZoom + 0.05));
-if (menuZoomOut) menuZoomOut.addEventListener("click", () => applyZoom(uiZoom - 0.05));
-if (menuZoomReset) menuZoomReset.addEventListener("click", () => applyZoom(1.0));
+ZoomController.bindControls();
 
 // =============================================================
 // SCREEN VIEW ROUTER
@@ -5991,20 +6101,20 @@ if (btnAckMedVerification) {
 
 // Global Keyboard Navigation
 window.addEventListener("keydown", (e) => {
-  // Zoom hotkeys: Ctrl/Cmd + Plus/Minus
+  // Zoom hotkeys: Ctrl/Cmd + Plus/Minus/0
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
     e.preventDefault();
-    applyZoom(uiZoom + 0.05);
+    ZoomController.zoomIn();
     return;
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === "-" || e.key === "_")) {
     e.preventDefault();
-    applyZoom(uiZoom - 0.05);
+    ZoomController.zoomOut();
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key === "0") {
     e.preventDefault();
-    applyZoom(1.0);
+    ZoomController.resetZoom();
     return;
   }
 
@@ -8994,5 +9104,5 @@ setupCompanyAndPlaceholderModalListeners();
 setupThreeOptionWorkflowListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
-applyZoom(uiZoom);
+ZoomController.init();
 showScreen("view-dashboard");

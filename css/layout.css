@@ -25,11 +25,16 @@ html, body {
 /* Master App Container */
 .alpha-app-shell {
   display: flex;
-  width: 100vw;
-  height: 100vh;
+  flex-direction: row;
+  width: calc(100vw / var(--ui-scale, 1));
+  height: calc(100vh / var(--ui-scale, 1));
+  max-width: calc(100vw / var(--ui-scale, 1));
+  max-height: calc(100vh / var(--ui-scale, 1));
+  zoom: var(--ui-scale, 1);
   overflow: hidden;
   position: relative;
   background-color: var(--alpha-bg-app);
+  box-sizing: border-box;
 }
 
 /* =========================================================
@@ -804,9 +809,15 @@ html, body {
   justify-content: center;
 }
 
-.btn-header-zoom:hover {
+.btn-header-zoom:hover:not(:disabled) {
   background: #ffffff;
   color: var(--alpha-brand-primary);
+}
+
+.btn-header-zoom:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .header-zoom-label {

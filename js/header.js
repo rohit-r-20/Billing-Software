@@ -355,21 +355,34 @@ class HeaderManager {
   }
 
   bindZoomControls() {
-    let currentZoom = 100;
-    const zoomInBtn = document.getElementById("btn-zoom-in");
-    const zoomOutBtn = document.getElementById("btn-zoom-out");
-    const zoomLabel = document.getElementById("header-zoom-label");
-
-    const applyZoom = (delta) => {
-      currentZoom = Math.min(130, Math.max(70, currentZoom + delta));
-      if (zoomLabel) zoomLabel.textContent = `${currentZoom}%`;
-      const quickZoom = document.getElementById("quick-zoom-label");
-      if (quickZoom) quickZoom.textContent = `${currentZoom}%`;
-      document.documentElement.style.setProperty("--ui-scale", (currentZoom / 100).toString());
-    };
-
-    if (zoomInBtn) zoomInBtn.addEventListener("click", () => applyZoom(10));
-    if (zoomOutBtn) zoomOutBtn.addEventListener("click", () => applyZoom(-10));
+    if (window.ZoomController && typeof window.ZoomController.bindControls === "function") {
+      window.ZoomController.bindControls();
+    } else {
+      const zoomInBtn = document.getElementById("btn-zoom-in");
+      const zoomOutBtn = document.getElementById("btn-zoom-out");
+      if (zoomInBtn && !zoomInBtn.dataset.zoomBound) {
+        zoomInBtn.dataset.zoomBound = "true";
+        zoomInBtn.addEventListener("click", () => {
+          if (window.ZoomController) {
+            window.ZoomController.zoomIn();
+          } else if (typeof window.applyZoom === "function") {
+            const cur = typeof window.uiZoom !== "undefined" ? window.uiZoom : (parseFloat(localStorage.getItem("alpha_ui_zoom") || "1.0"));
+            window.applyZoom(Math.round((cur + 0.10) * 10) / 10);
+          }
+        });
+      }
+      if (zoomOutBtn && !zoomOutBtn.dataset.zoomBound) {
+        zoomOutBtn.dataset.zoomBound = "true";
+        zoomOutBtn.addEventListener("click", () => {
+          if (window.ZoomController) {
+            window.ZoomController.zoomOut();
+          } else if (typeof window.applyZoom === "function") {
+            const cur = typeof window.uiZoom !== "undefined" ? window.uiZoom : (parseFloat(localStorage.getItem("alpha_ui_zoom") || "1.0"));
+            window.applyZoom(Math.round((cur - 0.10) * 10) / 10);
+          }
+        });
+      }
+    }
   }
 
   bindMobileToggle() {

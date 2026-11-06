@@ -3945,27 +3945,26 @@
         </div>
       </div>
     </div>
-    </main>
+
+    <!-- Modal: Global Quick Search (Ctrl+K) -->
+    <div class="modal-overlay" id="modal-global-search">
+      <div class="search-modal-box">
+        <div class="search-input-header">
+          <span class="search-input-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </span>
+          <input type="text" id="input-global-search" class="search-main-input" placeholder="Search invoices, products, reports, accounts or actions... (Esc to close)" autocomplete="off" />
+          <button type="button" class="btn-close-search" id="btn-close-global-search">ESC</button>
+        </div>
+        <div class="search-results-list" id="global-search-results">
+          <!-- Rendered by js/global_search.js -->
+        </div>
+      </div>
+    </div>
+
+    <div id="app-toast" class="app-toast"></div>
   </div>
 </div>
-
-<!-- Modal: Global Quick Search (Ctrl+K) -->
-<div class="modal-overlay" id="modal-global-search">
-  <div class="search-modal-box">
-    <div class="search-input-header">
-      <span class="search-input-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      </span>
-      <input type="text" id="input-global-search" class="search-main-input" placeholder="Search invoices, products, reports, accounts or actions... (Esc to close)" autocomplete="off" />
-      <button type="button" class="btn-close-search" id="btn-close-global-search">ESC</button>
-    </div>
-    <div class="search-results-list" id="global-search-results">
-      <!-- Rendered by js/global_search.js -->
-    </div>
-  </div>
-</div>
-
-<div id="app-toast" class="app-toast"></div>
 
 <!-- Scripts -->
 <script src="qwebchannel.js"></script>

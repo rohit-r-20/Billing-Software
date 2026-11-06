@@ -94,6 +94,20 @@ html, body {
   box-sizing: border-box;
 }
 
+.alpha-app-shell {
+  display: flex;
+  flex-direction: row;
+  width: calc(100vw / var(--ui-scale, 1));
+  height: calc(100vh / var(--ui-scale, 1));
+  max-width: calc(100vw / var(--ui-scale, 1));
+  max-height: calc(100vh / var(--ui-scale, 1));
+  position: relative;
+  zoom: var(--ui-scale, 1);
+  background: var(--bg-desktop);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
 /* -------------------------------------------------------------
    Top Alpha Titlebar & Zoom Tools
 ------------------------------------------------------------- */
@@ -5243,5 +5257,122 @@ html, body {
   background-color: #eff6ff !important;
   outline: 2px solid #2563eb !important;
 }
+
+/* =============================================================
+   INDEPENDENT PRINT ENGINE & PAGE GEOMETRY
+   Screen zoom MUST NOT affect actual printed invoice dimensions.
+   Thermal 58mm/80mm and A4/A5 retain exact physical proportions.
+   ============================================================= */
+@media print {
+  :root {
+    --ui-scale: 1 !important;
+  }
+
+  html,
+  body,
+  #app-root,
+  .alpha-app-shell,
+  .desktop-container {
+    zoom: 1 !important;
+    transform: none !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide interactive application chrome during printing */
+  .alpha-sidebar,
+  .alpha-top-header,
+  .alpha-app-tabs-bar,
+  .header-zoom-strip,
+  .btn-header-zoom,
+  .form-screen-ribbon,
+  .vch-bottom-hotkeys,
+  .pos-ribbon,
+  .pos-hotkeys-bar,
+  .btn-action,
+  .btn-classic,
+  .app-toast,
+  .modal-overlay:not(.show):not(.active) {
+    display: none !important;
+  }
+
+  /* Modal overlay containing the print preview should be unconstrained */
+  .modal-overlay.show,
+  .modal-overlay.active {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    background: transparent !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .modal-overlay .create-comp-dialog-box,
+  .modal-overlay .search-modal-box {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .modal-overlay .create-comp-header,
+  .modal-overlay .dialog-close-btn {
+    display: none !important;
+  }
+
+  /* Thermal Receipt and POS Invoice Sheets retain strict unscaled dimensions */
+  .pos-invoice-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 auto !important;
+    page-break-after: avoid !important;
+  }
+
+  .pos-invoice-sheet.sheet-a4 {
+    width: 100% !important;
+    max-width: 210mm !important;
+    min-height: auto !important;
+    padding: 10mm !important;
+  }
+
+  .pos-invoice-sheet.sheet-a5 {
+    width: 100% !important;
+    max-width: 148mm !important;
+    min-height: auto !important;
+    padding: 8mm !important;
+  }
+
+  .pos-invoice-sheet.sheet-thermal-80 {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 3mm !important;
+    font-size: 12px !important;
+  }
+
+  .pos-invoice-sheet.sheet-thermal-58 {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 2mm !important;
+    font-size: 11px !important;
+  }
+
+  .thermal-paper-pre {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    width: 80mm !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
 
 
