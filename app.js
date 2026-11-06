@@ -1913,6 +1913,8 @@ function openModifyAccountMaster(accId) {
     if (opTypeEl) opTypeEl.value = acc.op_type || acc.opType || "D";
     const addr1El = document.getElementById("acc-addr1");
     if (addr1El) addr1El.value = acc.address || "";
+    const countryEl = document.getElementById("acc-country");
+    if (countryEl) countryEl.value = acc.country || "India";
     const stateEl = document.getElementById("acc-state");
     if (stateEl) stateEl.value = acc.state || "Tamilnadu";
     const dealerEl = document.getElementById("acc-dealer-type");
@@ -1922,12 +1924,18 @@ function openModifyAccountMaster(accId) {
     if (accGstin) accGstin.value = acc.gstin || "";
     const mobEl = document.getElementById("acc-mobile");
     if (mobEl) mobEl.value = acc.mobile || "";
+    const waEl = document.getElementById("acc-whatsapp");
+    if (waEl) waEl.value = acc.whatsapp || "";
     const bankNameEl = document.getElementById("acc-bank-name");
     if (bankNameEl) bankNameEl.value = acc.bank_name || acc.bankName || "";
     const bankAccEl = document.getElementById("acc-bank-acc");
     if (bankAccEl) bankAccEl.value = acc.bank_acc || acc.bankAcc || "";
     const ifscEl = document.getElementById("acc-bank-ifsc");
     if (ifscEl) ifscEl.value = acc.ifsc || "";
+    const pinEl = document.getElementById("acc-pincode");
+    if (pinEl) pinEl.value = acc.pincode || "";
+    const notesEl = document.getElementById("acc-extra-info");
+    if (notesEl) notesEl.value = acc.notes || "";
     const titleEl = document.getElementById("account-master-screen-title");
     if (titleEl) titleEl.textContent = `Modify Account Master: ${acc.name}`;
     showScreen("view-add-account-master");
@@ -1979,7 +1987,17 @@ function renderAccountMasterList(searchQuery, groupFilter) {
                            (acc.mobile && acc.mobile.includes(q)) || 
                            (acc.gstin && acc.gstin.toLowerCase().includes(q)) ||
                            (acc.account_group && acc.account_group.toLowerCase().includes(q));
-      const matchG = !g || acc.account_group === g || acc.group === g;
+      let matchG = true;
+      if (g) {
+        const ag = acc.account_group || acc.group || "";
+        if (g === "Sundry Debtors") {
+          matchG = ag === "Sundry Debtors" || ag.includes("Both");
+        } else if (g === "Sundry Creditors") {
+          matchG = ag === "Sundry Creditors" || ag.includes("Both");
+        } else {
+          matchG = ag === g;
+        }
+      }
       return matchQ && matchG;
     });
 
@@ -1994,10 +2012,25 @@ function renderAccountMasterList(searchQuery, groupFilter) {
     filtered.forEach((acc, idx) => {
       const tr = document.createElement("tr");
       const bal = parseFloat(acc.current_balance ?? acc.op_bal ?? acc.opBal ?? 0) || 0;
+      const rawGrp = acc.account_group || acc.group || "Sundry Debtors";
+      let badgeStyle = "background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;";
+      let badgeLabel = rawGrp;
+      if (rawGrp === "Sundry Debtors") {
+        badgeStyle = "background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;";
+        badgeLabel = "Customer";
+      } else if (rawGrp === "Sundry Creditors") {
+        badgeStyle = "background: #fef3c7; color: #92400e; border: 1px solid #fde68a;";
+        badgeLabel = "Supplier";
+      } else if (rawGrp.includes("Both")) {
+        badgeStyle = "background: #ede9fe; color: #6b21a8; border: 1px solid #ddd6fe;";
+        badgeLabel = "Customer & Supplier";
+      }
+      const inactiveTag = acc.is_active === 0 ? '<span style="display: inline-block; margin-left: 6px; font-size: 10px; padding: 1px 5px; background: #fee2e2; color: #991b1b; border-radius: 3px; font-weight: 700;">INACTIVE</span>' : '';
+
       tr.innerHTML = `
         <td style="text-align: center; color: #64748b;">${idx + 1}</td>
-        <td><strong>${escapeHtml(acc.name)}</strong></td>
-        <td><span class="badge-category">${escapeHtml(acc.account_group || acc.group || "Sundry Debtors")}</span></td>
+        <td><strong>${escapeHtml(acc.name)}</strong>${inactiveTag}</td>
+        <td><span class="badge-category" style="${badgeStyle}">${escapeHtml(badgeLabel)}</span></td>
         <td>${escapeHtml(acc.customer_category || acc.customerCategory || "Direct Customer")}</td>
         <td>${escapeHtml(acc.gstin || acc.state || "-")}</td>
         <td>${escapeHtml(acc.mobile || "-")}</td>
@@ -2088,13 +2121,17 @@ function handleSaveAccountMaster() {
       document.getElementById("acc-addr1") ? document.getElementById("acc-addr1").value.trim() : "",
       document.getElementById("acc-addr2") ? document.getElementById("acc-addr2").value.trim() : ""
     ].filter(Boolean).join(", "),
+    country: document.getElementById("acc-country") ? document.getElementById("acc-country").value.trim() : "India",
     state: document.getElementById("acc-state") ? document.getElementById("acc-state").value.trim() : "Tamilnadu",
     dealerType: document.getElementById("acc-dealer-type") ? document.getElementById("acc-dealer-type").value : "Unregistered",
     gstin: accGstin ? accGstin.value.trim().toUpperCase() : "",
     mobile: document.getElementById("acc-mobile") ? document.getElementById("acc-mobile").value.trim() : "",
+    whatsapp: document.getElementById("acc-whatsapp") ? document.getElementById("acc-whatsapp").value.trim() : "",
     bankName: document.getElementById("acc-bank-name") ? document.getElementById("acc-bank-name").value.trim() : "",
     bankAcc: document.getElementById("acc-bank-acc") ? document.getElementById("acc-bank-acc").value.trim() : "",
     ifsc: document.getElementById("acc-bank-ifsc") ? document.getElementById("acc-bank-ifsc").value.trim().toUpperCase() : "",
+    pincode: document.getElementById("acc-pincode") ? document.getElementById("acc-pincode").value.trim() : "",
+    notes: document.getElementById("acc-extra-info") ? document.getElementById("acc-extra-info").value.trim() : "",
     createdAt: new Date().toISOString()
   };
   if (existingAccId) {
@@ -2628,24 +2665,53 @@ function initSalesVoucherScreen() {
 
   // Reset inputs
   vchPartyInput.value = "CASH";
+  delete vchPartyInput.dataset.accountId;
   vchNarration.value = "";
   updateVoucherPartyCategory();
 
-  // Populate Party autocomplete list from Account Masters
-  partyDatalist.innerHTML = "";
-  const optCash = document.createElement("option");
-  optCash.value = "CASH";
-  partyDatalist.appendChild(optCash);
+  // Populate Party autocomplete list from permanent database Account Masters
+  const populatePartyList = (accounts) => {
+    partyDatalist.innerHTML = "";
+    const optCash = document.createElement("option");
+    optCash.value = "CASH";
+    optCash.label = "Direct Cash Sale";
+    partyDatalist.appendChild(optCash);
 
-  if (activeCompany) {
-    const key = `alpha_accounts_${activeCompany.code}`;
-    const accounts = JSON.parse(localStorage.getItem(key) || "[]");
     accounts.forEach((acc) => {
+      const grp = acc.account_group || acc.group || "";
+      const isCust = grp === "Sundry Debtors" || grp.includes("Both") || grp === "Customer" ||
+                     acc.classification === "Customer" || acc.classification === "Both (Customer & Supplier)";
+      if (!isCust && grp && grp !== "Sundry Debtors") return;
+
       const opt = document.createElement("option");
       opt.value = acc.name;
-      opt.label = `${acc.group} | GST: ${acc.gstin || "N/A"}`;
+      opt.label = `${acc.account_group || acc.group || "Customer"} | GST: ${acc.gstin || "N/A"}`;
       partyDatalist.appendChild(opt);
     });
+  };
+
+  if (activeCompany) {
+    if (window.backend && window.backend.listAccounts) {
+      window.backend.listAccounts(activeCompany.id, (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success && Array.isArray(r.data)) {
+            cachedAccountsList = r.data;
+            populatePartyList(r.data);
+            return;
+          }
+        } catch (e) {}
+        const key = `alpha_accounts_${activeCompany.code}`;
+        const accounts = JSON.parse(localStorage.getItem(key) || "[]");
+        cachedAccountsList = accounts;
+        populatePartyList(accounts);
+      });
+    } else {
+      const key = `alpha_accounts_${activeCompany.code}`;
+      const accounts = JSON.parse(localStorage.getItem(key) || "[]");
+      cachedAccountsList = accounts;
+      populatePartyList(accounts);
+    }
   }
 
   // Render 11 item rows
@@ -2885,6 +2951,7 @@ function updateVoucherPartyCategory() {
   if (!badgeEl) return;
 
   if (!partyName || partyName === "CASH" || partyName === "CASH SALE") {
+    delete vchPartyInput.dataset.accountId;
     activeVoucherCustomerCategory = "Direct Customer";
     const discPct = cachedCategoryDiscounts["Direct Customer"] || 0.0;
     badgeEl.textContent = `Direct (${discPct}%)`;
@@ -2893,7 +2960,17 @@ function updateVoucherPartyCategory() {
     return;
   }
 
-  const foundAcc = cachedAccountsList.find(a => (a.name || "").toUpperCase() === partyName);
+  const foundAcc = cachedAccountsList.find(a => 
+    (a.name || "").toUpperCase() === partyName ||
+    (a.print_name || a.printName || "").toUpperCase() === partyName ||
+    (a.alias || "").toUpperCase() === partyName
+  );
+  if (foundAcc && foundAcc.id) {
+    vchPartyInput.dataset.accountId = foundAcc.id;
+  } else {
+    delete vchPartyInput.dataset.accountId;
+  }
+
   const cat = (foundAcc && foundAcc.customer_category) ? foundAcc.customer_category : (foundAcc && foundAcc.customerCategory ? foundAcc.customerCategory : "Direct Customer");
   activeVoucherCustomerCategory = cat;
   const discPct = cachedCategoryDiscounts[cat] !== undefined ? cachedCategoryDiscounts[cat] : (cat === "Commercial" ? 5.0 : (cat === "Sub-Commercial" ? 2.5 : 0.0));
@@ -3097,6 +3174,7 @@ function handleSaveSalesVoucher() {
   if (window.backend && activeCompany) {
     const payload = {
       party_name: party,
+      account_id: vchPartyInput.dataset.accountId || undefined,
       customer_category: activeVoucherCustomerCategory || "Direct Customer",
       sale_type: vchSaleType.value,
       payment_method: "CASH",
@@ -3556,7 +3634,10 @@ function initPosCustomerSelector() {
           const r = JSON.parse(resp);
           if (r.success && Array.isArray(r.data)) {
             cachedAccountsList = r.data;
-            populateOptions(r.data.filter(a => a.account_group === "Sundry Debtors" || a.group === "Sundry Debtors" || !a.account_group));
+            populateOptions(r.data.filter(a => {
+              const grp = a.account_group || a.group || "";
+              return !grp || grp === "Sundry Debtors" || grp.includes("Both") || a.classification === "Customer" || a.classification === "Both (Customer & Supplier)";
+            }));
           } else {
             populateOptions(localAccounts);
           }

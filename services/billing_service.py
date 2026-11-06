@@ -129,7 +129,19 @@ class BillingService:
                         VALUES (?, ?, 'MAIN', 'Main Branch', 1);
                     """, (branch_id, company_id))
 
-            # Resolve customer category if not explicitly provided
+            # Resolve customer category and account_id if not explicitly provided
+            if not account_id and party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
+                cursor.execute("""
+                    SELECT id, customer_category FROM accounts
+                    WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(print_name) = ? OR UPPER(alias) = ?)
+                    LIMIT 1;
+                """, (company_id, party_name.strip().upper(), party_name.strip().upper(), party_name.strip().upper()))
+                acc_row = cursor.fetchone()
+                if acc_row:
+                    account_id = acc_row["id"]
+                    if not customer_category and acc_row["customer_category"]:
+                        customer_category = acc_row["customer_category"]
+
             resolved_category = (customer_category or "").strip()
             if not resolved_category:
                 if account_id:
@@ -546,7 +558,21 @@ class BillingService:
             cursor.execute("DELETE FROM payments WHERE voucher_id = ?;", (vch_id,))
             cursor.execute("DELETE FROM sales_voucher_items WHERE voucher_id = ?;", (vch_id,))
 
-            # 4. Resolve customer category
+            # 4. Resolve customer category and account_id
+            if not account_id and party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
+                cursor.execute("""
+                    SELECT id, customer_category FROM accounts
+                    WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(print_name) = ? OR UPPER(alias) = ?)
+                    LIMIT 1;
+                """, (company_id, party_name.strip().upper(), party_name.strip().upper(), party_name.strip().upper()))
+                acc_row = cursor.fetchone()
+                if acc_row:
+                    account_id = acc_row["id"]
+                    if not customer_category and acc_row["customer_category"]:
+                        customer_category = acc_row["customer_category"]
+            if not account_id:
+                account_id = old_vch["account_id"] if "account_id" in old_vch.keys() else None
+
             resolved_category = (customer_category or "").strip()
             if not resolved_category:
                 if account_id:

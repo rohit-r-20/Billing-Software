@@ -70,7 +70,16 @@ class DatabaseManager:
                 if version not in applied_versions:
                     logger.info(f"Applying migration {sql_file.name} (v{version})...")
                     script = sql_file.read_text(encoding="utf-8")
-                    conn.executescript(script)
+                    for stmt in script.split(";"):
+                        stmt = stmt.strip()
+                        if not stmt:
+                            continue
+                        try:
+                            conn.execute(stmt)
+                        except sqlite3.OperationalError as oe:
+                            if "duplicate column name" in str(oe).lower():
+                                continue
+                            raise
                     conn.execute(
                         "INSERT INTO schema_migrations (version, name) VALUES (?, ?);",
                         (version, sql_file.name)

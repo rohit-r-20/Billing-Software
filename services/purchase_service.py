@@ -150,7 +150,58 @@ class PurchaseService:
             )
 
         # Supplier resolution / automatic registration
-        supp_obj = self.supplier_service.find_supplier_by_name(actual_comp_id, supplier_name)
+        supplier_id = (data.get("supplier_id") or data.get("supplierId") or "").strip()
+        supp_obj = None
+        if supplier_id:
+            supp_obj = self.supplier_service.get_supplier_by_id(actual_comp_id, supplier_id)
+            if not supp_obj:
+                with self.db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM accounts WHERE company_id = ? AND id = ?;", (actual_comp_id, supplier_id))
+                    acc_row = cursor.fetchone()
+                    if acc_row:
+                        supp_obj = dict(acc_row)
+                        # Ensure mirrored in suppliers table to satisfy foreign key constraint
+                        code = f"SUP-{supplier_id[:6].upper()}"
+                        cursor.execute("""
+                            INSERT INTO suppliers (
+                                id, company_id, code, name, contact_person, mobile, email, gstin,
+                                pan, address, city, state, pincode, opening_balance, current_balance,
+                                payment_terms, is_active
+                            ) VALUES (?, ?, ?, ?, ?, ?, '', ?, '', ?, '', ?, ?, 0.0, 0.0, 30, 1)
+                            ON CONFLICT(company_id, name) DO NOTHING;
+                        """, (
+                            supplier_id, actual_comp_id, code, acc_row["name"], acc_row["alias"],
+                            acc_row["mobile"] or "", acc_row["gstin"] or "", acc_row["address"] or "",
+                            acc_row["state"] or "Tamilnadu", acc_row["pincode"] or ""
+                        ))
+                        conn.commit()
+
+        if not supp_obj:
+            supp_obj = self.supplier_service.find_supplier_by_name(actual_comp_id, supplier_name)
+            if not supp_obj:
+                with self.db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM accounts WHERE company_id = ? AND UPPER(name) = ?;", (actual_comp_id, supplier_name.upper()))
+                    acc_row = cursor.fetchone()
+                    if acc_row:
+                        supp_obj = dict(acc_row)
+                        sup_acc_id = acc_row["id"]
+                        code = f"SUP-{sup_acc_id[:6].upper()}"
+                        cursor.execute("""
+                            INSERT INTO suppliers (
+                                id, company_id, code, name, contact_person, mobile, email, gstin,
+                                pan, address, city, state, pincode, opening_balance, current_balance,
+                                payment_terms, is_active
+                            ) VALUES (?, ?, ?, ?, ?, ?, '', ?, '', ?, '', ?, ?, 0.0, 0.0, 30, 1)
+                            ON CONFLICT(company_id, name) DO NOTHING;
+                        """, (
+                            sup_acc_id, actual_comp_id, code, acc_row["name"], acc_row["alias"],
+                            acc_row["mobile"] or "", acc_row["gstin"] or "", acc_row["address"] or "",
+                            acc_row["state"] or "Tamilnadu", acc_row["pincode"] or ""
+                        ))
+                        conn.commit()
+
         if not supp_obj:
             saved_supp = self.supplier_service.save_supplier(actual_comp_id, {
                 "name": supplier_name,

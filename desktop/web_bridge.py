@@ -115,7 +115,7 @@ class BackendBridge(QObject):
     def listAccounts(self, company_id: str) -> str:
         try:
             accs = account_service.list_accounts(company_id)
-            return json.dumps({"success": True, "data": accs})
+            return json.dumps({"success": True, "data": accs}, default=str)
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -124,7 +124,7 @@ class BackendBridge(QObject):
         try:
             data = json.loads(json_data)
             acc = account_service.save_account(company_id, data)
-            return json.dumps({"success": True, "data": acc})
+            return json.dumps({"success": True, "data": acc}, default=str)
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -133,8 +133,50 @@ class BackendBridge(QObject):
         try:
             acc = account_service.get_account_by_id(company_id, account_id)
             if acc:
-                return json.dumps({"success": True, "data": acc})
+                return json.dumps({"success": True, "data": acc}, default=str)
             return json.dumps({"success": False, "error": f"Account with ID '{account_id}' not found."})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def searchCustomers(self, company_id: str, query: str = "") -> str:
+        try:
+            customers = account_service.search_customers(company_id, query)
+            return json.dumps({"success": True, "data": customers}, default=str)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def searchSuppliers(self, company_id: str, query: str = "") -> str:
+        try:
+            suppliers = account_service.search_suppliers(company_id, query)
+            return json.dumps({"success": True, "data": suppliers}, default=str)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def deleteAccount(self, company_id: str, account_id: str) -> str:
+        try:
+            account_service.delete_account(company_id, account_id)
+            return json.dumps({"success": True, "data": True})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, bool, result=str)
+    def toggleAccountActive(self, company_id: str, account_id: str, is_active: bool) -> str:
+        try:
+            with account_service.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE accounts SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? AND id = ?;",
+                    (1 if is_active else 0, company_id, account_id)
+                )
+                cursor.execute(
+                    "UPDATE suppliers SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? AND id = ?;",
+                    (1 if is_active else 0, company_id, account_id)
+                )
+                conn.commit()
+            return json.dumps({"success": True, "data": is_active})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -238,6 +280,7 @@ class BackendBridge(QObject):
                 company_id=company_id,
                 items=items,
                 party_name=party,
+                account_id=payload.get("account_id"),
                 sale_type=sale_type,
                 payment_method=pay_method,
                 payments=payments,
