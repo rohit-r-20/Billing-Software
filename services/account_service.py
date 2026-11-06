@@ -50,7 +50,8 @@ class AccountService:
 
         acc_id = account_data.get("id") or str(uuid.uuid4())
         alias = account_data.get("alias", "").strip()
-        print_name = account_data.get("printName") or account_data.get("print_name") or name
+        # In Masters, Print Name is automatically synchronised and matches Name
+        print_name = name
         group = account_data.get("group") or account_data.get("account_group") or "Sundry Debtors"
         op_bal = float(account_data.get("opBal") or account_data.get("op_bal") or 0.0)
         op_type = account_data.get("opType") or account_data.get("op_type") or "Dr"
@@ -99,7 +100,15 @@ class AccountService:
             conn.commit()
 
         logger.info(f"Account {name} saved for company {company_id} (Category: {cust_cat}).")
-        return {"id": acc_id, "name": name, "group": group, "gstin": gstin, "customer_category": cust_cat}
+        return {
+            "id": acc_id,
+            "name": name,
+            "print_name": print_name,
+            "alias": alias,
+            "group": group,
+            "gstin": gstin,
+            "customer_category": cust_cat
+        }
 
 
 account_service = AccountService()

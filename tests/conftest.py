@@ -15,7 +15,15 @@ def qt_app():
 
 @pytest.fixture(scope="session")
 def session_web_view(qt_app):
+    from PyQt5.QtWebChannel import QWebChannel
+    from desktop.web_bridge import BackendBridge
+
     view = QWebEngineView()
+    channel = QWebChannel(view)
+    bridge = BackendBridge(view)
+    channel.registerObject("backend", bridge)
+    view.page().setWebChannel(channel)
+
     view.resize(1280, 800)
     view.show()
     view.load(QUrl.fromLocalFile(str(INDEX_HTML_PATH)))

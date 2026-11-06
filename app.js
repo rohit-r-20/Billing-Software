@@ -203,6 +203,8 @@ const btnAccCloseTop = document.getElementById("btn-acc-close-top");
 const btnValidateGstin = document.getElementById("btn-validate-gstin");
 const accGstin = document.getElementById("acc-gstin");
 const accName = document.getElementById("acc-name");
+const accPrintName = document.getElementById("acc-print-name");
+const accAlias = document.getElementById("acc-alias");
 
 const formItemMaster = document.getElementById("form-item-master");
 const itemIdInput = document.getElementById("item-id");
@@ -1814,14 +1816,69 @@ let currentModifySaleVchId = null;
 let isSalesModifyMode = false;
 let currentModifyPurchaseVchId = null;
 let isPurchaseModifyMode = false;
+let isSavingAccount = false;
 
-function openAddAccountMaster() {
+function syncAccountPrintName() {
+  if (accPrintName && accName) {
+    accPrintName.value = accName.value;
+  }
+}
+
+function resetAccountMasterAddForm() {
   if (formAccountMaster) formAccountMaster.reset();
   const idEl = document.getElementById("acc-id");
   if (idEl) idEl.value = "";
+  if (accName) accName.value = "";
+  if (accAlias) accAlias.value = "";
+  if (accPrintName) accPrintName.value = "";
+
+  const groupEl = document.getElementById("acc-group");
+  if (groupEl) groupEl.value = "Sundry Debtors";
+  const opBalEl = document.getElementById("acc-op-bal");
+  if (opBalEl) opBalEl.value = "0.00";
+  const opTypeEl = document.getElementById("acc-op-type");
+  if (opTypeEl) opTypeEl.value = "D";
+  const prevBalEl = document.getElementById("acc-prev-bal");
+  if (prevBalEl) prevBalEl.value = "0.00";
+  const prevTypeEl = document.getElementById("acc-prev-type");
+  if (prevTypeEl) prevTypeEl.value = "D";
+  const addr1El = document.getElementById("acc-addr1");
+  if (addr1El) addr1El.value = "";
+  const addr2El = document.getElementById("acc-addr2");
+  if (addr2El) addr2El.value = "";
+  const countryEl = document.getElementById("acc-country");
+  if (countryEl) countryEl.value = "India";
+  const stateEl = document.getElementById("acc-state");
+  if (stateEl) stateEl.value = "Tamilnadu";
+  const dealerEl = document.getElementById("acc-dealer-type");
+  if (dealerEl) dealerEl.value = "Unregistered";
+  const catEl = document.getElementById("acc-customer-category");
+  if (catEl) catEl.value = "Direct Customer";
+  const gstinEl = document.getElementById("acc-gstin");
+  if (gstinEl) gstinEl.value = "";
+  const mobEl = document.getElementById("acc-mobile");
+  if (mobEl) mobEl.value = "";
+  const waEl = document.getElementById("acc-whatsapp");
+  if (waEl) waEl.value = "";
+  const bankNameEl = document.getElementById("acc-bank-name");
+  if (bankNameEl) bankNameEl.value = "";
+  const bankAccEl = document.getElementById("acc-bank-acc");
+  if (bankAccEl) bankAccEl.value = "";
+  const ifscEl = document.getElementById("acc-bank-ifsc");
+  if (ifscEl) ifscEl.value = "";
+  const pinEl = document.getElementById("acc-pincode");
+  if (pinEl) pinEl.value = "";
+  const extraEl = document.getElementById("acc-extra-info");
+  if (extraEl) extraEl.value = "";
+
   const titleEl = document.getElementById("account-master-screen-title");
   if (titleEl) titleEl.textContent = "Add Account Master";
+}
+
+function openAddAccountMaster() {
+  resetAccountMasterAddForm();
   showScreen("view-add-account-master");
+  setTimeout(() => { if (accName) accName.focus(); }, 50);
 }
 
 function openModifyAccountMaster(accId) {
@@ -1980,74 +2037,142 @@ function renderAccountMasterList(searchQuery, groupFilter) {
 }
 
 function handleSaveAccountMaster() {
-  const name = accName.value.trim();
+  if (isSavingAccount) return;
+
+  const name = accName ? accName.value.trim() : "";
   if (!name) {
     alert("Please enter Account Name.");
-    accName.focus();
+    if (accName) accName.focus();
     return;
   }
 
-  const custCategory = document.getElementById("acc-customer-category") ? document.getElementById("acc-customer-category").value : "Direct Customer";
+  const groupEl = document.getElementById("acc-group");
+  const group = groupEl ? groupEl.value.trim() : "Sundry Debtors";
+  if (!group) {
+    alert("Please select an Account Group.");
+    if (groupEl) groupEl.focus();
+    return;
+  }
+
+  // Prevent duplicate saves caused by repeated button clicks
+  isSavingAccount = true;
+  if (btnAccSave) {
+    btnAccSave.disabled = true;
+    btnAccSave.style.opacity = "0.6";
+  }
+
+  // Print Name is automatically populated and synchronised with Name
+  const printName = name;
+  if (accPrintName) accPrintName.value = name;
+
+  const alias = accAlias ? accAlias.value.trim() : (document.getElementById("acc-alias") ? document.getElementById("acc-alias").value.trim() : "");
   const existingAccId = document.getElementById("acc-id") ? document.getElementById("acc-id").value : "";
+  const custCategory = document.getElementById("acc-customer-category") ? document.getElementById("acc-customer-category").value : "Direct Customer";
+  const opBal = document.getElementById("acc-op-bal") ? parseFloat(document.getElementById("acc-op-bal").value) || 0.0 : 0.0;
+  const opType = document.getElementById("acc-op-type") ? document.getElementById("acc-op-type").value : "D";
 
   const accountData = {
     name: name,
-    alias: document.getElementById("acc-alias").value.trim(),
-    printName: document.getElementById("acc-print-name").value.trim(),
-    group: document.getElementById("acc-group").value,
+    alias: alias,
+    printName: printName,
+    print_name: printName,
+    group: group,
+    account_group: group,
     customerCategory: custCategory,
     customer_category: custCategory,
-    opBal: document.getElementById("acc-op-bal").value,
-    opType: document.getElementById("acc-op-type").value,
+    opBal: opBal,
+    op_bal: opBal,
+    opType: opType,
+    op_type: opType,
     address: [
-      document.getElementById("acc-addr1").value.trim(),
-      document.getElementById("acc-addr2").value.trim()
+      document.getElementById("acc-addr1") ? document.getElementById("acc-addr1").value.trim() : "",
+      document.getElementById("acc-addr2") ? document.getElementById("acc-addr2").value.trim() : ""
     ].filter(Boolean).join(", "),
-    state: document.getElementById("acc-state").value.trim(),
-    dealerType: document.getElementById("acc-dealer-type").value,
-    gstin: accGstin.value.trim().toUpperCase(),
-    mobile: document.getElementById("acc-mobile").value.trim(),
-    bankName: document.getElementById("acc-bank-name").value.trim(),
-    bankAcc: document.getElementById("acc-bank-acc").value.trim(),
-    ifsc: document.getElementById("acc-bank-ifsc").value.trim().toUpperCase(),
+    state: document.getElementById("acc-state") ? document.getElementById("acc-state").value.trim() : "Tamilnadu",
+    dealerType: document.getElementById("acc-dealer-type") ? document.getElementById("acc-dealer-type").value : "Unregistered",
+    gstin: accGstin ? accGstin.value.trim().toUpperCase() : "",
+    mobile: document.getElementById("acc-mobile") ? document.getElementById("acc-mobile").value.trim() : "",
+    bankName: document.getElementById("acc-bank-name") ? document.getElementById("acc-bank-name").value.trim() : "",
+    bankAcc: document.getElementById("acc-bank-acc") ? document.getElementById("acc-bank-acc").value.trim() : "",
+    ifsc: document.getElementById("acc-bank-ifsc") ? document.getElementById("acc-bank-ifsc").value.trim().toUpperCase() : "",
     createdAt: new Date().toISOString()
   };
   if (existingAccId) {
     accountData.id = existingAccId;
   }
 
-  if (activeCompany) {
-    if (window.backend) {
-      window.backend.saveAccount(activeCompany.id, JSON.stringify(accountData), (resp) => {
-        try {
-          const r = JSON.parse(resp);
-          if (r.success) {
-            showNotification(existingAccId ? `Account "${name}" modified successfully!` : `Account "${name}" saved to database!`);
-          }
-        } catch (e) {}
-      });
+  const completeSave = (savedData) => {
+    // Sync localStorage cache
+    if (activeCompany) {
+      const key = `alpha_accounts_${activeCompany.code}`;
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) {}
+      const targetId = (savedData && savedData.id) || existingAccId;
+      const existingIdx = list.findIndex(a => (targetId && a.id === targetId) || (a.name && a.name.toUpperCase() === name.toUpperCase()));
+      const recordToCache = { ...accountData, id: targetId || (savedData && savedData.id) || accountData.id || ("acc-" + Date.now()) };
+      if (existingIdx !== -1) {
+        list[existingIdx] = recordToCache;
+      } else {
+        list.push(recordToCache);
+      }
+      localStorage.setItem(key, JSON.stringify(list));
     }
-    const key = `alpha_accounts_${activeCompany.code}`;
-    let list = [];
-    try {
-      list = JSON.parse(localStorage.getItem(key) || "[]");
-    } catch (e) {}
-    const existingIdx = list.findIndex(a => (existingAccId && a.id === existingAccId) || a.name === name);
-    if (existingIdx !== -1) {
-      list[existingIdx] = accountData;
-    } else {
-      list.push(accountData);
-    }
-    localStorage.setItem(key, JSON.stringify(list));
-  }
 
-  showNotification(existingAccId ? `Account Master "${name}" updated!` : `Account Master "${name}" saved!`);
-  formAccountMaster.reset();
-  const idEl = document.getElementById("acc-id");
-  if (idEl) idEl.value = "";
-  const titleEl = document.getElementById("account-master-screen-title");
-  if (titleEl) titleEl.textContent = "Add Account Master";
-  showScreen("view-account-list");
+    if (existingAccId) {
+      // Modify mode: notification, reset form, and return to account list
+      showNotification(`Account Master "${name}" updated successfully!`);
+      resetAccountMasterAddForm();
+      showScreen("view-account-list");
+      renderAccountMasterList();
+    } else {
+      // Continuous Add Workflow for NEW records:
+      // 1. Clear success confirmation
+      showNotification(`Account Master "${name}" saved successfully!`);
+      // 2. Reset form fields for next entry while preserving defaults
+      resetAccountMasterAddForm();
+      // 3. Keep user on the same Add Master screen (no redirect to Dashboard, List, Modify, etc.)
+      showScreen("view-add-account-master");
+      // 4. Automatically focus Name field
+      setTimeout(() => {
+        if (accName) accName.focus();
+      }, 50);
+    }
+
+    isSavingAccount = false;
+    if (btnAccSave) {
+      btnAccSave.disabled = false;
+      btnAccSave.style.opacity = "";
+    }
+  };
+
+  const failSave = (errMsg) => {
+    isSavingAccount = false;
+    if (btnAccSave) {
+      btnAccSave.disabled = false;
+      btnAccSave.style.opacity = "";
+    }
+    // Retain entered form data - do NOT clear form
+    alert(`Failed to save Account Master: ${errMsg || "Unknown database error"}`);
+    if (accName) accName.focus();
+  };
+
+  if (activeCompany && window.backend && typeof window.backend.saveAccount === "function") {
+    window.backend.saveAccount(activeCompany.id, JSON.stringify(accountData), (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success) {
+          completeSave(r.data);
+        } else {
+          failSave(r ? r.error : "Failed to save Account Master.");
+        }
+      } catch (e) {
+        failSave(e.message);
+      }
+    });
+  } else {
+    // Standalone / preview mode
+    completeSave({ id: "acc-" + Date.now(), name: name });
+  }
 }
 
 function validateGstinOnline() {
@@ -4794,6 +4919,24 @@ btnAccSave.addEventListener("click", handleSaveAccountMaster);
 btnAccQuit.addEventListener("click", () => showScreen("view-dashboard"));
 btnAccCloseTop.addEventListener("click", () => showScreen("view-dashboard"));
 btnValidateGstin.addEventListener("click", validateGstinOnline);
+
+if (accName) {
+  accName.addEventListener("input", syncAccountPrintName);
+  accName.addEventListener("change", syncAccountPrintName);
+  accName.addEventListener("keyup", syncAccountPrintName);
+  accName.addEventListener("paste", () => setTimeout(syncAccountPrintName, 0));
+}
+
+if (accPrintName) {
+  accPrintName.readOnly = true;
+  accPrintName.setAttribute("readonly", "readonly");
+  accPrintName.addEventListener("keydown", (e) => {
+    e.preventDefault();
+  });
+  accPrintName.addEventListener("paste", (e) => {
+    e.preventDefault();
+  });
+}
 
 // Item Master (Add / Edit Product)
 btnItemSave.addEventListener("click", handleSaveItemMaster);
