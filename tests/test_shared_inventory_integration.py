@@ -40,6 +40,16 @@ def _get_or_create_test_company():
 
 COMPANY_ID = _get_or_create_test_company()
 
+# Ensure customer masters exist for deterministic test runs
+with db_manager.get_connection() as _conn:
+    for _cname in ("TRADITIONAL CUSTOMER", "ENTERPRISE CLIENT", "RETURN TEST PARTY"):
+        _conn.execute("""
+            INSERT INTO accounts (id, company_id, name, account_group, is_active)
+            VALUES (?, ?, ?, 'Sundry Debtors', 1)
+            ON CONFLICT(company_id, name) DO NOTHING;
+        """, (str(uuid.uuid4()), COMPANY_ID, _cname))
+    _conn.commit()
+
 
 def _get_default_branch(company_id: str) -> str:
     with db_manager.get_connection() as conn:

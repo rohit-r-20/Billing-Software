@@ -357,6 +357,9 @@ class BackendBridge(QObject):
                 sale_type=sale_type,
                 payment_method=pay_method,
                 payments=payments,
+                branch_id=payload.get("branch_id"),
+                vch_date=payload.get("vch_date"),
+                series=payload.get("series", "Main"),
                 narration=narration,
                 customer_category=payload.get("customer_category")
             )

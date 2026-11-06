@@ -1314,12 +1314,10 @@
             <div class="vch-meta-row">
               <div class="meta-item flex-2">
                 <span class="meta-label">Party</span>
-                <div class="party-picker-box" style="display: flex; align-items: center; gap: 8px;">
-                  <input type="text" id="vch-party-input" placeholder="Select or type Customer / Party Name" list="party-datalist" autocomplete="off" />
+                <div class="party-picker-box" style="display: flex; align-items: center; gap: 8px; position: relative;">
+                  <input type="text" id="vch-party-input" placeholder="Search Customer from Masters (or Cash)..." autocomplete="off" />
                   <span id="vch-party-category-badge" class="vch-party-category-badge" style="display: none; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap;"></span>
-                  <datalist id="party-datalist">
-                    <!-- Populated from Account Masters -->
-                  </datalist>
+                  <div id="vch-party-autocomplete-popup" class="vch-autocomplete-popup" style="display: none;"></div>
                 </div>
               </div>
               <div class="meta-item">
@@ -1347,8 +1345,8 @@
                     <tr>
                       <th class="col-vch-sn">S.N.</th>
                       <th class="col-vch-item">Item</th>
-                      <th class="col-vch-qty">Qty.</th>
                       <th class="col-vch-unit">Unit</th>
+                      <th class="col-vch-qty">Qty.</th>
                       <th class="col-vch-price">Price (Rs.)</th>
                       <th class="col-vch-amount">Amount (Rs.)</th>
                     </tr>

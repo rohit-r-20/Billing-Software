@@ -214,8 +214,11 @@ class DatabaseManager:
     Provides DBAPI connections for existing service layers and SQLAlchemy 2.x
     sessions for modern ORM and Alembic migrations.
     """
-    def __init__(self, database_url: Optional[str] = None):
-        self.database_url = database_url or config.get_database_url()
+    def __init__(self, database_url: Optional[Union[str, Path]] = None):
+        if database_url is not None:
+            self.database_url = str(database_url)
+        else:
+            self.database_url = config.get_database_url()
         self.is_postgres = self._detect_postgres(self.database_url)
         self.is_sqlite = not self.is_postgres
         self.dialect = "postgresql" if self.is_postgres else "sqlite"

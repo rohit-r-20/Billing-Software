@@ -4247,6 +4247,53 @@ html, body {
   color: #166534;
 }
 
+.vch-party-no-match {
+  padding: 10px 12px;
+  background-color: #fef2f2;
+  border-left: 4px solid #ef4444;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vch-party-sugg-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.vch-party-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.vch-party-badge.customer {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.vch-party-badge.both {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.vch-unit-input.input-readonly {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  cursor: default !important;
+  text-align: center;
+  font-weight: 600;
+}
+
 /* =============================================================
    PRODUCT SEARCH MODAL (F1) STYLES & DIALOG ALIGNMENT
    ============================================================= */

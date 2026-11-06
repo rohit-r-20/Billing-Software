@@ -33,6 +33,7 @@ let lastFastBillingScreen = "view-fast-billing";
 let isSavingPosSale = false;
 let currentPrintVchId = null;
 let currentPrintVchData = null;
+let printSourceScreen = "view-fast-billing";
 let currentPrintPaperFormat = "thermal-80";
 let currentPrintOrientation = "portrait";
 let todaySalesHistoryData = [];
@@ -770,7 +771,9 @@ function showScreen(screenId) {
   } else if (screenId === "view-add-item-master") {
     itemName.focus();
   } else if (screenId === "view-sales-voucher") {
-    initSalesVoucherScreen();
+    if (!isSalesModifyMode) {
+      initSalesVoucherScreen();
+    }
   } else if (screenId === "view-sales-list") {
     renderSalesRegister();
   } else if (screenId === "view-items-list") {
@@ -1205,9 +1208,10 @@ function openFastBillingReprint() {
   }
 }
 
-function openFastBillingPrint(vchId, vchData = null) {
+function openFastBillingPrint(vchId, vchData = null, sourceScreen = "view-fast-billing") {
   currentPrintVchId = vchId;
   currentPrintVchData = vchData;
+  printSourceScreen = sourceScreen;
   lastFastBillingScreen = "view-fast-billing-print";
 
   if (posPrintCompany && activeCompany) {
@@ -3092,79 +3096,387 @@ function isVoucherNumberUsed(vchNum) {
   return vouchers.some((v) => v.vchNo.trim() === vchNum.trim());
 }
 
+// =============================================================
+// REBUILT SALES INVOICE WORKFLOW & MASTER INTEGRATION
+// =============================================================
+
+// Party Autocomplete & Customer Masters State
+let currentPartySuggestions = [];
+let activePartySuggestionIndex = -1;
+let partyDebounceTimer = null;
+
+function setupPartyAutocomplete() {
+  if (!vchPartyInput) return;
+  const popup = document.getElementById("vch-party-autocomplete-popup");
+  if (!popup) return;
+
+  function renderSuggestions(list, query) {
+    popup.innerHTML = "";
+    currentPartySuggestions = list;
+    activePartySuggestionIndex = -1;
+
+    if (!list || list.length === 0) {
+      const noMatch = document.createElement("div");
+      noMatch.className = "vch-party-no-match";
+      noMatch.textContent = "No customer master found. Please create this customer in Administration → Masters → Add.";
+      popup.appendChild(noMatch);
+      popup.style.display = "block";
+      return;
+    }
+
+    list.forEach((acc, idx) => {
+      const itemEl = document.createElement("div");
+      itemEl.className = "vch-party-sugg-item";
+      itemEl.dataset.index = idx;
+
+      const isCash = (acc.id === "CASH" || (acc.name && acc.name.toUpperCase() === "CASH"));
+      const name = isCash ? "CASH" : (acc.name || "");
+      const alias = acc.alias ? ` (${acc.alias})` : "";
+      const gstin = acc.gstin ? `GST: ${acc.gstin}` : "";
+      const mobile = (acc.mobile || acc.mobile_no) ? `Mob: ${acc.mobile || acc.mobile_no}` : "";
+      const cat = acc.customer_category || acc.customerCategory || (isCash ? "Direct Customer" : "Customer");
+      const subParts = [alias ? alias.trim() : "", gstin, mobile].filter(Boolean).join(" | ");
+
+      itemEl.innerHTML = `
+        <div class="vch-party-sugg-primary">
+          <div class="vch-party-sugg-name">${escapeHtml(name)}${escapeHtml(alias)}</div>
+          <div class="vch-party-sugg-meta">${escapeHtml(subParts || (isCash ? "Direct Walk-in Retail Customer" : cat))}</div>
+        </div>
+        <div class="vch-party-badge ${isCash ? 'cash' : 'customer'}">${isCash ? 'Walk-in' : escapeHtml(cat)}</div>
+      `;
+
+      itemEl.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectPartyItem(acc);
+      });
+
+      popup.appendChild(itemEl);
+    });
+
+    popup.style.display = "block";
+  }
+
+  function selectPartyItem(acc) {
+    const isCash = (acc.id === "CASH" || (acc.name && acc.name.toUpperCase() === "CASH"));
+    if (isCash) {
+      vchPartyInput.value = "CASH";
+      delete vchPartyInput.dataset.accountId;
+    } else {
+      vchPartyInput.value = acc.name || "";
+      vchPartyInput.dataset.accountId = acc.id || "";
+    }
+    updateVoucherPartyCategory();
+    hidePartyPopup();
+
+    // Focus row 1 Item field immediately after selecting customer
+    const firstRowItem = vchItemsTbody ? vchItemsTbody.querySelector('.vch-item-input[data-row="1"]') : null;
+    if (firstRowItem) {
+      firstRowItem.focus();
+    }
+  }
+
+  function hidePartyPopup() {
+    popup.style.display = "none";
+    currentPartySuggestions = [];
+    activePartySuggestionIndex = -1;
+  }
+
+  function highlightPartySuggestion(idx) {
+    const items = popup.querySelectorAll(".vch-party-sugg-item");
+    items.forEach((el, i) => {
+      el.classList.toggle("active", i === idx);
+      if (i === idx) el.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function filterEligibleCustomers(query) {
+    const q = (query || "").trim().toUpperCase();
+    const cashOption = {
+      id: "CASH",
+      name: "CASH",
+      account_group: "Sundry Debtors",
+      classification: "Customer",
+      customer_category: "Direct Customer"
+    };
+
+    const eligible = (cachedAccountsList || []).filter((acc) => {
+      const grp = acc.account_group || acc.group || "";
+      const isCust = grp === "Sundry Debtors" || grp.includes("Both") || grp === "Customer" ||
+                     acc.classification === "Customer" || acc.classification === "Both (Customer & Supplier)";
+      return isCust || !grp;
+    });
+
+    let results = [];
+    if (!q) {
+      results = [cashOption, ...eligible.slice(0, 10)];
+    } else {
+      if ("CASH".includes(q) || "DIRECT".includes(q)) {
+        results.push(cashOption);
+      }
+      const matched = eligible.filter((acc) => {
+        const name = (acc.name || "").toUpperCase();
+        const printName = (acc.print_name || acc.printName || "").toUpperCase();
+        const alias = (acc.alias || "").toUpperCase();
+        const gstin = (acc.gstin || "").toUpperCase();
+        const mobile = (acc.mobile || acc.mobile_no || "").toUpperCase();
+        return name.includes(q) || printName.includes(q) || alias.includes(q) || gstin.includes(q) || mobile.includes(q);
+      });
+      results.push(...matched);
+    }
+    return results;
+  }
+
+  vchPartyInput.addEventListener("input", () => {
+    const q = vchPartyInput.value.trim();
+    clearTimeout(partyDebounceTimer);
+    partyDebounceTimer = setTimeout(() => {
+      if (window.backend && window.backend.searchCustomers && activeCompany && q) {
+        window.backend.searchCustomers(activeCompany.id, q, (resp) => {
+          try {
+            const r = JSON.parse(resp);
+            if (r.success && Array.isArray(r.data)) {
+              let list = r.data;
+              if ("CASH".includes(q.toUpperCase())) {
+                list = [{ id: "CASH", name: "CASH", customer_category: "Direct Customer" }, ...list];
+              }
+              renderSuggestions(list, q);
+              return;
+            }
+          } catch (e) {}
+          renderSuggestions(filterEligibleCustomers(q), q);
+        });
+      } else {
+        renderSuggestions(filterEligibleCustomers(q), q);
+      }
+    }, 120);
+  });
+
+  vchPartyInput.addEventListener("focus", () => {
+    const q = vchPartyInput.value.trim();
+    renderSuggestions(filterEligibleCustomers(q), q);
+  });
+
+  vchPartyInput.addEventListener("keydown", (e) => {
+    if (popup.style.display !== "none") {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (currentPartySuggestions.length > 0) {
+          activePartySuggestionIndex = (activePartySuggestionIndex + 1) % currentPartySuggestions.length;
+          highlightPartySuggestion(activePartySuggestionIndex);
+        }
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (currentPartySuggestions.length > 0) {
+          activePartySuggestionIndex = (activePartySuggestionIndex - 1 + currentPartySuggestions.length) % currentPartySuggestions.length;
+          highlightPartySuggestion(activePartySuggestionIndex);
+        }
+        return;
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activePartySuggestionIndex >= 0 && currentPartySuggestions[activePartySuggestionIndex]) {
+          selectPartyItem(currentPartySuggestions[activePartySuggestionIndex]);
+          return;
+        } else if (currentPartySuggestions.length === 1) {
+          selectPartyItem(currentPartySuggestions[0]);
+          return;
+        } else {
+          const text = vchPartyInput.value.trim().toUpperCase();
+          if (text === "CASH" || text === "CASH SALE") {
+            selectPartyItem({ id: "CASH", name: "CASH" });
+            return;
+          }
+          const exactMatch = (cachedAccountsList || []).find(a => 
+            (a.name || "").toUpperCase() === text || 
+            (a.alias || "").toUpperCase() === text
+          );
+          if (exactMatch) {
+            selectPartyItem(exactMatch);
+            return;
+          }
+          alert("No customer master found. Please create this customer in Administration → Masters → Add.");
+          vchPartyInput.focus();
+          return;
+        }
+      } else if (e.key === "Escape") {
+        hidePartyPopup();
+        return;
+      }
+    } else {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const text = vchPartyInput.value.trim().toUpperCase();
+        if (text === "CASH" || text === "CASH SALE" || text === "") {
+          selectPartyItem({ id: "CASH", name: "CASH" });
+          return;
+        }
+        const exactMatch = (cachedAccountsList || []).find(a => 
+          (a.name || "").toUpperCase() === text || 
+          (a.alias || "").toUpperCase() === text
+        );
+        if (exactMatch) {
+          selectPartyItem(exactMatch);
+          return;
+        }
+        alert("No customer master found. Please create this customer in Administration → Masters → Add.");
+        vchPartyInput.focus();
+      }
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!popup.contains(e.target) && e.target !== vchPartyInput) {
+      hidePartyPopup();
+    }
+  });
+}
+
 // Initialize Sales Billing Screen
 function initSalesVoucherScreen() {
-  const nextNo = getNextVoucherNumber();
-  vchNumber.value = nextNo;
-  infoVchNo.textContent = nextNo;
+  isSalesModifyMode = false;
+  currentModifySaleVchId = null;
+  const modIn = document.getElementById("sales-modify-vch-id");
+  if (modIn) modIn.value = "";
+  const titleEl = document.getElementById("sales-voucher-screen-title");
+  if (titleEl) titleEl.textContent = "Add Sales Voucher";
 
-  // Set today's date
+  // Request next available sequential voucher number from database atomically
+  if (window.backend && window.backend.getNextVoucherNumber && activeCompany) {
+    const series = vchSeries ? (vchSeries.value || "Main") : "Main";
+    window.backend.getNextVoucherNumber(activeCompany.id, series, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          if (vchNumber) vchNumber.value = r.data;
+          if (infoVchNo) infoVchNo.textContent = r.data;
+          return;
+        }
+      } catch (e) {}
+      const fallbackNo = getNextVoucherNumber();
+      if (vchNumber) vchNumber.value = fallbackNo;
+      if (infoVchNo) infoVchNo.textContent = fallbackNo;
+    });
+  } else {
+    const nextNo = getNextVoucherNumber();
+    if (vchNumber) vchNumber.value = nextNo;
+    if (infoVchNo) infoVchNo.textContent = nextNo;
+  }
+
+  // Preserve header defaults: Series, Date, Mat Centre, Sale Type
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, "0");
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const yyyy = now.getFullYear();
-  vchDate.value = `${dd}-${mm}-${yyyy}`;
-
+  if (vchDate && !vchDate.value) {
+    vchDate.value = `${dd}-${mm}-${yyyy}`;
+  }
   const days = ["(Sun)", "(Mon)", "(Tue)", "(Wed)", "(Thu)", "(Fri)", "(Sat)"];
-  vchDayLabel.textContent = days[now.getDay()];
+  if (vchDayLabel) vchDayLabel.textContent = days[now.getDay()];
 
-  // Reset inputs
-  vchPartyInput.value = "CASH";
-  delete vchPartyInput.dataset.accountId;
-  vchNarration.value = "";
+  if (vchSeries && !vchSeries.value) vchSeries.value = "Main";
+  if (vchMatCentre && !vchMatCentre.value) vchMatCentre.value = "Main Store";
+  if (vchSaleType && !vchSaleType.value) vchSaleType.value = "L/GST-18%";
+
+  // Reset inputs and party
+  if (vchPartyInput) {
+    vchPartyInput.value = "CASH";
+    delete vchPartyInput.dataset.accountId;
+  }
+  if (vchNarration) vchNarration.value = "";
   updateVoucherPartyCategory();
 
-  // Populate Party autocomplete list from permanent database Account Masters
-  const populatePartyList = (accounts) => {
-    partyDatalist.innerHTML = "";
-    const optCash = document.createElement("option");
-    optCash.value = "CASH";
-    optCash.label = "Direct Cash Sale";
-    partyDatalist.appendChild(optCash);
-
-    accounts.forEach((acc) => {
-      const grp = acc.account_group || acc.group || "";
-      const isCust = grp === "Sundry Debtors" || grp.includes("Both") || grp === "Customer" ||
-                     acc.classification === "Customer" || acc.classification === "Both (Customer & Supplier)";
-      if (!isCust && grp && grp !== "Sundry Debtors") return;
-
-      const opt = document.createElement("option");
-      opt.value = acc.name;
-      opt.label = `${acc.account_group || acc.group || "Customer"} | GST: ${acc.gstin || "N/A"}`;
-      partyDatalist.appendChild(opt);
-    });
-  };
-
+  // Load customer accounts from permanent database
   if (activeCompany) {
-    if (window.backend && window.backend.listAccounts) {
-      window.backend.listAccounts(activeCompany.id, (resp) => {
+    if (window.backend && window.backend.searchCustomers) {
+      window.backend.searchCustomers(activeCompany.id, "", (resp) => {
         try {
           const r = JSON.parse(resp);
           if (r.success && Array.isArray(r.data)) {
             cachedAccountsList = r.data;
-            populatePartyList(r.data);
             return;
           }
         } catch (e) {}
         const key = `alpha_accounts_${activeCompany.code}`;
-        const accounts = JSON.parse(localStorage.getItem(key) || "[]");
-        cachedAccountsList = accounts;
-        populatePartyList(accounts);
+        cachedAccountsList = JSON.parse(localStorage.getItem(key) || "[]");
       });
     } else {
       const key = `alpha_accounts_${activeCompany.code}`;
-      const accounts = JSON.parse(localStorage.getItem(key) || "[]");
-      cachedAccountsList = accounts;
-      populatePartyList(accounts);
+      cachedAccountsList = JSON.parse(localStorage.getItem(key) || "[]");
     }
   }
 
-  // Render 11 item rows
+  // Render 11 item rows and recalculate totals
   renderVoucherItemRows();
   recalculateVoucherTotals();
-  vchPartyInput.focus();
+
+  // Focus party input automatically
+  setTimeout(() => {
+    if (vchPartyInput) {
+      vchPartyInput.focus();
+      vchPartyInput.select();
+    }
+  }, 60);
 }
 
+// Product Lookup by Barcode or Name
+function resolveItemByBarcodeOrName(val, callback) {
+  if (!val) {
+    callback(null);
+    return;
+  }
+  const clean = val.trim();
+  const upper = clean.toUpperCase();
+
+  // 1. Try barcode bridge first if available
+  if (window.backend && window.backend.findByBarcode && activeCompany) {
+    window.backend.findByBarcode(activeCompany.id, clean, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          callback(r.data);
+          return;
+        }
+      } catch (e) {}
+      searchCatalogFallback();
+    });
+  } else {
+    searchCatalogFallback();
+  }
+
+  function searchCatalogFallback() {
+    fetchAllItems(clean, (items) => {
+      if (!items || items.length === 0) {
+        callback(null);
+        return;
+      }
+      // Exact barcode match
+      let found = items.find(it => 
+        (it.barcodes && it.barcodes.toUpperCase() === upper) || 
+        (it.barcode && it.barcode.toUpperCase() === upper)
+      );
+      // Exact SKU / alias match
+      if (!found) {
+        found = items.find(it => it.alias && it.alias.toUpperCase() === upper);
+      }
+      // Exact name match
+      if (!found) {
+        found = items.find(it => it.name && it.name.toUpperCase() === upper);
+      }
+      // Prefix name match
+      if (!found) {
+        found = items.find(it => it.name && it.name.toUpperCase().startsWith(upper));
+      }
+      // First matching item
+      if (!found && items.length > 0) {
+        found = items[0];
+      }
+      callback(found || null);
+    });
+  }
+}
+
+// Populate line item row with product data from Item Master
 function populateVoucherRowWithItem(rowNum, item) {
   const rowInput = vchItemsTbody.querySelector(`.vch-item-input[data-row="${rowNum}"]`);
   const unitEl = vchItemsTbody.querySelector(`.vch-unit-input[data-row="${rowNum}"]`);
@@ -3174,8 +3486,12 @@ function populateVoucherRowWithItem(rowNum, item) {
   if (rowInput) {
     rowInput.value = item.name || "";
     rowInput.dataset.itemId = item.id || "";
+    rowInput.dataset.productBarcode = item.barcodes || item.barcode || item.alias || "";
   }
-  if (unitEl && item.unit) unitEl.value = item.unit;
+  // Standard Unit loaded automatically from Item Master (read-only)
+  if (unitEl) {
+    unitEl.value = item.unit || "Pcs.";
+  }
   const price = parseFloat(item.sales_price ?? item.salesPrice ?? 0);
   if (priceEl && price > 0) priceEl.value = price.toFixed(2);
 
@@ -3195,6 +3511,7 @@ function populateVoucherRowWithItem(rowNum, item) {
   }
 
   showNotification(`Selected ${item.name}`);
+  // Enter key from Item moves focus directly to Quantity field, skipping read-only Unit field!
   if (qtyEl) {
     qtyEl.focus();
     qtyEl.select();
@@ -3232,30 +3549,66 @@ function setupVoucherAutocomplete(input, row) {
   });
 
   input.addEventListener("keydown", (e) => {
-    if (!vchItemAutocompletePopup || vchItemAutocompletePopup.style.display === "none") {
-      if (e.key === "F1") {
-        e.preventDefault();
-        openProductSearchModal("VOUCHER", row);
-      }
+    if (e.key === "F1") {
+      e.preventDefault();
+      openProductSearchModal("VOUCHER", row);
       return;
     }
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      activeVchSuggestionIndex = (activeVchSuggestionIndex + 1) % currentVchSuggestions.length;
-      highlightVchSuggestion(activeVchSuggestionIndex);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      activeVchSuggestionIndex = (activeVchSuggestionIndex - 1 + currentVchSuggestions.length) % currentVchSuggestions.length;
-      highlightVchSuggestion(activeVchSuggestionIndex);
-    } else if (e.key === "Enter" && activeVchSuggestionIndex >= 0) {
+    const popupVisible = vchItemAutocompletePopup && vchItemAutocompletePopup.style.display !== "none";
+
+    if (popupVisible) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        activeVchSuggestionIndex = (activeVchSuggestionIndex + 1) % currentVchSuggestions.length;
+        highlightVchSuggestion(activeVchSuggestionIndex);
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        activeVchSuggestionIndex = (activeVchSuggestionIndex - 1 + currentVchSuggestions.length) % currentVchSuggestions.length;
+        highlightVchSuggestion(activeVchSuggestionIndex);
+        return;
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        hideVchAutocompletePopup();
+        return;
+      }
+    }
+
+    if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      const chosen = currentVchSuggestions[activeVchSuggestionIndex];
-      populateVoucherRowWithItem(row, chosen);
+
+      // Case 1: Active suggestion highlighted in popup
+      if (popupVisible && activeVchSuggestionIndex >= 0 && currentVchSuggestions[activeVchSuggestionIndex]) {
+        const chosen = currentVchSuggestions[activeVchSuggestionIndex];
+        hideVchAutocompletePopup();
+        populateVoucherRowWithItem(row, chosen);
+        return;
+      }
+
+      // Case 2: User scanned a barcode or entered a product name / SKU
+      const val = input.value.trim();
+      if (!val) {
+        const nextRow = parseInt(row, 10) + 1;
+        const nextItem = vchItemsTbody.querySelector(`.vch-item-input[data-row="${nextRow}"]`);
+        if (nextItem) nextItem.focus();
+        else if (btnSaveSalesVoucher) btnSaveSalesVoucher.focus();
+        return;
+      }
+
       hideVchAutocompletePopup();
-    } else if (e.key === "Escape") {
-      hideVchAutocompletePopup();
+
+      resolveItemByBarcodeOrName(val, (matchedItem) => {
+        if (matchedItem) {
+          populateVoucherRowWithItem(row, matchedItem);
+        } else {
+          // Prevent adding unregistered products
+          alert(`Product "${val}" not found in Item Master. Only registered products can be added to the invoice.`);
+          input.focus();
+          input.select();
+        }
+      });
     }
   });
 }
@@ -3327,28 +3680,31 @@ document.addEventListener("click", (e) => {
 
 // Render 11 item rows into billing table
 function renderVoucherItemRows() {
+  if (!vchItemsTbody) return;
   vchItemsTbody.innerHTML = "";
 
   for (let i = 1; i <= 11; i++) {
     const tr = document.createElement("tr");
     tr.dataset.row = i;
 
+    // Ordered columns: S.N. | Item | Unit | Qty. | Price (Rs.) | Amount (Rs.)
+    // Note: Unit is visibly read-only, populated from Item Master, with tabindex="-1" so keyboard flow skips directly to Qty!
     tr.innerHTML = `
       <td class="col-vch-sn">${i}</td>
       <td class="col-vch-item">
-        <input type="text" class="vch-item-input" data-row="${i}" placeholder="${i === 1 ? 'Type or select product (F1 to search)' : ''}" autocomplete="off" />
+        <input type="text" class="vch-item-input" data-row="${i}" placeholder="${i === 1 ? 'Scan barcode or type product name (F1 to search)...' : ''}" autocomplete="off" />
+      </td>
+      <td class="col-vch-unit">
+        <input type="text" class="vch-unit-input input-readonly" data-row="${i}" value="Pcs." readonly tabindex="-1" title="Unit from Item Master (Automatic &amp; Read-Only)" />
       </td>
       <td class="col-vch-qty">
         <input type="number" step="1" min="0" class="vch-qty-input" data-row="${i}" placeholder="0" />
-      </td>
-      <td class="col-vch-unit">
-        <input type="text" class="vch-unit-input" data-row="${i}" value="Pcs." />
       </td>
       <td class="col-vch-price">
         <input type="number" step="0.01" min="0" class="vch-price-input" data-row="${i}" placeholder="0.00" />
       </td>
       <td class="col-vch-amount">
-        <input type="text" class="vch-amount-input" data-row="${i}" value="0.00" readonly style="font-weight: 700; color: #1e40af;" />
+        <input type="text" class="vch-amount-input" data-row="${i}" value="0.00" readonly tabindex="-1" style="font-weight: 700; color: #1e40af;" />
       </td>
     `;
 
@@ -3364,6 +3720,34 @@ function renderVoucherItemRows() {
     });
   });
 
+  // Attach Enter navigation on Quantity inputs:
+  // Enter confirms line item, recalculates line amount and totals, and moves focus directly to next row's Item field!
+  vchItemsTbody.querySelectorAll(".vch-qty-input").forEach((qtyInput) => {
+    qtyInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = parseInt(qtyInput.dataset.row, 10);
+        const val = parseFloat(qtyInput.value);
+        if (isNaN(val) || val <= 0) {
+          qtyInput.value = "1";
+        }
+        calcRowAmount(row);
+        recalculateVoucherTotals();
+
+        // Move directly to next row's Item field
+        const nextRow = row + 1;
+        const nextItemInput = vchItemsTbody.querySelector(`.vch-item-input[data-row="${nextRow}"]`);
+        if (nextItemInput) {
+          nextItemInput.focus();
+        } else {
+          // If on the last row, focus Save button
+          if (btnSaveSalesVoucher) btnSaveSalesVoucher.focus();
+        }
+      }
+    });
+  });
+
   // Attach autocomplete & selection listeners
   vchItemsTbody.querySelectorAll(".vch-item-input").forEach((input) => {
     const row = input.dataset.row;
@@ -3371,20 +3755,9 @@ function renderVoucherItemRows() {
 
     input.addEventListener("focus", (e) => {
       const val = e.target.value.trim();
-      if (val) {
+      if (val && vchItemInfo) {
         vchItemInfo.textContent = `Selected Product: ${val}`;
       }
-    });
-
-    input.addEventListener("change", (e) => {
-      const val = e.target.value.trim().toUpperCase();
-      if (!val) return;
-      fetchAllItems(val, (items) => {
-        const matched = items.find((it) => it.name.toUpperCase() === val || (it.alias && it.alias.toUpperCase() === val));
-        if (matched) {
-          populateVoucherRowWithItem(row, matched);
-        }
-      });
     });
   });
 }
@@ -3405,7 +3778,7 @@ function updateVoucherPartyCategory() {
     return;
   }
 
-  const foundAcc = cachedAccountsList.find(a => 
+  const foundAcc = (cachedAccountsList || []).find(a => 
     (a.name || "").toUpperCase() === partyName ||
     (a.print_name || a.printName || "").toUpperCase() === partyName ||
     (a.alias || "").toUpperCase() === partyName
@@ -3546,7 +3919,7 @@ btnApplyTax.addEventListener("click", () => {
   showNotification("Tax & Bill Sundry recalculated.");
 });
 
-// Save Sales Voucher
+// Save Sales Voucher with atomic voucher sequence and post-save print transition
 function handleSaveSalesVoucher() {
   const party = vchPartyInput.value.trim();
   if (!party) {
@@ -3555,19 +3928,45 @@ function handleSaveSalesVoucher() {
     return;
   }
 
-  // Ensure voucher number is unique
-  let currentNo = vchNumber.value.trim();
-  if (!currentNo) currentNo = getNextVoucherNumber();
+  // 1. Party Selection - Masters Database Only Validation
+  const isDirectCash = (party.toUpperCase() === "CASH" || party.toUpperCase() === "CASH SALE" || party.toUpperCase() === "DIRECT CUSTOMER");
+  let customerAccountId = vchPartyInput.dataset.accountId;
 
-  if (isVoucherNumberUsed(currentNo)) {
-    const freshNo = getNextVoucherNumber();
-    alert(`Voucher number ${currentNo} is already used in a previous bill.\nUpdating to next unique voucher number: ${freshNo}`);
-    vchNumber.value = freshNo;
-    currentNo = freshNo;
+  if (isDirectCash) {
+    // Direct cash sale party is allowed for local retail billing,
+    // but MUST NOT be allowed for inter-state (IGST) transactions where a registered customer master is required.
+    const saleType = vchSaleType.value;
+    if (saleType && saleType.startsWith("I/GST")) {
+      alert("Direct Cash Sale (CASH) is not permitted for Inter-State (IGST) sales. Please select a registered Customer Master from Masters with a valid State and GSTIN.");
+      vchPartyInput.focus();
+      return;
+    }
+  } else {
+    // If not direct cash, party MUST exist in Customer Masters database
+    if (!customerAccountId) {
+      const match = (cachedAccountsList || []).find(a => 
+        (a.name || "").toUpperCase() === party.toUpperCase() ||
+        (a.print_name || a.printName || "").toUpperCase() === party.toUpperCase() ||
+        (a.alias || "").toUpperCase() === party.toUpperCase()
+      );
+      if (match && match.id) {
+        customerAccountId = match.id;
+        vchPartyInput.dataset.accountId = match.id;
+      }
+    }
+
+    if (!customerAccountId) {
+      alert("No customer master found. Please create this customer in Administration → Masters → Add.");
+      vchPartyInput.focus();
+      return;
+    }
   }
 
-  // Collect items
+  // 2. Validate products / line items
   const items = [];
+  let hasUnregisteredProduct = false;
+  let unregisteredProductName = "";
+
   vchItemsTbody.querySelectorAll("tr").forEach((tr) => {
     const row = tr.dataset.row;
     const nameEl = tr.querySelector(`.vch-item-input[data-row="${row}"]`);
@@ -3581,49 +3980,50 @@ function handleSaveSalesVoucher() {
     const price = parseFloat(priceEl.value) || 0;
     const amount = parseFloat(amtEl.value) || 0;
 
-    if (name && (qty > 0 || price > 0)) {
-      items.push({ 
-        sn: row, 
-        name, 
-        qty, 
-        unit: unitEl.value, 
-        price, 
-        amount,
-        item_id: nameEl.dataset.itemId || undefined
-      });
+    if (name) {
+      const itemId = nameEl.dataset.itemId;
+      if (!itemId && !nameEl.dataset.productBarcode) {
+        hasUnregisteredProduct = true;
+        unregisteredProductName = name;
+      }
+      if (qty > 0 || price > 0) {
+        items.push({ 
+          sn: row, 
+          name, 
+          qty: qty > 0 ? qty : 1, 
+          unit: unitEl ? unitEl.value : "Pcs.", 
+          price, 
+          amount: amount > 0 ? amount : (qty * price),
+          item_id: itemId || undefined
+        });
+      }
     }
   });
 
+  if (hasUnregisteredProduct) {
+    alert(`Product "${unregisteredProductName}" is not registered in Item Master. Only registered products can be added to the invoice.`);
+    return;
+  }
+
   if (items.length === 0) {
-    alert("Please add at least one item with quantity and price.");
+    alert("Please add at least one registered item with quantity and price.");
+    const firstItem = vchItemsTbody.querySelector('.vch-item-input[data-row="1"]');
+    if (firstItem) firstItem.focus();
     return;
   }
 
   const subtotal = parseFloat(vchSubtotalVal.textContent) || 0;
   const grandTotal = vchGrandTotal.textContent.replace("₹", "").trim();
 
-  const voucherRecord = {
-    vchNo: currentNo,
-    series: vchSeries.value,
-    date: vchDate.value,
-    saleType: vchSaleType.value,
-    party: party,
-    matCentre: vchMatCentre.value,
-    narration: vchNarration.value.trim(),
-    items: items,
-    subtotal: subtotal,
-    grandTotal: grandTotal,
-    createdAt: new Date().toISOString()
-  };
-
-  if (window.backend && activeCompany) {
+  // If modifying existing invoice
+  if (isSalesModifyMode && currentModifySaleVchId) {
     const payload = {
-      party_name: party,
-      account_id: vchPartyInput.dataset.accountId || undefined,
+      party_name: isDirectCash ? "CASH" : party,
+      account_id: customerAccountId || undefined,
       customer_category: activeVoucherCustomerCategory || "Direct Customer",
       sale_type: vchSaleType.value,
       payment_method: "CASH",
-      series: vchSeries.value,
+      series: vchSeries.value || "Main",
       vch_date: vchDate.value,
       narration: vchNarration.value.trim(),
       items: items.map((it) => ({
@@ -3638,12 +4038,12 @@ function handleSaveSalesVoucher() {
       }))
     };
 
-    if (isSalesModifyMode && currentModifySaleVchId) {
+    if (window.backend && activeCompany) {
       window.backend.modifySaleInvoice(activeCompany.id, currentModifySaleVchId, JSON.stringify(payload), (resp) => {
         try {
           const r = JSON.parse(resp);
           if (r.success) {
-            showNotification(`Sales Bill #${currentNo} modified successfully! Inventory and accounts reconciled.`);
+            showNotification(`Sales Bill #${vchNumber.value} modified successfully! Inventory and accounts reconciled.`);
             checkLowStockAlerts(false);
             isSalesModifyMode = false;
             currentModifySaleVchId = null;
@@ -3657,28 +4057,85 @@ function handleSaveSalesVoucher() {
           alert(`Error: ${e.message}`);
         }
       });
-      return;
     }
+    return;
+  }
 
+  // New Invoice: Backend generates sequential voucher number atomically inside database transaction
+  const payload = {
+    party_name: isDirectCash ? "CASH" : party,
+    account_id: customerAccountId || undefined,
+    customer_category: activeVoucherCustomerCategory || "Direct Customer",
+    sale_type: vchSaleType.value,
+    payment_method: "CASH",
+    series: vchSeries.value || "Main",
+    vch_date: vchDate.value,
+    narration: vchNarration.value.trim(),
+    items: items.map((it) => ({
+      item_id: it.item_id || undefined,
+      name: it.name,
+      qty: it.qty,
+      unit: it.unit,
+      price: it.price,
+      discount_percent: it.discount_percent || (cachedCategoryDiscounts[activeVoucherCustomerCategory] || 0.0),
+      discount_amount: it.discount_amount || 0.0,
+      line_total: it.amount
+    }))
+  };
+
+  const onCommitSuccess = (savedData) => {
+    lastCompletedVoucher = savedData.vch_no;
+    lastCompletedVoucherData = savedData;
+    saveSalesVoucherRecord({
+      vchNo: savedData.vch_no,
+      series: vchSeries.value || "Main",
+      date: vchDate.value,
+      saleType: vchSaleType.value,
+      party: party,
+      matCentre: vchMatCentre.value,
+      narration: vchNarration.value.trim(),
+      items: items,
+      subtotal: subtotal,
+      grandTotal: grandTotal,
+      createdAt: new Date().toISOString()
+    });
+
+    checkLowStockAlerts(false);
+    showNotification(`Sales Bill #${savedData.vch_no} saved and committed!`);
+
+    // Automatic post-save transition to dedicated Print screen
+    printSourceScreen = "view-sales-voucher";
+    openFastBillingPrint(savedData.voucher_id || savedData.id, savedData, "view-sales-voucher");
+  };
+
+  if (window.backend && activeCompany) {
     window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
       try {
         const r = JSON.parse(resp);
         if (r.success) {
-          lastCompletedVoucher = r.data.vch_no;
-          checkLowStockAlerts(false);
+          onCommitSuccess(r.data);
+        } else {
+          alert(`Failed to save sales invoice: ${r.error}`);
         }
-      } catch (e) {}
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      }
     });
-  }
-
-  saveSalesVoucherRecord(voucherRecord);
-  showNotification(`Sales Bill #${currentNo} saved successfully!`);
-
-  // Prompt or prepare next sequential bill
-  if (confirm(`Bill #${currentNo} saved!\nCreate next bill (#${getNextVoucherNumber()})?`)) {
-    initSalesVoucherScreen();
   } else {
-    showScreen("view-sales-list");
+    // Offline / mock fallback
+    const mockVchNo = getNextVoucherNumber();
+    const mockData = {
+      id: "vch_" + Date.now(),
+      voucher_id: "vch_" + Date.now(),
+      vch_no: mockVchNo,
+      party_name: party,
+      account_id: customerAccountId,
+      vch_date: vchDate.value,
+      subtotal: subtotal,
+      grand_total: parseFloat(grandTotal.replace(/,/g, "")),
+      items: items
+    };
+    onCommitSuccess(mockData);
   }
 }
 
@@ -3697,7 +4154,14 @@ function openModifySaleInvoice(vchId) {
     if (vchNumber) vchNumber.value = vch.vch_no || "";
     if (infoVchNo) infoVchNo.textContent = vch.vch_no || "";
     if (vchDate && vch.vch_date) vchDate.value = vch.vch_date;
-    if (vchPartyInput) vchPartyInput.value = vch.party_name || "CASH";
+    if (vchPartyInput) {
+      vchPartyInput.value = vch.party_name || "CASH";
+      if (vch.account_id) {
+        vchPartyInput.dataset.accountId = vch.account_id;
+      } else {
+        delete vchPartyInput.dataset.accountId;
+      }
+    }
     if (vchSaleType && vch.sale_type) vchSaleType.value = vch.sale_type;
     if (vchNarration) vchNarration.value = vch.narration || "";
 
@@ -3714,26 +4178,47 @@ function openModifySaleInvoice(vchId) {
       const priceEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-price-input[data-row="${r}"]`) : null;
       const amtEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-amount-input[data-row="${r}"]`) : null;
       if (nameEl) {
-        nameEl.value = it ? (it.name || "") : "";
-        nameEl.dataset.itemId = it ? (it.item_id || "") : "";
+        nameEl.value = it ? (it.item_name || it.name || "") : "";
+        nameEl.dataset.itemId = it ? (it.item_id || it.id || "") : "";
       }
       if (qtyEl) qtyEl.value = it ? (it.qty || "") : "";
       if (unitEl) unitEl.value = it ? (it.unit || "Pcs.") : "Pcs.";
       if (priceEl) priceEl.value = it ? (it.price || "") : "";
       if (amtEl) amtEl.value = it ? (it.line_total || it.amount || "") : "";
     }
+    updateVoucherPartyCategory();
     recalculateVoucherTotals();
     showScreen("view-sales-voucher");
   };
 
-  if (window.backend && window.backend.listVouchers) {
+  if (window.backend && window.backend.getVoucherDetails) {
+    window.backend.getVoucherDetails(activeCompany.id, vchId, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          loadInvoice(r.data);
+          return;
+        }
+      } catch (e) {}
+      if (window.backend.listVouchers) {
+        window.backend.listVouchers(activeCompany.id, (resp2) => {
+          try {
+            const r2 = JSON.parse(resp2);
+            if (r2.success && Array.isArray(r2.data)) {
+              const found = r2.data.find(v => v.id === vchId || v.vch_no === vchId);
+              loadInvoice(found);
+            }
+          } catch (e) {}
+        });
+      }
+    });
+  } else if (window.backend && window.backend.listVouchers) {
     window.backend.listVouchers(activeCompany.id, (resp) => {
       try {
         const r = JSON.parse(resp);
         if (r.success && Array.isArray(r.data)) {
           const found = r.data.find(v => v.id === vchId || v.vch_no === vchId);
           loadInvoice(found);
-          return;
         }
       } catch (e) {}
     });
@@ -5724,17 +6209,27 @@ if (btnDownloadPdfPrint) {
     }
   });
 }
+function returnFromPrintScreen() {
+  if (printSourceScreen === "view-sales-voucher") {
+    printSourceScreen = "view-fast-billing";
+    initSalesVoucherScreen();
+    showScreen("view-sales-voucher");
+  } else {
+    openFastBillingNewBill();
+  }
+}
+
 if (btnPrintScreenNewBill) {
-  btnPrintScreenNewBill.addEventListener("click", () => openFastBillingNewBill());
+  btnPrintScreenNewBill.addEventListener("click", () => returnFromPrintScreen());
 }
 if (btnPrintNextBill) {
-  btnPrintNextBill.addEventListener("click", () => openFastBillingNewBill());
+  btnPrintNextBill.addEventListener("click", () => returnFromPrintScreen());
 }
 if (btnPosPrintBack) {
-  btnPosPrintBack.addEventListener("click", () => openFastBillingNewBill());
+  btnPosPrintBack.addEventListener("click", () => returnFromPrintScreen());
 }
 if (btnPosPrintClose) {
-  btnPosPrintClose.addEventListener("click", () => openFastBillingNewBill());
+  btnPosPrintClose.addEventListener("click", () => returnFromPrintScreen());
 }
 
 const customWidthInput = document.getElementById("custom-paper-width");
@@ -6947,15 +7442,12 @@ window.addEventListener("keydown", (e) => {
       openFastBillingNewBill();
     }
   } else if (currentScreen === "view-fast-billing-print") {
-    if (e.key === "F4") {
+    if (e.key === "F4" || e.key === "Escape") {
       e.preventDefault();
-      openFastBillingNewBill();
+      returnFromPrintScreen();
     } else if (e.key === "Enter" || (e.ctrlKey && (e.key === "p" || e.key === "P"))) {
       e.preventDefault();
       triggerInvoicePrint();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      openFastBillingNewBill();
     }
   } else if (currentScreen === "view-add-account-master") {
     if (e.key === "F2") {
@@ -9386,6 +9878,7 @@ populateLoginCompanies();
 updateSystemClock();
 setInterval(updateSystemClock, 10000);
 setupPosBarcodeAutocomplete();
+setupPartyAutocomplete();
 initPosTextSizeControls();
 initDailyDiscountControls();
 initPosTenderListeners();

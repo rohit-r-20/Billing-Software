@@ -40,6 +40,16 @@ def _get_or_create_test_company() -> str:
 
 COMPANY_ID = _get_or_create_test_company()
 
+# Ensure customer masters exist for cross-module synchronisation tests
+with db_manager.get_connection() as _conn:
+    for _cname in ("TRADITIONAL PARTY", "TB CUSTOMER", "PRINT TEST CUSTOMER", "MODIFY PARTY", "RETURN TEST PARTY", "TB CUSTOMER 1", "TB CUSTOMER 2"):
+        _conn.execute("""
+            INSERT INTO accounts (id, company_id, name, account_group, is_active)
+            VALUES (?, ?, ?, 'Sundry Debtors', 1)
+            ON CONFLICT(company_id, name) DO NOTHING;
+        """, (str(uuid.uuid4()), COMPANY_ID, _cname))
+    _conn.commit()
+
 
 def _get_default_branch(company_id: str) -> str:
     with db_manager.get_connection() as conn:

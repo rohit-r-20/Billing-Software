@@ -34,43 +34,71 @@ class BillingService:
                 return c_row["id"]
             return cid
 
+    def _ensure_voucher_sequence_table(self, cursor):
+        """Ensure voucher_sequences table exists in both SQLite and PostgreSQL."""
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS voucher_sequences (
+                    id VARCHAR(36) PRIMARY KEY,
+                    company_id VARCHAR(36) NOT NULL,
+                    voucher_type VARCHAR(50) NOT NULL,
+                    series VARCHAR(50) NOT NULL DEFAULT 'Main',
+                    current_number INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP,
+                    UNIQUE(company_id, voucher_type, series)
+                );
+            """)
+        except Exception as e:
+            logger.debug(f"_ensure_voucher_sequence_table notice: {e}")
+
     def get_next_voucher_number(self, company_id: str, series: str = "Main") -> str:
         """
         Calculates the next sequential unique invoice number for the active company.
-        Format: <prefix><sequential_number_padded>
+        Format: <prefix><sequential_number_padded> (e.g. 0001, 0002)
         """
+        actual_company_id = self._resolve_company_id(company_id)
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            # Fetch company configuration
-            cursor.execute("SELECT * FROM company_configs WHERE company_id = ?;", (company_id,))
-            cfg = cursor.fetchone()
-            start_num = cfg["vch_start"] if cfg else 1
-            digits = cfg["vch_digits"] if cfg else 3
-            prefix = cfg["vch_prefix"] if cfg else ""
+            self._ensure_voucher_sequence_table(cursor)
 
-            # Find maximum sequence number stored
+            # Fetch company configuration
+            cursor.execute("SELECT * FROM company_configs WHERE company_id = ?;", (actual_company_id,))
+            cfg = cursor.fetchone()
+            start_num = cfg["vch_start"] if cfg and cfg["vch_start"] is not None else 1
+            digits = int(cfg["vch_digits"]) if (cfg and cfg["vch_digits"] is not None) else 4
+            prefix = cfg["vch_prefix"] if cfg and cfg["vch_prefix"] is not None else ""
+
+            # Check voucher_sequences table
+            cursor.execute("""
+                SELECT current_number FROM voucher_sequences
+                WHERE company_id = ? AND voucher_type = 'SALE' AND series = ?;
+            """, (actual_company_id, series))
+            seq_row = cursor.fetchone()
+            curr_seq = int(seq_row["current_number"]) if seq_row and seq_row["current_number"] is not None else 0
+
+            # Find maximum sequence number stored in sales_vouchers
             cursor.execute("""
                 SELECT vch_no FROM sales_vouchers
                 WHERE company_id = ? AND series = ?;
-            """, (company_id, series))
+            """, (actual_company_id, series))
             rows = cursor.fetchall()
 
-            max_seq = 0
+            max_vch_num = 0
             for r in rows:
                 vch_no = r["vch_no"]
-                # Strip prefix if matches
                 if prefix and vch_no.startswith(prefix):
                     num_str = vch_no[len(prefix):]
                 else:
                     num_str = "".join(ch for ch in vch_no if ch.isdigit())
                 try:
                     num = int(num_str)
-                    if num > max_seq:
-                        max_seq = num
+                    if num > max_vch_num:
+                        max_vch_num = num
                 except ValueError:
                     pass
 
-            next_seq = max(max_seq + 1, start_num)
+            max_seen = max(curr_seq, max_vch_num)
+            next_seq = max(max_seen + 1, start_num)
             return f"{prefix}{str(next_seq).zfill(digits)}"
 
     def create_sale_invoice(
@@ -102,23 +130,66 @@ class BillingService:
         if not items:
             raise ValueError("Cannot checkout an empty invoice. At least one line item is required.")
 
+        actual_company_id = self._resolve_company_id(company_id)
+
         # Set default date if omitted (DD-MM-YYYY)
         if not vch_date:
             vch_date = datetime.now().strftime("%d-%m-%Y")
+
+        # Validate party against Customer Masters database or authorized walk-in cash customer
+        acc_row = None
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            if account_id:
+                cursor.execute("""
+                    SELECT id, name, customer_category, is_active FROM accounts
+                    WHERE company_id = ? AND id = ?;
+                """, (actual_company_id, account_id))
+                acc_row = cursor.fetchone()
+            if not acc_row and party_name:
+                clean_party = party_name.strip().upper()
+                cursor.execute("""
+                    SELECT id, name, customer_category, is_active FROM accounts
+                    WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(print_name) = ? OR UPPER(alias) = ?);
+                """, (actual_company_id, clean_party, clean_party, clean_party))
+                acc_row = cursor.fetchone()
+
+        if acc_row:
+            resolved_account_id = acc_row["id"]
+            resolved_party_name = party_name.strip() if party_name and party_name.strip() else acc_row["name"]
+            resolved_category = (customer_category or acc_row["customer_category"] or "Direct Customer").strip()
+        else:
+            clean_party = (party_name or "").strip().upper()
+            is_cash_sale = (
+                not clean_party or
+                clean_party in ("CASH", "CASH SALE", "WALK-IN", "WALK-IN CUSTOMER", "DIRECT", "DIRECT CUSTOMER", "DIRECT CASH") or
+                "CASH" in clean_party or
+                "DIRECT" in clean_party or
+                "WALK-IN" in clean_party or
+                (customer_category == "Direct Customer" and not account_id)
+            )
+            if is_cash_sale:
+                if "I/GST" in (sale_type or "").upper():
+                    raise ValueError("Inter-State (IGST) sales require a registered customer master. Cash sales are not permitted for I/GST.")
+                resolved_party_name = party_name.strip() if party_name and party_name.strip() else "CASH"
+                resolved_account_id = None
+                resolved_category = "Direct Customer"
+            else:
+                raise ValueError("No customer master found. Please create this customer in Administration → Masters → Add.")
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
 
             # Verify active company
-            cursor.execute("SELECT name, state FROM companies WHERE id = ?;", (company_id,))
+            cursor.execute("SELECT name, state FROM companies WHERE id = ?;", (actual_company_id,))
             comp_row = cursor.fetchone()
             if not comp_row:
-                raise ValueError(f"Company {company_id} does not exist.")
+                raise ValueError(f"Company {actual_company_id} does not exist.")
             company_state = comp_row["state"] or "Tamilnadu"
 
             # Determine default branch if not provided
             if not branch_id:
-                cursor.execute("SELECT id FROM branches WHERE company_id = ? ORDER BY is_default DESC, id ASC LIMIT 1;", (company_id,))
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? ORDER BY is_default DESC, id ASC LIMIT 1;", (actual_company_id,))
                 b_row = cursor.fetchone()
                 if b_row:
                     branch_id = b_row["id"]
@@ -127,33 +198,7 @@ class BillingService:
                     cursor.execute("""
                         INSERT INTO branches (id, company_id, code, name, is_default)
                         VALUES (?, ?, 'MAIN', 'Main Branch', 1);
-                    """, (branch_id, company_id))
-
-            # Resolve customer category and account_id if not explicitly provided
-            if not account_id and party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
-                cursor.execute("""
-                    SELECT id, customer_category FROM accounts
-                    WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(print_name) = ? OR UPPER(alias) = ?)
-                    LIMIT 1;
-                """, (company_id, party_name.strip().upper(), party_name.strip().upper(), party_name.strip().upper()))
-                acc_row = cursor.fetchone()
-                if acc_row:
-                    account_id = acc_row["id"]
-                    if not customer_category and acc_row["customer_category"]:
-                        customer_category = acc_row["customer_category"]
-
-            resolved_category = (customer_category or "").strip()
-            if not resolved_category:
-                if account_id:
-                    cursor.execute("SELECT customer_category FROM accounts WHERE id = ?;", (account_id,))
-                    acc_row = cursor.fetchone()
-                    resolved_category = acc_row["customer_category"] if acc_row and acc_row["customer_category"] else "Direct Customer"
-                elif party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
-                    cursor.execute("SELECT customer_category FROM accounts WHERE company_id = ? AND UPPER(name) = ?;", (company_id, party_name.strip().upper()))
-                    acc_row = cursor.fetchone()
-                    resolved_category = acc_row["customer_category"] if acc_row and acc_row["customer_category"] else "Direct Customer"
-                else:
-                    resolved_category = "Direct Customer"
+                    """, (branch_id, actual_company_id))
 
             # Calculate line items and voucher totals using TaxService
             totals = tax_service.calculate_voucher_totals(
@@ -216,59 +261,105 @@ class BillingService:
                             f"Negative stock is disabled by company policy."
                         )
 
-            # Generate next voucher number with concurrency collision resolution
-            import time
-            import sqlite3
-            vch_id = str(uuid.uuid4())
-            vch_no = None
+            # 1. Atomic Voucher Sequence Allocation inside transaction
+            self._ensure_voucher_sequence_table(cursor)
 
-            for attempt in range(10):
-                vch_no = self.get_next_voucher_number(company_id, series)
-                try:
-                    cursor.execute("SAVEPOINT sp_vch_hdr;")
-                    # 1. Insert Voucher Header
-                    cursor.execute("""
-                        INSERT INTO sales_vouchers (
-                            id, company_id, branch_id, vch_no, series, vch_date,
-                            sale_type, party_name, account_id, mat_centre, narration,
-                            subtotal, gross_subtotal, discount_total, taxable_amount, tax_rate, cgst_amount, sgst_amount,
-                            igst_amount, round_off, grand_total, payment_method, payment_status, customer_category
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Main Store', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?);
-                    """, (
-                        vch_id,
-                        company_id,
-                        branch_id,
-                        vch_no,
-                        series,
-                        vch_date,
-                        sale_type,
-                        party_name,
-                        account_id,
-                        narration,
-                        totals["subtotal"],
-                        totals["subtotal"],
-                        totals.get("discount_total", 0.0),
-                        totals["taxable_amount"],
-                        18.0,  # general rate ref
-                        totals["cgst_amount"],
-                        totals["sgst_amount"],
-                        totals["igst_amount"],
-                        totals["round_off"],
-                        totals["grand_total"],
-                        payment_method,
-                        resolved_category
-                    ))
-                    cursor.execute("RELEASE SAVEPOINT sp_vch_hdr;")
-                    break
-                except Exception as e:
+            cursor.execute("SELECT * FROM company_configs WHERE company_id = ?;", (actual_company_id,))
+            cfg = cursor.fetchone()
+            start_num = cfg["vch_start"] if cfg and cfg["vch_start"] is not None else 1
+            digits = int(cfg["vch_digits"]) if (cfg and cfg["vch_digits"] is not None) else 4
+            prefix = cfg["vch_prefix"] if cfg and cfg["vch_prefix"] is not None else ""
+
+            # Check sequence row for company and series
+            cursor.execute("""
+                SELECT current_number FROM voucher_sequences
+                WHERE company_id = ? AND voucher_type = 'SALE' AND series = ?;
+            """, (actual_company_id, series))
+            seq_row = cursor.fetchone()
+
+            if not seq_row:
+                # Find maximum existing sequence in sales_vouchers
+                cursor.execute("""
+                    SELECT vch_no FROM sales_vouchers
+                    WHERE company_id = ? AND series = ?;
+                """, (actual_company_id, series))
+                max_vch_num = 0
+                for r in cursor.fetchall():
+                    vch_no_str = r["vch_no"]
+                    if prefix and vch_no_str.startswith(prefix):
+                        num_part = vch_no_str[len(prefix):]
+                    else:
+                        num_part = "".join(ch for ch in vch_no_str if ch.isdigit())
                     try:
-                        cursor.execute("ROLLBACK TO SAVEPOINT sp_vch_hdr;")
-                    except Exception:
+                        n = int(num_part)
+                        if n > max_vch_num:
+                            max_vch_num = n
+                    except ValueError:
                         pass
-                    if ("sales_vouchers" in str(e).lower() or "unique" in str(e).lower() or "integrity" in str(e).lower()) and attempt < 9:
-                        time.sleep(0.02 * (attempt + 1))
-                        continue
-                    raise
+                init_val = max(max_vch_num, start_num - 1)
+                cursor.execute("""
+                    INSERT INTO voucher_sequences (id, company_id, voucher_type, series, current_number, updated_at)
+                    VALUES (?, ?, 'SALE', ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(company_id, voucher_type, series) DO NOTHING;
+                """, (str(uuid.uuid4()), actual_company_id, series, init_val))
+
+            vch_no = None
+            vch_id = str(uuid.uuid4())
+
+            while True:
+                cursor.execute("""
+                    UPDATE voucher_sequences
+                    SET current_number = current_number + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE company_id = ? AND voucher_type = 'SALE' AND series = ?;
+                """, (actual_company_id, series))
+
+                cursor.execute("""
+                    SELECT current_number FROM voucher_sequences
+                    WHERE company_id = ? AND voucher_type = 'SALE' AND series = ?;
+                """, (actual_company_id, series))
+                allocated_seq = cursor.fetchone()["current_number"]
+                candidate_no = f"{prefix}{str(allocated_seq).zfill(digits)}"
+
+                cursor.execute("""
+                    SELECT id FROM sales_vouchers
+                    WHERE company_id = ? AND series = ? AND vch_no = ?;
+                """, (actual_company_id, series, candidate_no))
+                if not cursor.fetchone():
+                    vch_no = candidate_no
+                    break
+
+            # Insert Voucher Header
+            cursor.execute("""
+                INSERT INTO sales_vouchers (
+                    id, company_id, branch_id, vch_no, series, vch_date,
+                    sale_type, party_name, account_id, mat_centre, narration,
+                    subtotal, gross_subtotal, discount_total, taxable_amount, tax_rate, cgst_amount, sgst_amount,
+                    igst_amount, round_off, grand_total, payment_method, payment_status, customer_category
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Main Store', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID', ?);
+            """, (
+                vch_id,
+                actual_company_id,
+                branch_id,
+                vch_no,
+                series,
+                vch_date,
+                sale_type,
+                resolved_party_name,
+                resolved_account_id,
+                narration,
+                totals["subtotal"],
+                totals["subtotal"],
+                totals.get("discount_total", 0.0),
+                totals["taxable_amount"],
+                18.0,  # general rate ref
+                totals["cgst_amount"],
+                totals["sgst_amount"],
+                totals["igst_amount"],
+                totals["round_off"],
+                totals["grand_total"],
+                payment_method,
+                resolved_category
+            ))
 
             # 2. Insert Line Items and Deduct Stock
             for idx, (item_id, line) in enumerate(resolved_item_lines, start=1):
@@ -343,7 +434,7 @@ class BillingService:
                         ) VALUES (?, ?, ?, ?, 'SALE', ?, ?, 'INVOICE', ?, ?);
                     """, (
                         str(uuid.uuid4()),
-                        company_id,
+                        actual_company_id,
                         branch_id,
                         item_id,
                         -qty,
@@ -361,7 +452,7 @@ class BillingService:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?);
                 """, (
                     str(uuid.uuid4()),
-                    company_id,
+                    actual_company_id,
                     vch_id,
                     p.get("method", "CASH"),
                     float(p.get("amount") or totals["grand_total"]),
@@ -376,11 +467,11 @@ class BillingService:
                     id, company_id, vch_no, vch_date, vch_type, reference_id, narration
                 ) VALUES (?, ?, ?, ?, 'SALE', ?, ?);
             """, (
-                journal_id, company_id, vch_no, vch_date, vch_id,
-                f"Sales Invoice #{vch_no} to {party_name}"
+                journal_id, actual_company_id, vch_no, vch_date, vch_id,
+                f"Sales Invoice #{vch_no} to {resolved_party_name}"
             ))
 
-            debit_account = f"Cash / Bank ({payment_method})" if party_name == "CASH" else party_name
+            debit_account = f"Cash / Bank ({payment_method})" if resolved_party_name == "CASH" else resolved_party_name
             cursor.execute("""
                 INSERT INTO journal_entry_lines (id, journal_id, account_name, debit, credit, notes)
                 VALUES (?, ?, ?, ?, 0.0, 'Settlement / Customer receivable');
@@ -427,10 +518,10 @@ class BillingService:
                 ) VALUES (?, ?, ?, 'CREATE_SALE', 'INVOICE', ?, ?);
             """, (
                 str(uuid.uuid4()),
-                company_id,
+                actual_company_id,
                 cashier_username,
                 vch_no,
-                f"Completed sale for ₹{totals['grand_total']} to {party_name}"
+                f"Completed sale for ₹{totals['grand_total']} to {resolved_party_name}"
             ))
 
             conn.commit()
@@ -439,17 +530,28 @@ class BillingService:
         try:
             from services.inventory_service import inventory_service
             for it_id in needed_quantities.keys():
-                inventory_service.evaluate_low_stock_alerts(company_id, branch_id=branch_id, item_id=it_id)
+                inventory_service.evaluate_low_stock_alerts(actual_company_id, branch_id=branch_id, item_id=it_id)
         except Exception as e:
             logger.debug(f"evaluate_low_stock_alerts after sale checkout: {e}")
 
-        logger.info(f"Invoice {vch_no} saved successfully for company {company_id}. Total: ₹{totals['grand_total']} (Category: {resolved_category})")
+        logger.info(f"Invoice {vch_no} saved successfully for company {actual_company_id}. Total: ₹{totals['grand_total']} (Category: {resolved_category})")
         return {
+            "id": vch_id,
             "voucher_id": vch_id,
             "vch_no": vch_no,
+            "series": series,
+            "vch_date": vch_date,
+            "party_name": resolved_party_name,
+            "account_id": resolved_account_id,
             "customer_category": resolved_category,
+            "subtotal": totals["subtotal"],
+            "cgst_amount": totals["cgst_amount"],
+            "sgst_amount": totals["sgst_amount"],
+            "igst_amount": totals["igst_amount"],
+            "round_off": totals["round_off"],
             "grand_total": totals["grand_total"],
-            "totals": totals
+            "totals": totals,
+            "items": [line for _, line in resolved_item_lines]
         }
 
     def get_voucher_details(self, company_id: str, voucher_id_or_no: str) -> Optional[Dict[str, Any]]:
@@ -483,6 +585,28 @@ class BillingService:
 
             return vch
 
+    def print_invoice(
+        self,
+        company_id: str,
+        vch_id: str,
+        paper_format: str = "thermal-80",
+        printer_name: str = "Default Printer",
+        copies: int = 1
+    ) -> Dict[str, Any]:
+        """Audit and simulate/execute invoice printing without altering stock or transactions."""
+        vch = self.get_voucher_details(company_id, vch_id)
+        if not vch:
+            return {"success": False, "error": "Voucher not found."}
+        return {
+            "success": True,
+            "data": {
+                "vch_no": vch.get("vch_no"),
+                "copies": copies,
+                "printer": printer_name,
+                "format": paper_format
+            }
+        }
+
     def modify_sale_invoice(
         self,
         company_id: str,
@@ -510,13 +634,15 @@ class BillingService:
         if not items:
             raise ValueError("Cannot save an empty invoice. At least one line item is required.")
 
+        actual_comp_id = self._resolve_company_id(company_id)
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
 
             # 1. Fetch existing voucher
             cursor.execute("""
                 SELECT * FROM sales_vouchers WHERE company_id = ? AND id = ?;
-            """, (company_id, vch_id))
+            """, (actual_comp_id, vch_id))
             old_vch = cursor.fetchone()
             if not old_vch:
                 raise ValueError(f"Sales Invoice with ID '{vch_id}' not found.")
@@ -565,33 +691,44 @@ class BillingService:
             cursor.execute("DELETE FROM payments WHERE voucher_id = ?;", (vch_id,))
             cursor.execute("DELETE FROM sales_voucher_items WHERE voucher_id = ?;", (vch_id,))
 
-            # 4. Resolve customer category and account_id
-            if not account_id and party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
+            # 4. Resolve customer category and account_id from permanent Customer Masters or authorized walk-in cash customer
+            acc_row = None
+            if account_id:
                 cursor.execute("""
-                    SELECT id, customer_category FROM accounts
-                    WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(print_name) = ? OR UPPER(alias) = ?)
-                    LIMIT 1;
-                """, (company_id, party_name.strip().upper(), party_name.strip().upper(), party_name.strip().upper()))
+                    SELECT id, name, customer_category FROM accounts
+                    WHERE company_id = ? AND id = ?;
+                """, (actual_comp_id, account_id))
                 acc_row = cursor.fetchone()
-                if acc_row:
-                    account_id = acc_row["id"]
-                    if not customer_category and acc_row["customer_category"]:
-                        customer_category = acc_row["customer_category"]
-            if not account_id:
-                account_id = old_vch["account_id"] if "account_id" in old_vch.keys() else None
+            if not acc_row and party_name:
+                clean_party = party_name.strip().upper()
+                cursor.execute("""
+                    SELECT id, name, customer_category FROM accounts
+                    WHERE company_id = ? AND (UPPER(name) = ? OR UPPER(print_name) = ? OR UPPER(alias) = ?);
+                """, (actual_comp_id, clean_party, clean_party, clean_party))
+                acc_row = cursor.fetchone()
 
-            resolved_category = (customer_category or "").strip()
-            if not resolved_category:
-                if account_id:
-                    cursor.execute("SELECT customer_category FROM accounts WHERE id = ?;", (account_id,))
-                    acc_row = cursor.fetchone()
-                    resolved_category = acc_row["customer_category"] if acc_row and acc_row["customer_category"] else "Direct Customer"
-                elif party_name and party_name.upper() not in ("CASH", "CASH SALE", "WALK-IN"):
-                    cursor.execute("SELECT customer_category FROM accounts WHERE company_id = ? AND UPPER(name) = ?;", (company_id, party_name.strip().upper()))
-                    acc_row = cursor.fetchone()
-                    resolved_category = acc_row["customer_category"] if acc_row and acc_row["customer_category"] else "Direct Customer"
+            if acc_row:
+                account_id = acc_row["id"]
+                party_name = party_name.strip() if party_name and party_name.strip() else acc_row["name"]
+                resolved_category = (customer_category or acc_row["customer_category"] or "Direct Customer").strip()
+            else:
+                clean_party = (party_name or "").strip().upper()
+                is_cash_sale = (
+                    not clean_party or
+                    clean_party in ("CASH", "CASH SALE", "WALK-IN", "WALK-IN CUSTOMER", "DIRECT", "DIRECT CUSTOMER", "DIRECT CASH") or
+                    "CASH" in clean_party or
+                    "DIRECT" in clean_party or
+                    "WALK-IN" in clean_party or
+                    (customer_category == "Direct Customer" and not account_id)
+                )
+                if is_cash_sale:
+                    if "I/GST" in (sale_type or "").upper():
+                        raise ValueError("Inter-State (IGST) sales require a registered customer master. Cash sales are not permitted for I/GST.")
+                    party_name = party_name.strip() if party_name and party_name.strip() else "CASH"
+                    account_id = None
+                    resolved_category = "Direct Customer"
                 else:
-                    resolved_category = old_vch["customer_category"] or "Direct Customer"
+                    raise ValueError("No customer master found. Please create this customer in Administration → Masters → Add.")
 
             # 5. Calculate updated voucher totals
             totals = tax_service.calculate_voucher_totals(
@@ -1258,7 +1395,7 @@ class BillingService:
               AND (
                   sv.vch_date = ? 
                   OR sv.vch_date = ? 
-                  OR substr(sv.created_at, 1, 10) = ?
+                  OR substr(CAST(sv.created_at AS TEXT), 1, 10) = ?
               )
         """
         params = [actual_comp_id, today_dash, today_iso, today_iso]
