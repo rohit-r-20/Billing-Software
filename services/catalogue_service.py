@@ -295,6 +295,36 @@ class CatalogueService:
         else:
             min_stock_alert_level = None
 
+        # Reorder level threshold
+        raw_reorder = item_data.get("reorder_level")
+        if raw_reorder is not None and str(raw_reorder).strip() not in ("", "null", "None"):
+            try:
+                reorder_level = max(0.0, float(raw_reorder))
+            except (ValueError, TypeError):
+                reorder_level = None
+        else:
+            reorder_level = None
+
+        # Preferred reorder quantity
+        raw_reorder_qty = item_data.get("reorder_qty") or item_data.get("preferred_reorder_qty") or item_data.get("reorder_quantity")
+        if raw_reorder_qty is not None and str(raw_reorder_qty).strip() not in ("", "null", "None"):
+            try:
+                reorder_qty = max(0.0, float(raw_reorder_qty))
+            except (ValueError, TypeError):
+                reorder_qty = None
+        else:
+            reorder_qty = None
+
+        # Maximum stock level
+        raw_max_stock = item_data.get("max_stock_level") or item_data.get("max_stock")
+        if raw_max_stock is not None and str(raw_max_stock).strip() not in ("", "null", "None"):
+            try:
+                max_stock_level = max(0.0, float(raw_max_stock))
+            except (ValueError, TypeError):
+                max_stock_level = None
+        else:
+            max_stock_level = None
+
         raw_alert_enabled = item_data.get("alert_enabled")
         if raw_alert_enabled is None:
             alert_enabled = 1
@@ -358,13 +388,17 @@ class CatalogueService:
                         min_sales_price = ?,
                         description = ?,
                         min_stock_alert_level = ?,
-                        alert_enabled = ?
+                        alert_enabled = ?,
+                        reorder_level = ?,
+                        reorder_qty = ?,
+                        max_stock_level = ?
                     WHERE company_id = ? AND id = ?;
                 """, (
                     name, alias, print_name, group,
                     unit, tax_cat, hsn,
                     sales_price, purc_price, mrp, min_price, desc,
                     min_stock_alert_level, alert_enabled,
+                    reorder_level, reorder_qty, max_stock_level,
                     actual_company_id, item_id
                 ))
                 actual_id = item_id
@@ -375,8 +409,9 @@ class CatalogueService:
                         id, company_id, name, alias, print_name, item_group,
                         unit, op_stock_qty, op_stock_val, tax_category, hsn,
                         sales_price, purc_price, mrp, min_sales_price, description,
-                        min_stock_alert_level, alert_enabled
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        min_stock_alert_level, alert_enabled,
+                        reorder_level, reorder_qty, max_stock_level
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(company_id, name) DO UPDATE SET
                         alias = excluded.alias,
                         print_name = excluded.print_name,
@@ -390,12 +425,16 @@ class CatalogueService:
                         min_sales_price = excluded.min_sales_price,
                         description = excluded.description,
                         min_stock_alert_level = excluded.min_stock_alert_level,
-                        alert_enabled = excluded.alert_enabled;
+                        alert_enabled = excluded.alert_enabled,
+                        reorder_level = excluded.reorder_level,
+                        reorder_qty = excluded.reorder_qty,
+                        max_stock_level = excluded.max_stock_level;
                 """, (
                     item_id, actual_company_id, name, alias, print_name, group,
                     unit, op_qty, op_val, tax_cat, hsn,
                     sales_price, purc_price, mrp, min_price, desc,
-                    min_stock_alert_level, alert_enabled
+                    min_stock_alert_level, alert_enabled,
+                    reorder_level, reorder_qty, max_stock_level
                 ))
 
                 # Query actual ID
@@ -427,6 +466,13 @@ class CatalogueService:
 
             conn.commit()
 
+        # Trigger automatic low-stock evaluation after item configuration change
+        try:
+            from services.inventory_service import inventory_service
+            inventory_service.evaluate_low_stock_alerts(actual_company_id)
+        except Exception as e:
+            logger.debug(f"evaluate_low_stock_alerts after save_item: {e}")
+
         logger.info(f"Item {name} (ID: {actual_id}) saved for company {actual_company_id}.")
         return {
             "id": actual_id,
@@ -437,8 +483,103 @@ class CatalogueService:
             "tax_category": tax_cat,
             "item_group": group,
             "min_stock_alert_level": min_stock_alert_level,
+            "reorder_level": reorder_level,
+            "reorder_qty": reorder_qty,
+            "max_stock_level": max_stock_level,
             "alert_enabled": alert_enabled
         }
+
+    def set_item_branch_config(
+        self,
+        company_id: str,
+        branch_id: str,
+        item_id: str,
+        config_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Configure branch-specific minimum stock, reorder level, and notifications."""
+        actual_comp_id = self._resolve_company_id(company_id)
+        raw_min = config_data.get("min_stock_level") if config_data.get("min_stock_level") is not None else config_data.get("min_stock_alert_level")
+        min_lvl = float(raw_min) if (raw_min is not None and str(raw_min).strip() not in ("", "null", "None")) else None
+        
+        raw_reorder = config_data.get("reorder_level")
+        reorder_lvl = float(raw_reorder) if (raw_reorder is not None and str(raw_reorder).strip() not in ("", "null", "None")) else None
+        
+        raw_rq = config_data.get("reorder_qty") if config_data.get("reorder_qty") is not None else config_data.get("preferred_reorder_qty")
+        reorder_q = float(raw_rq) if (raw_rq is not None and str(raw_rq).strip() not in ("", "null", "None")) else None
+        
+        raw_max = config_data.get("max_stock_level") if config_data.get("max_stock_level") is not None else config_data.get("max_stock")
+        max_lvl = float(raw_max) if (raw_max is not None and str(raw_max).strip() not in ("", "null", "None")) else None
+        
+        alert_en = 1 if config_data.get("alert_enabled", 1) in (1, True, "1", "true") else 0
+
+        config_id = str(uuid.uuid4())
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO item_branch_stock_configs (
+                    id, company_id, branch_id, item_id,
+                    min_stock_level, reorder_level, reorder_qty, max_stock_level, alert_enabled, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(branch_id, item_id) DO UPDATE SET
+                    min_stock_level = excluded.min_stock_level,
+                    reorder_level = excluded.reorder_level,
+                    reorder_qty = excluded.reorder_qty,
+                    max_stock_level = excluded.max_stock_level,
+                    alert_enabled = excluded.alert_enabled,
+                    updated_at = CURRENT_TIMESTAMP;
+            """, (config_id, actual_comp_id, branch_id, item_id, min_lvl, reorder_lvl, reorder_q, max_lvl, alert_en))
+            conn.commit()
+
+        try:
+            from services.inventory_service import inventory_service
+            inventory_service.evaluate_low_stock_alerts(actual_comp_id)
+        except Exception as e:
+            logger.debug(f"evaluate_low_stock_alerts after set_item_branch_config: {e}")
+
+        return {
+            "branch_id": branch_id,
+            "item_id": item_id,
+            "min_stock_level": min_lvl,
+            "reorder_level": reorder_lvl,
+            "reorder_qty": reorder_q,
+            "max_stock_level": max_lvl,
+            "alert_enabled": alert_en
+        }
+
+    def get_item_branch_config(
+        self,
+        company_id: str,
+        branch_id: str,
+        item_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve branch-specific stock configuration for an item."""
+        actual_comp_id = self._resolve_company_id(company_id)
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM item_branch_stock_configs
+                WHERE company_id = ? AND branch_id = ? AND item_id = ?;
+            """, (actual_comp_id, branch_id, item_id))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def list_item_branch_configs(
+        self,
+        company_id: str,
+        item_id: str
+    ) -> List[Dict[str, Any]]:
+        """List all branch overrides configured for an item."""
+        actual_comp_id = self._resolve_company_id(company_id)
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT c.*, b.name as branch_name, b.code as branch_code
+                FROM item_branch_stock_configs c
+                JOIN branches b ON b.id = c.branch_id
+                WHERE c.company_id = ? AND c.item_id = ?
+                ORDER BY b.name ASC;
+            """, (actual_comp_id, item_id))
+            return [dict(r) for r in cursor.fetchall()]
 
 
 catalogue_service = CatalogueService()

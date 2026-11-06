@@ -1009,6 +1009,11 @@ class PurchaseService:
 
             conn.commit()
 
+        try:
+            self.inventory_service.evaluate_low_stock_alerts(actual_comp_id)
+        except Exception as e:
+            logger.debug(f"evaluate_low_stock_alerts after purchase return: {e}")
+
         logger.info(f"Purchase Return {vch_no} processed successfully.")
         return {
             "return_id": ret_id,

@@ -1965,6 +1965,12 @@ function resetProductMasterForm() {
   if (idEl) idEl.value = "";
   const minStockEl = document.getElementById("item-min-stock-level");
   if (minStockEl) minStockEl.value = "";
+  const reorderLvlEl = document.getElementById("item-reorder-level");
+  if (reorderLvlEl) reorderLvlEl.value = "";
+  const reorderQtyEl = document.getElementById("item-reorder-qty");
+  if (reorderQtyEl) reorderQtyEl.value = "";
+  const maxStockEl = document.getElementById("item-max-stock-level");
+  if (maxStockEl) maxStockEl.value = "";
   const alertEnabledEl = document.getElementById("item-alert-enabled");
   if (alertEnabledEl) alertEnabledEl.checked = true;
   const titleEl = document.getElementById("item-master-screen-title");
@@ -2012,6 +2018,18 @@ function loadProductForEditing(itemId) {
     if (minStockEl) {
       minStockEl.value = (item.min_stock_alert_level !== null && item.min_stock_alert_level !== undefined) ? item.min_stock_alert_level : "";
     }
+    const reorderLvlEl = document.getElementById("item-reorder-level");
+    if (reorderLvlEl) {
+      reorderLvlEl.value = (item.reorder_level !== null && item.reorder_level !== undefined) ? item.reorder_level : "";
+    }
+    const reorderQtyEl = document.getElementById("item-reorder-qty");
+    if (reorderQtyEl) {
+      reorderQtyEl.value = (item.reorder_qty !== null && item.reorder_qty !== undefined) ? item.reorder_qty : "";
+    }
+    const maxStockEl = document.getElementById("item-max-stock-level");
+    if (maxStockEl) {
+      maxStockEl.value = (item.max_stock_level !== null && item.max_stock_level !== undefined) ? item.max_stock_level : "";
+    }
     const alertEnabledEl = document.getElementById("item-alert-enabled");
     if (alertEnabledEl) {
       alertEnabledEl.checked = (item.alert_enabled !== 0);
@@ -2036,11 +2054,26 @@ function handleSaveItemMaster() {
   const existingId = document.getElementById("item-id")?.value.trim() || undefined;
 
   const rawMinStock = document.getElementById("item-min-stock-level") ? document.getElementById("item-min-stock-level").value.trim() : "";
+  const rawReorder = document.getElementById("item-reorder-level") ? document.getElementById("item-reorder-level").value.trim() : "";
+  const rawReorderQty = document.getElementById("item-reorder-qty") ? document.getElementById("item-reorder-qty").value.trim() : "";
+  const rawMaxStock = document.getElementById("item-max-stock-level") ? document.getElementById("item-max-stock-level").value.trim() : "";
   const alertEnabled = document.getElementById("item-alert-enabled") ? (document.getElementById("item-alert-enabled").checked ? 1 : 0) : 1;
 
   let parsedMinStock = null;
   if (rawMinStock !== "" && !isNaN(parseFloat(rawMinStock))) {
     parsedMinStock = Math.max(0, parseFloat(rawMinStock));
+  }
+  let parsedReorder = null;
+  if (rawReorder !== "" && !isNaN(parseFloat(rawReorder))) {
+    parsedReorder = Math.max(0, parseFloat(rawReorder));
+  }
+  let parsedReorderQty = null;
+  if (rawReorderQty !== "" && !isNaN(parseFloat(rawReorderQty))) {
+    parsedReorderQty = Math.max(0, parseFloat(rawReorderQty));
+  }
+  let parsedMaxStock = null;
+  if (rawMaxStock !== "" && !isNaN(parseFloat(rawMaxStock))) {
+    parsedMaxStock = Math.max(0, parseFloat(rawMaxStock));
   }
 
   const itemData = {
@@ -2069,6 +2102,9 @@ function handleSaveItemMaster() {
     description: document.getElementById("item-desc").value.trim(),
     min_stock_alert_level: parsedMinStock,
     min_stock_level: parsedMinStock,
+    reorder_level: parsedReorder,
+    reorder_qty: parsedReorderQty,
+    max_stock_level: parsedMaxStock,
     alert_enabled: alertEnabled,
     updatedAt: new Date().toISOString()
   };
@@ -3041,16 +3077,61 @@ function fetchCustomerCategoryDiscounts() {
   });
 }
 
+let currentNotifFilter = "all";
+let currentNotifAlerts = [];
+
+function updateHeaderNotificationsBadge(count) {
+  const badge = document.getElementById("header-notif-badge");
+  const btn = document.getElementById("btn-header-notifications");
+  const modalBadge = document.getElementById("low-stock-modal-badge");
+
+  // In Fast Billing cashier mode, cashier cannot view stock management or alerts
+  const isCashier = (activeBillingMode === "FAST" && window.currentUserRole === "cashier");
+  if (isCashier) {
+    if (badge) badge.style.display = "none";
+    if (btn) btn.style.display = "none";
+    return;
+  }
+
+  if (btn) btn.style.display = "flex";
+  if (modalBadge) modalBadge.textContent = count;
+
+  if (badge) {
+    badge.textContent = count;
+    if (count > 0) {
+      badge.style.display = "flex";
+      badge.style.backgroundColor = "#dc2626";
+    } else {
+      badge.style.display = "none";
+    }
+  }
+}
+
 function checkLowStockAlerts(allowAutoPopup = true) {
-  if (!activeCompany || !window.backend || !window.backend.getLowStockAlerts) return;
-  window.backend.getLowStockAlerts(activeCompany.id, (resp) => {
+  if (!activeCompany || !window.backend) return;
+  if (activeBillingMode === "FAST" && window.currentUserRole === "cashier") {
+    updateHeaderNotificationsBadge(0);
+    return;
+  }
+
+  const fetchAlerts = (cb) => {
+    if (window.backend.getLowStockNotificationsFiltered) {
+      window.backend.getLowStockNotificationsFiltered(activeCompany.id, "all", cb);
+    } else if (window.backend.getLowStockAlerts) {
+      window.backend.getLowStockAlerts(activeCompany.id, cb);
+    }
+  };
+
+  fetchAlerts((resp) => {
     try {
       const res = JSON.parse(resp);
       if (!res.success) return;
       const alerts = res.data || [];
       const count = alerts.length;
 
-      // Update Menubar Badge
+      updateHeaderNotificationsBadge(count);
+
+      // Update Legacy / POS Badges if present
       const barBtn = document.getElementById("bar-low-stock-alert");
       const barCount = document.getElementById("bar-low-stock-count");
       if (barBtn && barCount) {
@@ -3058,16 +3139,8 @@ function checkLowStockAlerts(allowAutoPopup = true) {
         barBtn.style.display = count > 0 ? "inline-flex" : "none";
       }
 
-      // Update POS Badge
-      const posBtn = document.getElementById("btn-pos-low-stock-pill");
-      const posCount = document.getElementById("pos-low-stock-count");
-      if (posBtn && posCount) {
-        posCount.textContent = count;
-        posBtn.style.display = count > 0 ? "inline-flex" : "none";
-      }
-
       if (count > 0 && allowAutoPopup && !sessionLowStockDismissed) {
-        showLowStockAlertModal(alerts);
+        showLowStockAlertModal(alerts, "all");
       }
     } catch (e) {
       console.warn("Error checking low stock alerts:", e);
@@ -3075,46 +3148,134 @@ function checkLowStockAlerts(allowAutoPopup = true) {
   });
 }
 
-function showLowStockAlertModal(alertsList) {
-  const modal = document.getElementById("modal-low-stock-alert");
+function renderNotificationRows(alertsList, filterQuery = "") {
   const tbody = document.getElementById("low-stock-modal-tbody");
-  const title = document.getElementById("low-stock-modal-title");
-  if (!modal || !tbody) return;
+  const summaryText = document.getElementById("notif-modal-summary-text");
+  const modal = document.getElementById("modal-low-stock-alert");
+  if (!tbody) return;
 
-  title.textContent = `Low Stock Alert — ${alertsList.length} Product${alertsList.length === 1 ? '' : 's'} Below Threshold`;
   tbody.innerHTML = "";
+  const query = (filterQuery || "").trim().toUpperCase();
 
-  alertsList.forEach((a) => {
-    const tr = document.createElement("tr");
-    tr.dataset.itemId = a.item_id;
-    const isOut = a.current_stock <= 0;
-    tr.className = isOut ? "low-stock-row-out" : "low-stock-row-warning";
-
-    const badgeCls = isOut ? "stock-badge-out" : "stock-badge-low";
-    const statusText = a.is_negative ? "Negative" : (isOut ? "Out of Stock" : "Low Stock");
-
-    tr.innerHTML = `
-      <td style="font-weight: 700; color: #0f172a;">${escapeHtml(a.product_name)}</td>
-      <td style="font-family: monospace; color: #475569;">${escapeHtml(a.barcode || "-")}</td>
-      <td style="text-align: right; font-weight: 800; color: ${isOut ? '#dc2626' : '#b45309'};">${a.current_stock.toFixed(2)} ${escapeHtml(a.unit || '')}</td>
-      <td style="text-align: right; font-weight: 600;">${a.threshold.toFixed(2)} ${escapeHtml(a.unit || '')}</td>
-      <td style="text-align: right; font-weight: 800; color: #b91c1c;">-${a.shortfall.toFixed(2)}</td>
-      <td style="text-align: center;"><span class="${badgeCls}">${statusText}</span></td>
-    `;
-    tr.addEventListener("click", () => {
-      tbody.querySelectorAll("tr").forEach(r => r.style.outline = "none");
-      tr.style.outline = "2px solid #2563eb";
-      modal.dataset.selectedItemId = a.item_id;
-    });
-    tbody.appendChild(tr);
+  const filtered = (alertsList || []).filter((a) => {
+    if (!query) return true;
+    const name = (a.product_name || a.name || "").toUpperCase();
+    const code = (a.item_code || a.alias || "").toUpperCase();
+    const barcode = (a.barcode || "").toUpperCase();
+    const branch = (a.branch_name || "").toUpperCase();
+    return name.includes(query) || code.includes(query) || barcode.includes(query) || branch.includes(query);
   });
 
-  if (alertsList.length > 0) {
-    modal.dataset.selectedItemId = alertsList[0].item_id;
+  if (summaryText) {
+    summaryText.textContent = `Showing ${filtered.length} of ${(alertsList || []).length} items (${currentNotifFilter.toUpperCase()})`;
   }
 
-  modal.classList.add("show");
-  modal.style.display = "flex";
+  if (filtered.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="10" style="text-align: center; padding: 24px; color: #64748b; font-size: 13px;">No notifications found for this criteria.</td>`;
+    tbody.appendChild(tr);
+    if (modal) modal.dataset.selectedItemId = "";
+    return;
+  }
+
+  filtered.forEach((a, idx) => {
+    const tr = document.createElement("tr");
+    tr.dataset.itemId = a.item_id;
+    tr.className = "low-stock-table-row";
+    if (idx === 0) {
+      tr.classList.add("selected-row");
+      if (modal) modal.dataset.selectedItemId = a.item_id;
+    }
+
+    const isCritical = (a.severity === "CRITICAL" || a.current_stock <= 0);
+    const isResolved = (a.status === "RESOLVED");
+
+    let badgeHtml = "";
+    if (isResolved) {
+      badgeHtml = `<span class="stock-badge-resolved">RESOLVED</span>`;
+    } else if (isCritical) {
+      badgeHtml = `<span class="stock-badge-critical">CRITICAL</span>`;
+    } else {
+      badgeHtml = `<span class="stock-badge-reorder">REORDER</span>`;
+    }
+
+    const stockColor = isResolved ? "#166534" : (isCritical ? "#dc2626" : "#b45309");
+    const stockVal = Number(a.current_stock !== undefined ? a.current_stock : a.available_qty || 0).toFixed(2);
+    const minVal = a.min_stock_level !== null && a.min_stock_level !== undefined ? Number(a.min_stock_level).toFixed(2) : "-";
+    const reorderVal = a.reorder_level !== null && a.reorder_level !== undefined ? Number(a.reorder_level).toFixed(2) : (a.threshold ? Number(a.threshold).toFixed(2) : "-");
+    const suggestedQty = a.suggested_reorder_qty !== null && a.suggested_reorder_qty !== undefined ? Number(a.suggested_reorder_qty).toFixed(2) : "0.00";
+    const timeVal = a.created_at || a.last_evaluated_at || a.resolved_at || "-";
+
+    tr.innerHTML = `
+      <td style="padding: 8px 10px; font-weight: 700; color: #0f172a;">${escapeHtml(a.product_name || a.name || "")}</td>
+      <td style="padding: 8px 10px; font-family: monospace; color: #475569;">${escapeHtml(a.item_code || a.alias || "-")}</td>
+      <td style="padding: 8px 10px; font-family: monospace; color: #64748b;">${escapeHtml(a.barcode || "-")}</td>
+      <td style="padding: 8px 10px; color: #334155;">${escapeHtml(a.branch_name || "Main Store")}</td>
+      <td style="padding: 8px 10px; text-align: right; font-weight: 800; color: ${stockColor};">${stockVal} ${escapeHtml(a.unit || '')}</td>
+      <td style="padding: 8px 10px; text-align: right; color: #475569;">${minVal}</td>
+      <td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #1e293b;">${reorderVal}</td>
+      <td style="padding: 8px 10px; text-align: right; font-weight: 800; color: #1e40af;">+${suggestedQty}</td>
+      <td style="padding: 8px 10px; text-align: center;">${badgeHtml}</td>
+      <td style="padding: 8px 10px; text-align: right; font-size: 11px; color: #64748b;">${escapeHtml(timeVal)}</td>
+    `;
+
+    tr.addEventListener("click", () => {
+      tbody.querySelectorAll("tr").forEach(r => r.classList.remove("selected-row"));
+      tr.classList.add("selected-row");
+      if (modal) modal.dataset.selectedItemId = a.item_id;
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+function showLowStockAlertModal(alertsList = null, filterType = "all") {
+  const modal = document.getElementById("modal-low-stock-alert");
+  if (!modal) return;
+
+  currentNotifFilter = filterType;
+
+  // Highlight active filter tab
+  document.querySelectorAll(".notif-filter-btn").forEach((btn) => {
+    btn.classList.toggle("notif-filter-active", btn.dataset.filter === filterType);
+  });
+
+  const searchInput = document.getElementById("notif-modal-search");
+  if (searchInput) searchInput.value = "";
+
+  const renderData = (data) => {
+    currentNotifAlerts = data || [];
+    renderNotificationRows(currentNotifAlerts, "");
+    modal.classList.add("show");
+    modal.style.display = "flex";
+  };
+
+  if (alertsList && filterType === "all") {
+    renderData(alertsList);
+  } else if (activeCompany && window.backend) {
+    if (window.backend.getLowStockNotificationsFiltered) {
+      window.backend.getLowStockNotificationsFiltered(activeCompany.id, filterType, (resp) => {
+        try {
+          const res = JSON.parse(resp);
+          renderData(res.success ? res.data : []);
+        } catch (e) {
+          console.error("Error loading low stock notifications:", e);
+        }
+      });
+    } else if (window.backend.getLowStockAlerts) {
+      window.backend.getLowStockAlerts(activeCompany.id, (resp) => {
+        try {
+          const res = JSON.parse(resp);
+          renderData(res.success ? res.data : []);
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    }
+  } else {
+    modal.classList.add("show");
+    modal.style.display = "flex";
+  }
 }
 
 function closeLowStockAlertModal(dismissForSession = false) {
@@ -8011,9 +8172,38 @@ function setupEnterpriseErpEventListeners() {
     });
   }
 
+  // Header Notifications Bell Trigger
+  const btnHeaderNotifications = document.getElementById("btn-header-notifications");
+  if (btnHeaderNotifications) {
+    btnHeaderNotifications.addEventListener("click", () => {
+      showLowStockAlertModal(null, "all");
+    });
+  }
+
+  // Low Stock Notification Filter Tabs
+  document.querySelectorAll(".notif-filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const fType = btn.dataset.filter || "all";
+      showLowStockAlertModal(null, fType);
+    });
+  });
+
+  // Low Stock Notification In-Modal Search
+  const notifModalSearch = document.getElementById("notif-modal-search");
+  if (notifModalSearch) {
+    notifModalSearch.addEventListener("input", (e) => {
+      renderNotificationRows(currentNotifAlerts, e.target.value);
+    });
+  }
+
   const btnCloseLowStockModal = document.getElementById("btn-close-low-stock-modal");
   if (btnCloseLowStockModal) {
     btnCloseLowStockModal.addEventListener("click", () => closeLowStockAlertModal(false));
+  }
+
+  const btnCloseLowStockBottom = document.getElementById("btn-close-low-stock-bottom");
+  if (btnCloseLowStockBottom) {
+    btnCloseLowStockBottom.addEventListener("click", () => closeLowStockAlertModal(false));
   }
 
   const btnLowStockDismiss = document.getElementById("btn-low-stock-dismiss");
@@ -8034,8 +8224,22 @@ function setupEnterpriseErpEventListeners() {
     });
   }
 
+  const btnLowStockEditItem = document.getElementById("btn-low-stock-edit-item") || document.getElementById("btn-low-stock-view-product");
+  if (btnLowStockEditItem) {
+    btnLowStockEditItem.addEventListener("click", () => {
+      const modal = document.getElementById("modal-low-stock-alert");
+      const selectedId = modal ? modal.dataset.selectedItemId : null;
+      closeLowStockAlertModal(false);
+      if (selectedId) {
+        loadProductForEditing(selectedId);
+      } else {
+        showScreen("view-items-list");
+      }
+    });
+  }
+
   const btnLowStockViewProduct = document.getElementById("btn-low-stock-view-product");
-  if (btnLowStockViewProduct) {
+  if (btnLowStockViewProduct && btnLowStockViewProduct !== btnLowStockEditItem) {
     btnLowStockViewProduct.addEventListener("click", () => {
       const modal = document.getElementById("modal-low-stock-alert");
       const selectedId = modal ? modal.dataset.selectedItemId : null;

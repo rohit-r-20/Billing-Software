@@ -1101,15 +1101,29 @@
                 <div class="field-row-split">
                   <div class="split-col">
                     <label class="field-label" for="item-min-stock-level" title="Alerts if stock < threshold">Min. Stock Alert Level</label>
-                    <input type="number" step="0.01" min="0" id="item-min-stock-level" placeholder="Optional (e.g. 10.0)" />
+                    <input type="number" step="0.01" min="0" id="item-min-stock-level" placeholder="e.g. 10.0" />
                   </div>
                   <div class="split-col">
-                    <label class="field-label" for="item-alert-enabled">Stock Notification</label>
-                    <label class="checkbox-inline-label" for="item-alert-enabled">
-                      <input type="checkbox" id="item-alert-enabled" checked />
-                      <span>Enable Low-Stock Alert</span>
-                    </label>
+                    <label class="field-label" for="item-reorder-level" title="Threshold triggering low-stock & reorder warning">Reorder Level</label>
+                    <input type="number" step="0.01" min="0" id="item-reorder-level" placeholder="e.g. 15.0" />
                   </div>
+                </div>
+                <div class="field-row-split">
+                  <div class="split-col">
+                    <label class="field-label" for="item-reorder-qty" title="Preferred batch or purchase reorder quantity">Preferred Reorder Qty</label>
+                    <input type="number" step="0.01" min="0" id="item-reorder-qty" placeholder="e.g. 50.0" />
+                  </div>
+                  <div class="split-col">
+                    <label class="field-label" for="item-max-stock-level" title="Maximum target inventory level (optional)">Maximum Stock Level</label>
+                    <input type="number" step="0.01" min="0" id="item-max-stock-level" placeholder="e.g. 100.0" />
+                  </div>
+                </div>
+                <div class="field-row">
+                  <label class="field-label" for="item-alert-enabled">Stock Notification</label>
+                  <label class="checkbox-inline-label" for="item-alert-enabled">
+                    <input type="checkbox" id="item-alert-enabled" checked />
+                    <span>Enable Low-Stock &amp; Reorder Notifications</span>
+                  </label>
                 </div>
               </fieldset>
 
@@ -3711,28 +3725,54 @@
          POPUP MODAL: LOW-STOCK ALERTS & NOTIFICATIONS
     ========================================================== -->
     <div class="modal-overlay" id="modal-low-stock-alert" role="dialog" aria-modal="true" style="display: none;">
-      <div class="create-comp-dialog-box" style="width: 720px; max-width: 95vw;">
-        <div class="create-comp-header" style="background: #b91c1c;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 12px; font-weight: 800; color: #b91c1c;">ALERT</span>
-            <h2 id="low-stock-modal-title">Low Stock Alert — Products Below Threshold</h2>
+      <div class="create-comp-dialog-box" style="width: 920px; max-width: 96vw; max-height: 90vh; display: flex; flex-direction: column;">
+        <div class="create-comp-header" style="background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 11px; font-weight: 800; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px;">ALERTS</span>
+            <h2 id="low-stock-modal-title" style="color: #ffffff; font-size: 16px; margin: 0; font-weight: 700;">Low Stock &amp; Reorder Notifications</h2>
+            <span id="low-stock-modal-badge" style="background: #ffffff; color: #991b1b; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; margin-left: 6px;">0</span>
           </div>
-          <button type="button" class="dialog-close-btn" id="btn-close-low-stock-modal" title="Dismiss Alert">&times;</button>
+          <button type="button" class="dialog-close-btn" id="btn-close-low-stock-modal" title="Close" style="color: #ffffff; font-size: 22px; line-height: 1;">&times;</button>
         </div>
-        <div style="padding: 14px;">
-          <div style="margin-bottom: 10px; font-size: 13px; color: #475569;">
-            The following products have dropped strictly below their configured minimum stock alert levels. Please reorder or replenish stock to prevent checkout shortages.
+
+        <div style="padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+          <!-- Filter Tabs & Search Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
+            <div class="notif-filter-tabs" style="display: flex; gap: 6px;">
+              <button type="button" class="btn-classic notif-filter-btn notif-filter-active" id="btn-notif-filter-all" data-filter="all" style="font-size: 12px; font-weight: 700; padding: 5px 12px;">
+                All Low-Stock
+              </button>
+              <button type="button" class="btn-classic notif-filter-btn" id="btn-notif-filter-critical" data-filter="critical" style="font-size: 12px; font-weight: 700; padding: 5px 12px;">
+                Critical Stock
+              </button>
+              <button type="button" class="btn-classic notif-filter-btn" id="btn-notif-filter-reorder" data-filter="reorder" style="font-size: 12px; font-weight: 700; padding: 5px 12px;">
+                Reorder Required
+              </button>
+              <button type="button" class="btn-classic notif-filter-btn" id="btn-notif-filter-resolved" data-filter="resolved" style="font-size: 12px; font-weight: 700; padding: 5px 12px;">
+                Resolved History
+              </button>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; max-width: 320px; min-width: 200px;">
+              <input type="text" id="notif-modal-search" placeholder="Search product, code, or barcode..." style="width: 100%; font-size: 12px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+            </div>
           </div>
-          <div style="max-height: 280px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 4px; margin-bottom: 14px;">
-            <table class="companies-table" id="low-stock-modal-table" style="width: 100%; border-collapse: collapse;">
+
+          <!-- Notification Table -->
+          <div style="max-height: 380px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);">
+            <table class="companies-table" id="low-stock-modal-table" style="width: 100%; border-collapse: collapse; font-size: 12px;">
               <thead>
-                <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; color: #475569;">
-                  <th style="padding: 6px 10px; text-align: left;">Product Name</th>
-                  <th style="padding: 6px 10px; text-align: left;">Barcode / SKU</th>
-                  <th style="padding: 6px 10px; text-align: right;">Current Stock</th>
-                  <th style="padding: 6px 10px; text-align: right;">Threshold</th>
-                  <th style="padding: 6px 10px; text-align: right; color: #b91c1c;">Shortfall</th>
-                  <th style="padding: 6px 10px; text-align: center;">Status</th>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; color: #475569; position: sticky; top: 0; z-index: 2;">
+                  <th style="padding: 8px 10px; text-align: left;">Product Name</th>
+                  <th style="padding: 8px 10px; text-align: left;">Code / SKU</th>
+                  <th style="padding: 8px 10px; text-align: left;">Barcode</th>
+                  <th style="padding: 8px 10px; text-align: left;">Branch</th>
+                  <th style="padding: 8px 10px; text-align: right;">Available Stock</th>
+                  <th style="padding: 8px 10px; text-align: right;">Min Stock</th>
+                  <th style="padding: 8px 10px; text-align: right;">Reorder Level</th>
+                  <th style="padding: 8px 10px; text-align: right; color: #1e40af;">Suggested Qty</th>
+                  <th style="padding: 8px 10px; text-align: center;">Severity</th>
+                  <th style="padding: 8px 10px; text-align: right;">Notification Time</th>
                 </tr>
               </thead>
               <tbody id="low-stock-modal-tbody">
@@ -3740,20 +3780,27 @@
               </tbody>
             </table>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div style="font-size: 11px; color: #64748b;">
-              Alerts automatically resolve once inventory is replenished to threshold or above.
+
+          <!-- Footer Actions & Quick Navigation -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 6px;">
+            <div id="notif-modal-summary-text" style="font-size: 12px; color: #64748b; font-weight: 600;">
+              Showing notifications
             </div>
             <div style="display: flex; gap: 8px;">
-              <button type="button" class="btn-classic" id="btn-low-stock-view-product" style="font-weight: 600;">
-                View Product
+              <button type="button" class="btn-classic" id="btn-low-stock-edit-item" style="background: #2563eb; border-color: #1d4ed8; color: #ffffff; font-weight: 700; font-size: 12px; padding: 6px 14px;">
+                Edit in Item Master
               </button>
-              <button type="button" class="btn-classic" id="btn-low-stock-view-inventory" style="background: #15803d; border-color: #166534; color: #ffffff; font-weight: 700;">
+              <button type="button" style="display:none;" id="btn-low-stock-view-product">View Product</button>
+              <button type="button" class="btn-classic" id="btn-low-stock-view-inventory" style="background: #15803d; border-color: #166534; color: #ffffff; font-weight: 700; font-size: 12px; padding: 6px 14px;">
                 View Inventory
               </button>
-              <button type="button" class="btn-classic" id="btn-low-stock-dismiss" style="font-weight: 600;">
+              <button type="button" class="btn-classic" id="btn-low-stock-dismiss" style="font-weight: 600; font-size: 12px; padding: 6px 14px;">
                 Dismiss
               </button>
+              <button type="button" class="btn-classic" id="btn-close-low-stock-bottom" style="font-weight: 600; font-size: 12px; padding: 6px 14px;">
+                Close
+              </button>
+              <span style="display:none;" id="bar-low-stock-alert"><span id="bar-low-stock-count">0</span></span>
             </div>
           </div>
         </div>

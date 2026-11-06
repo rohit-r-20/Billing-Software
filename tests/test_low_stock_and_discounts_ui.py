@@ -44,8 +44,8 @@ def test_low_stock_modal_and_indicators_in_html():
     assert 'id="btn-low-stock-view-product"' in html
     assert 'id="bar-low-stock-alert"' in html
     assert 'id="bar-low-stock-count"' in html
-    assert 'id="btn-pos-low-stock-pill"' in html
-    assert 'id="pos-low-stock-count"' in html
+    assert 'id="btn-header-notifications"' in html
+    assert 'id="header-notif-badge"' in html
 
 
 def test_pos_and_voucher_customer_category_elements_in_html():

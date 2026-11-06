@@ -988,6 +988,12 @@ class BillingService:
 
             conn.commit()
 
+        try:
+            from services.inventory_service import inventory_service
+            inventory_service.evaluate_low_stock_alerts(company_id)
+        except Exception as e:
+            logger.debug(f"evaluate_low_stock_alerts after sales return: {e}")
+
         logger.info(f"Sales Return {vch_no} processed successfully.")
         return {
             "id": ret_id,

@@ -586,6 +586,75 @@ class BackendBridge(QObject):
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
+    def getLowStockNotificationsFiltered(self, company_id: str, filter_type: str) -> str:
+        """Retrieve low stock notifications with filter ('all', 'critical', 'reorder', 'resolved')."""
+        try:
+            alerts = inventory_service.get_active_low_stock_alerts(
+                company_id=company_id,
+                filter_type=filter_type or "all",
+                include_dismissed=False
+            )
+            return json.dumps({"success": True, "data": alerts})
+        except Exception as e:
+            logger.error(f"Error getting filtered low stock alerts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getLowStockNotifications(self, company_id: str, filter_type: str, user_role: str) -> str:
+        """
+        Retrieve low-stock and reorder notifications for authorised roles.
+        Cashier counter role is strictly forbidden from accessing stock valuation and notifications.
+        """
+        try:
+            role_clean = str(user_role or "").strip().lower()
+            if role_clean in ("cashier", "pos_cashier", "fast_billing_cashier"):
+                return json.dumps({
+                    "success": False,
+                    "error": "Access Denied: Stock management and notifications are restricted for Cashier roles."
+                })
+
+            alerts = inventory_service.get_active_low_stock_alerts(
+                company_id=company_id,
+                filter_type=filter_type or "all",
+                include_dismissed=False
+            )
+            return json.dumps({"success": True, "data": alerts})
+        except Exception as e:
+            logger.error(f"Error getting low stock notifications: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, result=str)
+    def setItemBranchStockConfig(self, company_id: str, branch_id: str, item_id: str, config_json: str) -> str:
+        """Save branch-specific reorder and minimum stock configuration."""
+        try:
+            data = json.loads(config_json)
+            res = catalogue_service.set_item_branch_config(company_id, branch_id, item_id, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error setting item branch stock config: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getItemBranchStockConfig(self, company_id: str, branch_id: str, item_id: str) -> str:
+        """Retrieve branch-specific stock threshold configuration."""
+        try:
+            res = catalogue_service.get_item_branch_config(company_id, branch_id, item_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error getting item branch stock config: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def listItemBranchStockConfigs(self, company_id: str, item_id: str) -> str:
+        """List all branch overrides for an item."""
+        try:
+            res = catalogue_service.list_item_branch_configs(company_id, item_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error listing item branch configs: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
     def dismissLowStockAlert(self, company_id: str, alert_id: str) -> str:
         try:
             inventory_service.dismiss_low_stock_alert(company_id, alert_id if alert_id else None)

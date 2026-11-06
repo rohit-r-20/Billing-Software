@@ -5171,3 +5171,77 @@ html, body {
   border-radius: 4px;
 }
 
+/* Low Stock & Reorder Notifications System */
+.notif-filter-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.notif-filter-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.notif-filter-btn.notif-filter-active {
+  background: #1e40af !important;
+  color: #ffffff !important;
+  border-color: #1e3a8a !important;
+  box-shadow: 0 1px 3px rgba(30, 64, 175, 0.3);
+}
+
+.stock-badge-critical {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #f87171;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: inline-block;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.stock-badge-reorder {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+  text-align: center;
+}
+
+.stock-badge-resolved {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+  text-align: center;
+}
+
+.low-stock-table-row {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.low-stock-table-row:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.low-stock-table-row.selected-row {
+  background-color: #eff6ff !important;
+  outline: 2px solid #2563eb !important;
+}
+
+

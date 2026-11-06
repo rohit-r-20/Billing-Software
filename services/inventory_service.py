@@ -442,6 +442,12 @@ class InventoryService:
 
             conn.commit()
 
+        # Trigger automatic low-stock evaluation after stock transfer
+        try:
+            self.evaluate_low_stock_alerts(actual_comp_id)
+        except Exception as e:
+            logger.debug(f"evaluate_low_stock_alerts after stock transfer: {e}")
+
         logger.info(f"Stock Transfer {transfer_no} completed from {src_branch} to {dst_branch}.")
         return {"id": transfer_id, "transfer_no": transfer_no, "status": "COMPLETED"}
 
@@ -705,96 +711,276 @@ class InventoryService:
         summary = self.get_stock_summary(actual_comp_id)
         return [r for r in summary if r["closing_stock"] <= threshold]
 
-    def evaluate_low_stock_alerts(self, company_id: str) -> List[Dict[str, Any]]:
+    def evaluate_low_stock_alerts(self, company_id: str, branch_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Authoritatively evaluates items with configured low-stock thresholds against
-        real-time stock balances across default branch / company.
-        Creates or updates 'ACTIVE' alerts in low_stock_alerts table when stock < min_stock_alert_level.
-        Automatically resolves alerts when stock >= min_stock_alert_level.
-        Returns list of active low-stock alerts.
+        real-time stock balances across all branches or a designated branch.
+        - Supports Item Master defaults: min_stock_alert_level, reorder_level, reorder_qty, max_stock_level, alert_enabled.
+        - Supports Branch-specific overrides from item_branch_stock_configs.
+        - Reorder threshold rule: Available Stock <= Reorder Level (fallback to min_stock_alert_level).
+        - Severity: 'CRITICAL' if available <= min_stock_alert_level or available <= 0; else 'REORDER_REQUIRED'.
+        - Suggested Reorder: difference between max_stock_level and available, or preferred reorder_qty.
+        - Lifecycle: Creates new event on threshold breach; updates existing active/dismissed event on stock changes;
+          marks as 'RESOLVED' when stock recovers above threshold; preserves historic alerts.
         """
         actual_comp_id = self._resolve_company_id(company_id)
-        default_branch = self._get_default_branch_id(actual_comp_id)
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT i.id, i.name, i.alias, i.unit, i.min_stock_alert_level, i.alert_enabled,
-                       COALESCE(sb.current_qty, 0.0) as available_qty,
-                       GROUP_CONCAT(ib.barcode, ', ') as barcodes
-                FROM items i
-                LEFT JOIN stock_balances sb ON sb.item_id = i.id AND sb.branch_id = ?
-                LEFT JOIN item_barcodes ib ON ib.item_id = i.id
-                WHERE i.company_id = ? AND i.is_active = 1 
-                  AND i.alert_enabled = 1 AND i.min_stock_alert_level IS NOT NULL
-                GROUP BY i.id
-                ORDER BY i.name ASC;
-            """, (default_branch, actual_comp_id))
-            items_to_check = [dict(r) for r in cursor.fetchall()]
+
+            # Load branch-level overrides for fast in-memory mapping
+            cursor.execute("SELECT * FROM item_branch_stock_configs WHERE company_id = ?;", (actual_comp_id,))
+            branch_configs = {}
+            for r in cursor.fetchall():
+                branch_configs[(r["branch_id"], r["item_id"])] = dict(r)
+
+            # Determine branches to evaluate
+            if branch_id:
+                cursor.execute("SELECT id, name, code, is_default FROM branches WHERE company_id = ? AND id = ?;", (actual_comp_id, branch_id))
+            else:
+                cursor.execute("SELECT id, name, code, is_default FROM branches WHERE company_id = ? ORDER BY is_default DESC, name ASC;", (actual_comp_id,))
+            
+            branch_rows = cursor.fetchall()
+            if not branch_rows:
+                branches = [{"id": None, "name": "Main Store", "code": "MAIN", "is_default": 1}]
+            else:
+                branches = [dict(b) for b in branch_rows]
 
             active_alerts = []
 
-            for it in items_to_check:
-                item_id = it["id"]
-                threshold = float(it["min_stock_alert_level"])
-                available = float(it["available_qty"])
-                bcode = it.get("barcodes") or it.get("alias") or "-"
+            for br in branches:
+                target_branch_id = br["id"]
+                target_branch_name = br["name"]
+                is_def_branch = 1 if br.get("is_default") else 0
 
-                if available < threshold:
-                    shortfall = round(threshold - available, 2)
-                    cursor.execute("""
-                        SELECT id, status FROM low_stock_alerts
-                        WHERE company_id = ? AND item_id = ? AND status IN ('ACTIVE', 'DISMISSED');
-                    """, (actual_comp_id, item_id))
-                    existing = cursor.fetchone()
+                cursor.execute("""
+                    SELECT i.id, i.name, i.alias, i.unit, i.item_group,
+                           i.min_stock_alert_level, i.reorder_level, i.reorder_qty, i.max_stock_level, i.alert_enabled,
+                           COALESCE(sb.current_qty, 0.0) as available_qty,
+                           GROUP_CONCAT(ib.barcode, ', ') as barcodes
+                    FROM items i
+                    LEFT JOIN stock_balances sb ON sb.item_id = i.id AND (? IS NULL OR sb.branch_id = ?)
+                    LEFT JOIN item_barcodes ib ON ib.item_id = i.id
+                    WHERE i.company_id = ? AND i.is_active = 1
+                      AND (? = 1 OR sb.id IS NOT NULL OR EXISTS (
+                          SELECT 1 FROM item_branch_stock_configs cfg
+                          WHERE cfg.branch_id = ? AND cfg.item_id = i.id
+                      ))
+                    GROUP BY i.id
+                    ORDER BY i.name ASC;
+                """, (target_branch_id, target_branch_id, actual_comp_id, is_def_branch, target_branch_id))
+                items_to_check = [dict(r) for r in cursor.fetchall()]
 
-                    if existing:
-                        alert_id = existing["id"]
-                        current_status = existing["status"]
+                for it in items_to_check:
+                    item_id = it["id"]
+                    override = branch_configs.get((target_branch_id, item_id))
+
+                    if override:
+                        alert_enabled = 1 if override.get("alert_enabled", 1) in (1, True, "1", "true") else 0
+                        raw_min = override.get("min_stock_level") if override.get("min_stock_level") is not None else it.get("min_stock_alert_level")
+                        raw_reorder = override.get("reorder_level") if override.get("reorder_level") is not None else it.get("reorder_level")
+                        raw_rq = override.get("reorder_qty") if override.get("reorder_qty") is not None else it.get("reorder_qty")
+                        raw_max = override.get("max_stock_level") if override.get("max_stock_level") is not None else it.get("max_stock_level")
+                    else:
+                        alert_enabled = 1 if it.get("alert_enabled", 1) in (1, True, "1", "true") else 0
+                        raw_min = it.get("min_stock_alert_level")
+                        raw_reorder = it.get("reorder_level")
+                        raw_rq = it.get("reorder_qty")
+                        raw_max = it.get("max_stock_level")
+
+                    min_lvl = float(raw_min) if (raw_min is not None and str(raw_min).strip() not in ("", "null", "None")) else None
+                    reorder_lvl = float(raw_reorder) if (raw_reorder is not None and str(raw_reorder).strip() not in ("", "null", "None")) else None
+                    reorder_q = float(raw_rq) if (raw_rq is not None and str(raw_rq).strip() not in ("", "null", "None")) else None
+                    max_lvl = float(raw_max) if (raw_max is not None and str(raw_max).strip() not in ("", "null", "None")) else None
+
+                    # If notification disabled for this item/branch, resolve existing active alert if any
+                    if not alert_enabled:
                         cursor.execute("""
                             UPDATE low_stock_alerts
-                            SET available_qty = ?, threshold = ?, last_evaluated_at = CURRENT_TIMESTAMP
-                            WHERE id = ?;
-                        """, (available, threshold, alert_id))
-                    else:
-                        alert_id = str(uuid.uuid4())
-                        current_status = "ACTIVE"
-                        cursor.execute("""
-                            INSERT INTO low_stock_alerts (
-                                id, company_id, item_id, threshold, available_qty, status, last_evaluated_at
-                            ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP);
-                        """, (alert_id, actual_comp_id, item_id, threshold, available))
+                            SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
+                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
+                              AND status IN ('ACTIVE', 'DISMISSED');
+                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        continue
 
-                    active_alerts.append({
-                        "alert_id": alert_id,
-                        "item_id": item_id,
-                        "product_name": it["name"],
-                        "barcode": bcode,
-                        "unit": it.get("unit") or "Pcs.",
-                        "current_stock": available,
-                        "threshold": threshold,
-                        "shortfall": shortfall,
-                        "status": current_status,
-                        "is_negative": available < 0,
-                        "is_zero": available == 0
-                    })
-                else:
-                    cursor.execute("""
-                        UPDATE low_stock_alerts
-                        SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
-                        WHERE company_id = ? AND item_id = ? AND status IN ('ACTIVE', 'DISMISSED');
-                    """, (actual_comp_id, item_id))
+                    available = float(it["available_qty"])
+                    # Effective threshold rule: Reorder Level takes precedence; fall back to Minimum Stock Level
+                    if reorder_lvl is not None and reorder_lvl > 0:
+                        eff_threshold = float(reorder_lvl)
+                        is_low_stock = (available <= eff_threshold)
+                    elif min_lvl is not None and min_lvl > 0:
+                        eff_threshold = float(min_lvl)
+                        is_low_stock = (available < eff_threshold)
+                    else:
+                        eff_threshold = None
+                        is_low_stock = False
+
+                    # If neither reorder level nor min stock level is set, resolve existing alert if any
+                    if eff_threshold is None:
+                        cursor.execute("""
+                            UPDATE low_stock_alerts
+                            SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
+                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
+                              AND status IN ('ACTIVE', 'DISMISSED');
+                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        continue
+
+                    if is_low_stock:
+                        # Determine severity: CRITICAL vs REORDER_REQUIRED
+                        is_critical = False
+                        if min_lvl is not None and available <= min_lvl:
+                            is_critical = True
+                        elif available <= 0:
+                            is_critical = True
+
+                        severity = "CRITICAL" if is_critical else "REORDER_REQUIRED"
+
+                        # Suggested purchase reorder quantity: target stock - available, or preferred reorder qty
+                        if max_lvl is not None and max_lvl > available:
+                            suggested_qty = round(max_lvl - available, 2)
+                        elif reorder_q is not None and reorder_q > 0:
+                            suggested_qty = float(reorder_q)
+                        else:
+                            suggested_qty = round(max(0.0, (eff_threshold * 2.0) - available), 2)
+
+                        bcode = it.get("barcodes") or it.get("alias") or "-"
+
+                        # Check if active or dismissed alert already exists
+                        cursor.execute("""
+                            SELECT id, status, created_at FROM low_stock_alerts
+                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
+                              AND status IN ('ACTIVE', 'DISMISSED');
+                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        existing = cursor.fetchone()
+
+                        if existing:
+                            alert_id = existing["id"]
+                            current_status = existing["status"]
+                            alert_created_at = existing["created_at"]
+                            cursor.execute("""
+                                UPDATE low_stock_alerts
+                                SET available_qty = ?, threshold = ?, min_stock_level = ?, reorder_level = ?,
+                                    suggested_reorder_qty = ?, severity = ?, last_evaluated_at = CURRENT_TIMESTAMP
+                                WHERE id = ?;
+                            """, (available, eff_threshold, min_lvl, reorder_lvl, suggested_qty, severity, alert_id))
+                        else:
+                            alert_id = str(uuid.uuid4())
+                            current_status = "ACTIVE"
+                            alert_created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            cursor.execute("""
+                                INSERT INTO low_stock_alerts (
+                                    id, company_id, item_id, branch_id, threshold, min_stock_level, reorder_level,
+                                    available_qty, suggested_reorder_qty, severity, status, last_evaluated_at, created_at
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                            """, (alert_id, actual_comp_id, item_id, target_branch_id, eff_threshold, min_lvl, reorder_lvl, available, suggested_qty, severity))
+
+                        active_alerts.append({
+                            "alert_id": alert_id,
+                            "id": alert_id,
+                            "item_id": item_id,
+                            "product_name": it["name"],
+                            "name": it["name"],
+                            "item_code": it.get("alias") or it["name"][:6],
+                            "barcode": bcode,
+                            "branch_id": target_branch_id,
+                            "branch_name": target_branch_name,
+                            "unit": it.get("unit") or "Pcs.",
+                            "current_stock": round(available, 2),
+                            "available_qty": round(available, 2),
+                            "threshold": round(eff_threshold, 2),
+                            "min_stock_level": min_lvl,
+                            "reorder_level": reorder_lvl,
+                            "suggested_reorder_qty": round(suggested_qty, 2),
+                            "shortfall": round(eff_threshold - available, 2),
+                            "severity": severity,
+                            "status": current_status,
+                            "is_negative": available < 0,
+                            "is_zero": available == 0,
+                            "created_at": str(alert_created_at)
+                        })
+                    else:
+                        # Stock recovered above threshold -> mark alert as RESOLVED
+                        cursor.execute("""
+                            UPDATE low_stock_alerts
+                            SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
+                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
+                              AND status IN ('ACTIVE', 'DISMISSED');
+                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
 
             conn.commit()
 
         return active_alerts
 
-    def get_active_low_stock_alerts(self, company_id: str, include_dismissed: bool = False) -> List[Dict[str, Any]]:
-        """Retrieve authoritative active low stock alerts."""
+    def get_active_low_stock_alerts(
+        self,
+        company_id: str,
+        filter_type: str = "all",
+        include_dismissed: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve low-stock and reorder notifications with comprehensive filtering:
+        - 'all': All active low-stock & reorder notifications
+        - 'critical': Critical severity alerts (available <= min_stock_level or <= 0)
+        - 'reorder' / 'reorder_required': Reorder required alerts
+        - 'resolved': Historical notifications where stock was replenished
+        """
         actual_comp_id = self._resolve_company_id(company_id)
+        f_type = (filter_type or "all").lower().strip()
+
+        if f_type in ("resolved", "resolved notifications"):
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT a.*, i.name as product_name, i.alias as item_code, i.unit,
+                           COALESCE(b.name, 'Main Store') as branch_name,
+                           GROUP_CONCAT(ib.barcode, ', ') as barcodes
+                    FROM low_stock_alerts a
+                    JOIN items i ON i.id = a.item_id
+                    LEFT JOIN branches b ON b.id = a.branch_id
+                    LEFT JOIN item_barcodes ib ON ib.item_id = i.id
+                    WHERE a.company_id = ? AND a.status = 'RESOLVED'
+                    GROUP BY a.id
+                    ORDER BY a.resolved_at DESC, a.last_evaluated_at DESC
+                    LIMIT 100;
+                """, (actual_comp_id,))
+                resolved = []
+                for r in cursor.fetchall():
+                    item_d = dict(r)
+                    resolved.append({
+                        "alert_id": item_d["id"],
+                        "id": item_d["id"],
+                        "item_id": item_d["item_id"],
+                        "product_name": item_d["product_name"],
+                        "name": item_d["product_name"],
+                        "item_code": item_d["item_code"] or "",
+                        "barcode": item_d.get("barcodes") or item_d.get("item_code") or "-",
+                        "branch_id": item_d.get("branch_id"),
+                        "branch_name": item_d.get("branch_name") or "Main Store",
+                        "unit": item_d.get("unit") or "Pcs.",
+                        "current_stock": float(item_d["available_qty"] or 0.0),
+                        "available_qty": float(item_d["available_qty"] or 0.0),
+                        "threshold": float(item_d["threshold"] or 0.0),
+                        "min_stock_level": float(item_d["min_stock_level"]) if item_d.get("min_stock_level") is not None else None,
+                        "reorder_level": float(item_d["reorder_level"]) if item_d.get("reorder_level") is not None else None,
+                        "suggested_reorder_qty": float(item_d["suggested_reorder_qty"] or 0.0),
+                        "shortfall": 0.0,
+                        "severity": item_d.get("severity") or "RESOLVED",
+                        "status": "RESOLVED",
+                        "is_negative": float(item_d["available_qty"] or 0.0) < 0,
+                        "is_zero": float(item_d["available_qty"] or 0.0) == 0,
+                        "resolved_at": str(item_d.get("resolved_at") or ""),
+                        "created_at": str(item_d.get("created_at") or "")
+                    })
+                return resolved
+
         all_alerts = self.evaluate_low_stock_alerts(actual_comp_id)
         if not include_dismissed:
-            return [a for a in all_alerts if a["status"] == "ACTIVE"]
+            all_alerts = [a for a in all_alerts if a["status"] == "ACTIVE"]
+
+        if f_type in ("critical", "critical stock"):
+            return [a for a in all_alerts if a["severity"] == "CRITICAL"]
+        elif f_type in ("reorder", "reorder_required", "reorder required"):
+            return [a for a in all_alerts if a["severity"] == "REORDER_REQUIRED"]
         return all_alerts
 
     def dismiss_low_stock_alert(self, company_id: str, alert_id: Optional[str] = None) -> bool:
