@@ -225,6 +225,7 @@ class BillingService:
             for attempt in range(10):
                 vch_no = self.get_next_voucher_number(company_id, series)
                 try:
+                    cursor.execute("SAVEPOINT sp_vch_hdr;")
                     # 1. Insert Voucher Header
                     cursor.execute("""
                         INSERT INTO sales_vouchers (
@@ -257,10 +258,15 @@ class BillingService:
                         payment_method,
                         resolved_category
                     ))
+                    cursor.execute("RELEASE SAVEPOINT sp_vch_hdr;")
                     break
-                except sqlite3.IntegrityError as e:
-                    if ("sales_vouchers" in str(e).lower() or "unique" in str(e).lower()) and attempt < 9:
-                        time.sleep(0.01 * (attempt + 1))
+                except Exception as e:
+                    try:
+                        cursor.execute("ROLLBACK TO SAVEPOINT sp_vch_hdr;")
+                    except Exception:
+                        pass
+                    if ("sales_vouchers" in str(e).lower() or "unique" in str(e).lower() or "integrity" in str(e).lower()) and attempt < 9:
+                        time.sleep(0.02 * (attempt + 1))
                         continue
                     raise
 

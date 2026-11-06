@@ -2228,6 +2228,398 @@ function validateGstinOnline() {
 }
 
 // =============================================================
+// AUTOMATIC UNIQUE BARCODE GENERATOR & LABEL PRINTING
+// =============================================================
+let currentAlternateBarcodes = [];
+
+function initBarcodeModule() {
+  const btnGen = document.getElementById("btn-generate-barcode");
+  const aliasInput = document.getElementById("item-alias");
+  const btnPrint = document.getElementById("btn-print-barcode-label");
+  const btnAddAlt = document.getElementById("btn-add-alternate-barcode");
+  const altInput = document.getElementById("item-alternate-barcodes-input");
+
+  // 1. Generate Barcode Button
+  if (btnGen && !btnGen.dataset.bound) {
+    btnGen.dataset.bound = "true";
+    btnGen.addEventListener("click", () => {
+      handleGenerateBarcodeClick();
+    });
+  }
+
+  // 2. Barcode Input Live Validation & Preview
+  if (aliasInput && !aliasInput.dataset.bound) {
+    aliasInput.dataset.bound = "true";
+    let debounceTimer = null;
+    aliasInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const val = aliasInput.value.trim().toUpperCase();
+        aliasInput.value = val;
+        if (val) {
+          updateBarcodePreview(val);
+        } else {
+          const prev = document.getElementById("item-barcode-preview-container");
+          if (prev) prev.style.display = "none";
+        }
+      }, 250);
+    });
+  }
+
+  // 3. Add Alternate Barcode
+  if (btnAddAlt && !btnAddAlt.dataset.bound) {
+    btnAddAlt.dataset.bound = "true";
+    btnAddAlt.addEventListener("click", () => {
+      handleAddAlternateBarcode();
+    });
+  }
+  if (altInput && !altInput.dataset.bound) {
+    altInput.dataset.bound = "true";
+    altInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAddAlternateBarcode();
+      }
+    });
+  }
+
+  // 4. Print Barcode Label
+  if (btnPrint && !btnPrint.dataset.bound) {
+    btnPrint.dataset.bound = "true";
+    btnPrint.addEventListener("click", () => {
+      openBarcodeLabelModal();
+    });
+  }
+
+  // Modal event bindings
+  initBarcodeModalEvents();
+}
+
+function handleGenerateBarcodeClick() {
+  const aliasInput = document.getElementById("item-alias");
+  const currentVal = aliasInput ? aliasInput.value.trim() : "";
+
+  // Requirement 1: Do not overwrite an existing manually entered barcode without confirmation
+  if (currentVal) {
+    const ok = confirm(`The Barcode / SKU field already contains "${currentVal}".\n\nDo you want to generate a new unique barcode and replace it?`);
+    if (!ok) return;
+  }
+
+  const compId = activeCompany ? activeCompany.id : "COMP0001";
+  if (window.backend && window.backend.generateUniqueBarcode) {
+    window.backend.generateUniqueBarcode(compId, (resp) => {
+      try {
+        const res = JSON.parse(resp);
+        if (res.success && res.data) {
+          const genCode = res.data.barcode;
+          if (aliasInput) aliasInput.value = genCode;
+          showNotification(`Generated unique Code 128 barcode: ${genCode}`);
+          updateBarcodePreview(genCode, res.data.svg, res.data.standard);
+        } else {
+          alert(`Error generating barcode: ${res.error || "Unknown error"}`);
+        }
+      } catch (e) {
+        console.error("Barcode generator response parse error:", e);
+      }
+    });
+  } else {
+    // Standalone fallback: simulate atomic AB sequence
+    const fallbackCode = "AB" + String(Date.now()).slice(-12);
+    if (aliasInput) aliasInput.value = fallbackCode;
+    updateBarcodePreview(fallbackCode);
+  }
+}
+
+function updateBarcodePreview(barcode, preRenderedSvg, standardName) {
+  const container = document.getElementById("item-barcode-preview-container");
+  const svgWrapper = document.getElementById("item-barcode-svg-wrapper");
+  const humanText = document.getElementById("item-barcode-human-text");
+  const badge = document.getElementById("item-barcode-standard-badge");
+  const statusText = document.getElementById("item-barcode-status-text");
+
+  if (!container || !barcode) {
+    if (container) container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "flex";
+  if (humanText) humanText.textContent = barcode;
+
+  const currentItemId = document.getElementById("item-id")?.value.trim() || "";
+  const compId = activeCompany ? activeCompany.id : "";
+
+  // Render SVG graphic
+  if (preRenderedSvg && svgWrapper) {
+    svgWrapper.innerHTML = preRenderedSvg;
+    if (badge && standardName) badge.textContent = standardName;
+  } else if (window.backend && window.backend.renderBarcodeSvg) {
+    window.backend.renderBarcodeSvg(barcode, "", (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.svg && svgWrapper) {
+          svgWrapper.innerHTML = r.svg;
+        }
+      } catch (e) {}
+    });
+  }
+
+  // Validate format & checksum
+  if (window.backend && window.backend.validateBarcode) {
+    window.backend.validateBarcode(barcode, (resp) => {
+      try {
+        const valRes = JSON.parse(resp);
+        if (valRes.success && valRes.data) {
+          const d = valRes.data;
+          if (badge) badge.textContent = d.standard || "Code 128";
+          if (!d.is_valid) {
+            if (statusText) {
+              statusText.style.color = "#dc2626";
+              statusText.textContent = `⚠️ ${d.message || "Invalid Check Digit"}`;
+            }
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // Check database uniqueness across all products
+      if (compId && window.backend.checkBarcodeAvailability) {
+        window.backend.checkBarcodeAvailability(compId, barcode, currentItemId, (availResp) => {
+          try {
+            const aRes = JSON.parse(availResp);
+            if (aRes.success && aRes.data) {
+              if (aRes.data.is_unique) {
+                if (statusText) {
+                  statusText.style.color = "#166534";
+                  statusText.textContent = "✓ Unique & Available in Database";
+                }
+              } else {
+                const dupItem = aRes.data.existing_product ? aRes.data.existing_product.name : "another item";
+                if (statusText) {
+                  statusText.style.color = "#dc2626";
+                  statusText.textContent = `❌ Conflicting: Already assigned to "${dupItem}"`;
+                }
+              }
+            }
+          } catch (e) {}
+        });
+      }
+    });
+  }
+}
+
+function handleAddAlternateBarcode() {
+  const altInput = document.getElementById("item-alternate-barcodes-input");
+  const val = altInput ? altInput.value.trim().toUpperCase() : "";
+  if (!val) return;
+
+  const primary = document.getElementById("item-alias")?.value.trim().toUpperCase();
+  if (val === primary) {
+    alert(`"${val}" is already entered as the primary barcode.`);
+    return;
+  }
+  if (currentAlternateBarcodes.includes(val)) {
+    alert(`"${val}" is already added to alternate barcodes.`);
+    return;
+  }
+
+  const currentItemId = document.getElementById("item-id")?.value.trim() || "";
+  const compId = activeCompany ? activeCompany.id : "";
+
+  // Check backend availability
+  if (compId && window.backend && window.backend.checkBarcodeAvailability) {
+    window.backend.checkBarcodeAvailability(compId, val, currentItemId, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data && !r.data.is_unique) {
+          const item = r.data.existing_product ? r.data.existing_product.name : "another product";
+          alert(`Cannot add barcode "${val}": Already assigned to "${item}".`);
+          return;
+        }
+      } catch (e) {}
+      currentAlternateBarcodes.push(val);
+      if (altInput) altInput.value = "";
+      renderAlternateBarcodesList();
+    });
+  } else {
+    currentAlternateBarcodes.push(val);
+    if (altInput) altInput.value = "";
+    renderAlternateBarcodesList();
+  }
+}
+
+function removeAlternateBarcode(bcode) {
+  currentAlternateBarcodes = currentAlternateBarcodes.filter(x => x !== bcode);
+  renderAlternateBarcodesList();
+}
+
+function renderAlternateBarcodesList() {
+  const listEl = document.getElementById("item-alternate-barcodes-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  currentAlternateBarcodes.forEach((b) => {
+    const badge = document.createElement("span");
+    badge.className = "alternate-barcode-badge";
+    badge.innerHTML = `<span>${b}</span><button type="button" class="remove-barcode-btn" title="Remove barcode" onclick="removeAlternateBarcode('${b}')">&times;</button>`;
+    listEl.appendChild(badge);
+  });
+}
+
+function openBarcodeLabelModal() {
+  const modal = document.getElementById("modal-barcode-label-print");
+  const barcode = document.getElementById("item-alias")?.value.trim();
+  if (!barcode) {
+    alert("Please enter or generate a Barcode / SKU first before printing labels.");
+    return;
+  }
+  if (modal) {
+    modal.style.display = "flex";
+    modal.classList.add("show");
+    updateBarcodeLabelLivePreview();
+  }
+}
+
+function closeBarcodeLabelModal() {
+  const modal = document.getElementById("modal-barcode-label-print");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("show");
+  }
+}
+
+function updateBarcodeLabelLivePreview() {
+  const previewBox = document.getElementById("barcode-label-live-preview");
+  if (!previewBox) return;
+
+  const barcode = document.getElementById("item-alias")?.value.trim() || "AB000000000001";
+  const name = document.getElementById("item-name")?.value.trim() || "Product Name";
+  const salesPrice = parseFloat(document.getElementById("item-sales-price")?.value || "0");
+  const mrp = parseFloat(document.getElementById("item-mrp")?.value || "0");
+  const sku = document.getElementById("item-alias")?.value.trim() || "";
+
+  const sizeKey = document.getElementById("barcode-label-size-select")?.value || "50x25";
+  const incName = document.getElementById("chk-label-include-name")?.checked ?? true;
+  const incPrice = document.getElementById("chk-label-include-price")?.checked ?? true;
+  const incMrp = document.getElementById("chk-label-include-mrp")?.checked ?? true;
+  const incSku = document.getElementById("chk-label-include-sku")?.checked ?? true;
+
+  const itemData = {
+    name: name,
+    barcode: barcode,
+    alias: sku,
+    sales_price: salesPrice,
+    mrp: mrp
+  };
+  const opts = {
+    size: sizeKey,
+    include_name: incName,
+    include_price: incPrice,
+    include_mrp: incMrp,
+    include_sku: incSku,
+    copies: 1
+  };
+
+  if (window.backend && window.backend.generateBarcodeLabelHtml) {
+    window.backend.generateBarcodeLabelHtml(JSON.stringify(itemData), JSON.stringify(opts), (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.html) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(r.html, "text/html");
+          const labelEl = doc.querySelector(".physical-barcode-label");
+          if (labelEl) {
+            previewBox.innerHTML = labelEl.outerHTML;
+          }
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+function initBarcodeModalEvents() {
+  const btnClose = document.getElementById("btn-close-barcode-modal");
+  const btnCancel = document.getElementById("btn-cancel-barcode-modal");
+  const btnPrintNow = document.getElementById("btn-execute-print-barcode");
+
+  if (btnClose && !btnClose.dataset.bound) {
+    btnClose.dataset.bound = "true";
+    btnClose.addEventListener("click", closeBarcodeLabelModal);
+  }
+  if (btnCancel && !btnCancel.dataset.bound) {
+    btnCancel.dataset.bound = "true";
+    btnCancel.addEventListener("click", closeBarcodeLabelModal);
+  }
+
+  ["barcode-label-size-select", "chk-label-include-name", "chk-label-include-price", "chk-label-include-mrp", "chk-label-include-sku"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.bound) {
+      el.dataset.bound = "true";
+      el.addEventListener("change", updateBarcodeLabelLivePreview);
+    }
+  });
+
+  if (btnPrintNow && !btnPrintNow.dataset.bound) {
+    btnPrintNow.dataset.bound = "true";
+    btnPrintNow.addEventListener("click", executeBarcodeLabelPrint);
+  }
+}
+
+function executeBarcodeLabelPrint() {
+  const barcode = document.getElementById("item-alias")?.value.trim() || "";
+  const name = document.getElementById("item-name")?.value.trim() || "Product";
+  const salesPrice = parseFloat(document.getElementById("item-sales-price")?.value || "0");
+  const mrp = parseFloat(document.getElementById("item-mrp")?.value || "0");
+  const sku = document.getElementById("item-alias")?.value.trim() || "";
+
+  const sizeKey = document.getElementById("barcode-label-size-select")?.value || "50x25";
+  const incName = document.getElementById("chk-label-include-name")?.checked ?? true;
+  const incPrice = document.getElementById("chk-label-include-price")?.checked ?? true;
+  const incMrp = document.getElementById("chk-label-include-mrp")?.checked ?? true;
+  const incSku = document.getElementById("chk-label-include-sku")?.checked ?? true;
+  const copies = parseInt(document.getElementById("barcode-label-copies")?.value || "1", 10);
+
+  const itemData = { name, barcode, alias: sku, sales_price: salesPrice, mrp };
+  const opts = { size: sizeKey, include_name: incName, include_price: incPrice, include_mrp: incMrp, include_sku: incSku, copies };
+
+  if (window.backend && window.backend.generateBarcodeLabelHtml) {
+    window.backend.generateBarcodeLabelHtml(JSON.stringify(itemData), JSON.stringify(opts), (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.html) {
+          // Open decoupled print iframe
+          let printIframe = document.getElementById("barcode-print-iframe");
+          if (!printIframe) {
+            printIframe = document.createElement("iframe");
+            printIframe.id = "barcode-print-iframe";
+            printIframe.style.position = "fixed";
+            printIframe.style.right = "0";
+            printIframe.style.bottom = "0";
+            printIframe.style.width = "0";
+            printIframe.style.height = "0";
+            printIframe.style.border = "0";
+            document.body.appendChild(printIframe);
+          }
+          const doc = printIframe.contentWindow.document;
+          doc.open();
+          doc.write(r.html);
+          doc.close();
+          setTimeout(() => {
+            printIframe.contentWindow.focus();
+            printIframe.contentWindow.print();
+            closeBarcodeLabelModal();
+            showNotification(`Sent ${copies} barcode label(s) to printer.`);
+          }, 300);
+        }
+      } catch (e) {
+        alert("Print error: " + e.message);
+      }
+    });
+  } else {
+    window.print();
+    closeBarcodeLabelModal();
+  }
+}
+
+// =============================================================
 // ITEM MASTER & PRODUCTS CATALOGUE MANAGEMENT
 // =============================================================
 
@@ -2247,6 +2639,12 @@ function resetProductMasterForm() {
   if (alertEnabledEl) alertEnabledEl.checked = true;
   const titleEl = document.getElementById("item-master-screen-title");
   if (titleEl) titleEl.textContent = "Add Product";
+
+  // Reset Barcode Preview & Alternates
+  const prev = document.getElementById("item-barcode-preview-container");
+  if (prev) prev.style.display = "none";
+  currentAlternateBarcodes = [];
+  renderAlternateBarcodesList();
 }
 
 function loadProductForEditing(itemId) {
@@ -2260,7 +2658,24 @@ function loadProductForEditing(itemId) {
     
     if (itemName) itemName.value = item.name || "";
     const aliasEl = document.getElementById("item-alias");
-    if (aliasEl) aliasEl.value = item.barcodes || item.alias || "";
+    const primaryBar = item.primary_barcode || item.alias || (item.barcodes ? item.barcodes.split(",")[0].trim() : "");
+    if (aliasEl) aliasEl.value = primaryBar;
+
+    currentAlternateBarcodes = [];
+    if (item.alternate_barcodes && Array.isArray(item.alternate_barcodes)) {
+      currentAlternateBarcodes = item.alternate_barcodes.filter(b => b && b !== primaryBar);
+    } else if (item.barcodes && typeof item.barcodes === "string") {
+      const parts = item.barcodes.split(",").map(s => s.trim()).filter(Boolean);
+      currentAlternateBarcodes = parts.filter(b => b !== primaryBar);
+    }
+    renderAlternateBarcodesList();
+
+    if (primaryBar) {
+      updateBarcodePreview(primaryBar);
+    } else {
+      const prev = document.getElementById("item-barcode-preview-container");
+      if (prev) prev.style.display = "none";
+    }
     const printEl = document.getElementById("item-print-name");
     if (printEl) printEl.value = item.print_name || item.printName || item.name || "";
     const groupEl = document.getElementById("item-group");
@@ -2348,10 +2763,15 @@ function handleSaveItemMaster() {
     parsedMaxStock = Math.max(0, parseFloat(rawMaxStock));
   }
 
+  const primaryBarcode = document.getElementById("item-alias") ? document.getElementById("item-alias").value.trim() : "";
+  const allBarcodes = [primaryBarcode, ...currentAlternateBarcodes].filter(Boolean);
+
   const itemData = {
     id: existingId,
     name: name,
-    alias: document.getElementById("item-alias").value.trim(),
+    alias: primaryBarcode,
+    barcodes: allBarcodes,
+    alternate_barcodes: currentAlternateBarcodes,
     printName: document.getElementById("item-print-name").value.trim(),
     print_name: document.getElementById("item-print-name").value.trim(),
     group: document.getElementById("item-group").value,
@@ -9322,11 +9742,15 @@ window.openModifyAccountMaster = openModifyAccountMaster;
 window.openModifySaleInvoice = openModifySaleInvoice;
 window.openModifyPurchaseVoucher = openModifyPurchaseVoucher;
 window.renderAccountMasterList = renderAccountMasterList;
+window.removeAlternateBarcode = removeAlternateBarcode;
+window.openBarcodeLabelModal = openBarcodeLabelModal;
+window.initBarcodeModule = initBarcodeModule;
 
 setupEnterpriseErpEventListeners();
 setupCompanyAndPlaceholderModalListeners();
 setupThreeOptionWorkflowListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
+initBarcodeModule();
 ZoomController.init();
 showScreen("view-dashboard");

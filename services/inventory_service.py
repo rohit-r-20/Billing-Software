@@ -729,6 +729,7 @@ class InventoryService:
           marks as 'RESOLVED' when stock recovers above threshold; preserves historic alerts.
         """
         actual_comp_id = self._resolve_company_id(company_id)
+        target_item_filter = item_id
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -768,10 +769,10 @@ class InventoryService:
                 target_branch_name = br["name"]
                 is_def_branch = 1 if br.get("is_default") else 0
 
-                item_filter_clause = "AND i.id = ?" if item_id else ""
+                item_filter_clause = "AND i.id = ?" if target_item_filter else ""
                 query_params = [target_branch_id, actual_comp_id, is_def_branch, target_branch_id]
-                if item_id:
-                    query_params.append(item_id)
+                if target_item_filter:
+                    query_params.append(target_item_filter)
 
                 cursor.execute(f"""
                     SELECT i.id, i.name, i.alias, i.unit, i.item_group,
@@ -793,8 +794,8 @@ class InventoryService:
                 items_to_check = [dict(r) for r in cursor.fetchall()]
 
                 for it in items_to_check:
-                    item_id = it["id"]
-                    override = branch_configs.get((target_branch_id, item_id))
+                    curr_item_id = it["id"]
+                    override = branch_configs.get((target_branch_id, curr_item_id))
 
                     if override:
                         alert_enabled = 1 if override.get("alert_enabled", 1) in (1, True, "1", "true") else 0
@@ -821,7 +822,7 @@ class InventoryService:
                             SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
                             WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
                               AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        """, (actual_comp_id, curr_item_id, target_branch_id, target_branch_id))
                         continue
 
                     available = float(it["available_qty"])
@@ -843,7 +844,7 @@ class InventoryService:
                             SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
                             WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
                               AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        """, (actual_comp_id, curr_item_id, target_branch_id, target_branch_id))
                         continue
 
                     if is_low_stock:
@@ -867,7 +868,7 @@ class InventoryService:
                         bcode = it.get("barcodes") or it.get("alias") or "-"
 
                         # Check if active or dismissed alert already exists in-memory
-                        existing = existing_alerts_map.get((item_id, target_branch_id))
+                        existing = existing_alerts_map.get((curr_item_id, target_branch_id))
 
                         if existing:
                             alert_id = existing["id"]
@@ -888,10 +889,10 @@ class InventoryService:
                                     id, company_id, item_id, branch_id, threshold, min_stock_level, reorder_level,
                                     available_qty, suggested_reorder_qty, severity, status, last_evaluated_at, created_at
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-                            """, (alert_id, actual_comp_id, item_id, target_branch_id, eff_threshold, min_lvl, reorder_lvl, available, suggested_qty, severity))
-                            existing_alerts_map[(item_id, target_branch_id)] = {
+                            """, (alert_id, actual_comp_id, curr_item_id, target_branch_id, eff_threshold, min_lvl, reorder_lvl, available, suggested_qty, severity))
+                            existing_alerts_map[(curr_item_id, target_branch_id)] = {
                                 "id": alert_id,
-                                "item_id": item_id,
+                                "item_id": curr_item_id,
                                 "branch_id": target_branch_id,
                                 "status": "ACTIVE",
                                 "created_at": alert_created_at
@@ -900,7 +901,7 @@ class InventoryService:
                         active_alerts.append({
                             "alert_id": alert_id,
                             "id": alert_id,
-                            "item_id": item_id,
+                            "item_id": curr_item_id,
                             "product_name": it["name"],
                             "name": it["name"],
                             "item_code": it.get("alias") or it["name"][:6],
@@ -923,14 +924,14 @@ class InventoryService:
                         })
                     else:
                         # Stock recovered above threshold -> mark alert as RESOLVED only if currently active/dismissed
-                        existing = existing_alerts_map.get((item_id, target_branch_id))
+                        existing = existing_alerts_map.get((curr_item_id, target_branch_id))
                         if existing:
                             cursor.execute("""
                                 UPDATE low_stock_alerts
                                 SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
                                 WHERE id = ?;
                             """, (existing["id"],))
-                            del existing_alerts_map[(item_id, target_branch_id)]
+                            del existing_alerts_map[(curr_item_id, target_branch_id)]
 
             conn.commit()
 
@@ -964,7 +965,7 @@ class InventoryService:
                     LEFT JOIN branches b ON b.id = a.branch_id
                     LEFT JOIN item_barcodes ib ON ib.item_id = i.id
                     WHERE a.company_id = ? AND a.status = 'RESOLVED'
-                    GROUP BY a.id
+                    GROUP BY a.id, i.name, i.alias, i.unit, b.name
                     ORDER BY a.resolved_at DESC, a.last_evaluated_at DESC
                     LIMIT 100;
                 """, (actual_comp_id,))

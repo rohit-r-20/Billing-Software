@@ -6,7 +6,7 @@ Compatible with Supabase PostgreSQL, Self-Managed PostgreSQL, and SQLite.
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import (
-    String, Text, Float, Integer, DateTime, ForeignKey,
+    String, Text, Float, Integer, BigInteger, DateTime, ForeignKey,
     UniqueConstraint, Index
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -347,6 +347,16 @@ class VoucherSequence(Base):
     __table_args__ = (
         UniqueConstraint("company_id", "voucher_type", "series", name="uq_voucher_sequence_type_series"),
     )
+
+
+class BarcodeSequence(Base):
+    __tablename__ = "barcode_sequences"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    sequence_name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
+    prefix: Mapped[str] = mapped_column(String(10), default="AB", server_default="AB", nullable=False)
+    current_value: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
 
 # ==============================================================================

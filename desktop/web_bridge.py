@@ -28,6 +28,7 @@ from services.supplier_service import supplier_service
 from services.purchase_service import purchase_service
 from services.accounting_service import accounting_service
 from services.ocr_service import ocr_service
+from services.barcode_service import barcode_service
 from core.configuration import config
 from core.logging_config import logger
 
@@ -253,6 +254,78 @@ class BackendBridge(QObject):
             data = json.loads(json_data)
             it = catalogue_service.save_item(company_id, data)
             return json.dumps({"success": True, "data": it})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Barcode Generator & Label Printing ---
+    @pyqtSlot(result=str)
+    @pyqtSlot(str, result=str)
+    def generateUniqueBarcode(self, company_id: str = "") -> str:
+        try:
+            res = barcode_service.generate_internal_barcode(company_id or None)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error generating internal barcode: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def validateBarcode(self, barcode: str) -> str:
+        try:
+            res = barcode_service.validate_barcode(barcode)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    @pyqtSlot(str, str, result=str)
+    @pyqtSlot(str, str, str, result=str)
+    def checkBarcodeAvailability(self, arg1: str, arg2: str = "", arg3: str = "") -> str:
+        try:
+            if arg2:
+                # Called as (company_id, barcode, exclude_item_id)
+                comp_id = arg1
+                barcode = arg2
+                exclude_id = arg3 or None
+            else:
+                # Called as (barcode)
+                comp_id = None
+                barcode = arg1
+                exclude_id = None
+            res = barcode_service.check_barcode_uniqueness(comp_id, barcode, exclude_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    @pyqtSlot(str, str, result=str)
+    def getItemBarcodes(self, arg1: str, arg2: str = "") -> str:
+        try:
+            if arg2:
+                res = barcode_service.get_item_barcodes(arg1, arg2)
+            else:
+                res = barcode_service.get_item_barcodes(arg1)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    @pyqtSlot(str, str, result=str)
+    @pyqtSlot(str, str, bool, result=str)
+    def renderBarcodeSvg(self, barcode: str, standard: str = "", include_text: bool = True) -> str:
+        try:
+            svg = barcode_service.render_barcode_svg(barcode, standard, human_readable=include_text)
+            return json.dumps({"success": True, "svg": svg})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    @pyqtSlot(str, str, result=str)
+    def generateBarcodeLabelHtml(self, item_json: str, options_json: str = "{}") -> str:
+        try:
+            item_data = json.loads(item_json)
+            opts = json.loads(options_json) if options_json else {}
+            html = barcode_service.generate_label_html(item_data, opts)
+            return json.dumps({"success": True, "html": html})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
