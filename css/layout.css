@@ -42,7 +42,8 @@ html, body {
    ========================================================= */
 .alpha-sidebar {
   width: var(--alpha-sidebar-width);
-  height: 100vh;
+  height: 100%;
+  max-height: 100%;
   background-color: var(--alpha-bg-sidebar);
   border-right: 1px solid var(--alpha-border-default);
   display: flex;
@@ -52,6 +53,8 @@ html, body {
   transition: width var(--alpha-transition-smooth), transform var(--alpha-transition-smooth);
   user-select: none;
   position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* Collapsed Sidebar Rail */
@@ -176,6 +179,9 @@ html, body {
 .nav-section-item {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border-radius: var(--alpha-radius-md);
   margin-bottom: 2px;
   position: relative;
@@ -184,15 +190,18 @@ html, body {
 /* Nav Header / Parent Item Button */
 .nav-parent-btn {
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border: none;
+  padding: 9px 12px;
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--alpha-text-secondary);
+  color: var(--alpha-sidebar-heading, #0f172a);
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.15px;
   border-radius: var(--alpha-radius-md);
   cursor: pointer;
   text-align: left;
@@ -203,7 +212,8 @@ html, body {
 
 .nav-parent-btn:hover {
   background-color: var(--alpha-bg-surface-subtle);
-  color: var(--alpha-brand-primary);
+  border-color: var(--alpha-border-default);
+  color: #0f172a;
 }
 
 .nav-parent-btn:focus-visible {
@@ -213,11 +223,13 @@ html, body {
 /* Nav Section Active State */
 .nav-section-item.active > .nav-parent-btn {
   background-color: var(--alpha-brand-primary-light);
-  color: var(--alpha-brand-primary);
+  border-color: var(--alpha-brand-primary-border);
+  color: var(--alpha-brand-navy, #1e3a8a);
+  font-weight: 700;
 }
 
 .nav-section-item.active > .nav-parent-btn .nav-icon {
-  color: var(--alpha-brand-primary);
+  color: var(--alpha-brand-primary, #2563eb);
 }
 
 /* Nav Icon Wrapper */
@@ -228,21 +240,24 @@ html, body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--alpha-text-muted);
+  color: var(--alpha-sidebar-icon, #1e293b);
   transition: color var(--alpha-transition-fast);
 }
 
 .nav-parent-btn:hover .nav-icon {
-  color: var(--alpha-brand-primary);
+  color: var(--alpha-brand-primary, #2563eb);
 }
 
 /* Nav Label & Chevron */
 .nav-label {
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: -0.1px;
+  color: inherit;
+  font-weight: inherit;
 }
 
 .nav-arrow {
@@ -251,13 +266,18 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--alpha-text-faint);
+  flex-shrink: 0;
+  color: #475569;
   transition: transform var(--alpha-transition-normal), color var(--alpha-transition-fast);
 }
 
 .nav-section-item.expanded > .nav-parent-btn .nav-arrow {
   transform: rotate(90deg);
-  color: var(--alpha-text-primary);
+  color: #0f172a;
+}
+
+.nav-section-item.active.expanded > .nav-parent-btn .nav-arrow {
+  color: var(--alpha-brand-primary, #2563eb);
 }
 
 /* Hide label and arrow when sidebar is collapsed */
@@ -275,7 +295,10 @@ html, body {
 .nav-submenu-list {
   display: none;
   flex-direction: column;
-  padding: 4px 0 6px 36px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 3px 6px 5px 28px;
   gap: 2px;
   overflow: hidden;
   position: relative;
@@ -284,11 +307,11 @@ html, body {
 .nav-submenu-list::before {
   content: "";
   position: absolute;
-  left: 21px;
+  left: 17px;
   top: 4px;
   bottom: 8px;
   width: 1.5px;
-  background-color: var(--alpha-border-default);
+  background-color: var(--alpha-border-hover, #cbd5e1);
 }
 
 .nav-section-item.expanded .nav-submenu-list {
@@ -299,20 +322,25 @@ html, body {
 .nav-sub-item {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   position: relative;
 }
 
 .nav-sub-btn {
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 6.5px 10px;
   font-size: 12.5px;
-  font-weight: 500;
-  color: var(--alpha-text-muted);
+  font-weight: 600;
+  color: var(--alpha-sidebar-text, #334155);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--alpha-radius-sm);
   cursor: pointer;
   text-align: left;
@@ -323,6 +351,35 @@ html, body {
   position: relative;
 }
 
+.nav-sub-btn:hover {
+  color: #0f172a;
+  background-color: var(--alpha-bg-surface-subtle);
+  border-color: var(--alpha-border-default);
+}
+
+.nav-sub-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--alpha-brand-primary-border);
+}
+
+.nav-sub-btn.active {
+  color: var(--alpha-sidebar-active-text, #1e40af);
+  background-color: var(--alpha-sidebar-active-bg, #eff6ff);
+  border-color: var(--alpha-sidebar-active-border, #bfdbfe);
+  font-weight: 700;
+}
+
+.nav-sub-btn.active::before {
+  content: "";
+  position: absolute;
+  left: -13px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--alpha-brand-primary, #2563eb);
+}
+
 .nav-sub-icon {
   width: 15px;
   height: 15px;
@@ -330,20 +387,26 @@ html, body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--alpha-text-muted);
+  color: var(--alpha-sidebar-sub-icon, #475569);
   transition: color var(--alpha-transition-fast);
 }
 
-.nav-sub-btn:hover .nav-sub-icon,
+.nav-sub-btn:hover .nav-sub-icon {
+  color: #1e293b;
+}
+
 .nav-sub-btn.active .nav-sub-icon {
-  color: var(--alpha-brand-primary);
+  color: var(--alpha-brand-primary, #2563eb);
 }
 
 .nav-sub-label {
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: inherit;
+  font-weight: inherit;
 }
 
 .nav-sub-expand-icon {
@@ -352,20 +415,24 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   margin-left: auto;
-  color: var(--alpha-text-faint);
-  transition: transform var(--alpha-transition-fast);
+  color: #64748b;
+  transition: transform var(--alpha-transition-fast), color var(--alpha-transition-fast);
 }
 
 .nav-sub-group.expanded > .nav-sub-btn .nav-sub-expand-icon {
   transform: rotate(90deg);
-  color: var(--alpha-brand-primary);
+  color: var(--alpha-brand-primary, #2563eb);
 }
 
 .nav-sub-children-list {
   display: none;
   flex-direction: column;
-  padding: 2px 0 4px 18px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 2px 4px 4px 16px;
   gap: 2px;
 }
 
@@ -374,15 +441,18 @@ html, body {
 }
 
 .nav-child-sub-btn {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--alpha-text-muted);
+  font-weight: 550;
+  color: var(--alpha-sidebar-text, #334155);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--alpha-radius-sm);
   cursor: pointer;
   text-align: left;
@@ -392,52 +462,37 @@ html, body {
 }
 
 .nav-child-sub-btn:hover {
-  color: var(--alpha-text-primary);
+  color: #0f172a;
   background-color: var(--alpha-bg-surface-subtle);
+  border-color: var(--alpha-border-default);
 }
 
 .nav-child-sub-btn.active {
-  color: var(--alpha-brand-primary);
-  background-color: var(--alpha-brand-primary-light);
-  font-weight: 600;
+  color: var(--alpha-sidebar-active-text, #1e40af);
+  background-color: var(--alpha-sidebar-active-bg, #eff6ff);
+  border-color: var(--alpha-sidebar-active-border, #bfdbfe);
+  font-weight: 700;
 }
 
-.nav-sub-btn:hover {
-  color: var(--alpha-text-primary);
-  background-color: var(--alpha-bg-surface-subtle);
+.nav-child-sub-btn .nav-sub-icon {
+  color: var(--alpha-sidebar-sub-icon, #475569);
 }
 
-.nav-sub-btn:focus-visible {
-  box-shadow: 0 0 0 2px var(--alpha-brand-primary-border);
-}
-
-.nav-sub-btn.active {
-  color: var(--alpha-brand-primary);
-  background-color: var(--alpha-brand-primary-light);
-  font-weight: 600;
-}
-
-.nav-sub-btn.active::before {
-  content: "";
-  position: absolute;
-  left: -16px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--alpha-brand-primary);
+.nav-child-sub-btn.active .nav-sub-icon {
+  color: var(--alpha-brand-primary, #2563eb);
 }
 
 /* Submenu Badge (optional pill) */
 .nav-sub-badge {
   margin-left: auto;
+  flex-shrink: 0;
   font-size: 10.5px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: var(--alpha-radius-full);
-  background-color: var(--alpha-bg-surface-subtle);
-  color: var(--alpha-text-muted);
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
 /* Floating Tooltip / Flyout Menu When Collapsed */
@@ -475,6 +530,9 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .user-avatar-badge {
@@ -518,8 +576,8 @@ html, body {
 
 .user-name {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--alpha-text-primary);
+  font-weight: 700;
+  color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -527,7 +585,8 @@ html, body {
 
 .user-role-badge {
   font-size: 11px;
-  color: var(--alpha-text-muted);
+  font-weight: 500;
+  color: #475569;
   white-space: nowrap;
 }
 
@@ -535,18 +594,19 @@ html, body {
   margin-left: auto;
   background: transparent;
   border: none;
-  color: var(--alpha-text-muted);
+  color: #334155;
   cursor: pointer;
   padding: 6px;
   border-radius: var(--alpha-radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .btn-user-action:hover {
   background-color: var(--alpha-bg-surface-subtle);
-  color: var(--alpha-text-primary);
+  color: #0f172a;
 }
 
 .alpha-sidebar.collapsed .btn-user-action {
@@ -561,9 +621,11 @@ html, body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
   background-color: var(--alpha-bg-app);
+  box-sizing: border-box;
 }
 
 /* Top Header */
@@ -578,6 +640,8 @@ html, body {
   gap: 16px;
   z-index: 40;
   flex-shrink: 0;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .header-left-group {

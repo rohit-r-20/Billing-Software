@@ -376,6 +376,7 @@ class SidebarNavigationManager {
       const iconHtml = window.getLucideIcon(sec.icon, "nav-icon");
       const arrowHtml = window.getLucideIcon("chevronRight", "nav-arrow");
 
+      parentBtn.title = sec.label;
       parentBtn.innerHTML = `
         <span class="nav-icon">${iconHtml}</span>
         <span class="nav-label">${sec.label}</span>
@@ -439,6 +440,7 @@ class SidebarNavigationManager {
           expandChevronHtml = `<span class="nav-sub-expand-icon">${window.getLucideIcon("chevronRight", "", 12)}</span>`;
         }
 
+        subBtn.title = sub.label;
         subBtn.innerHTML = `
           <span class="nav-sub-icon">${subIconHtml}</span>
           <span class="nav-sub-label">${sub.label}</span>
@@ -474,6 +476,7 @@ class SidebarNavigationManager {
             childBtn.dataset.sectionId = sec.id;
 
             const childIconHtml = child.icon ? window.getLucideIcon(child.icon, "nav-sub-icon", 12) : "";
+            childBtn.title = child.label;
             childBtn.innerHTML = `
               <span class="nav-sub-icon" style="width:14px; height:14px;">${childIconHtml}</span>
               <span class="nav-sub-label">${child.label}</span>

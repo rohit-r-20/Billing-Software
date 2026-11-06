@@ -26,6 +26,14 @@
   --alpha-text-muted: #64748b;          /* Slate 500 */
   --alpha-text-faint: #94a3b8;          /* Slate 400 */
   --alpha-text-inverted: #ffffff;
+  --alpha-sidebar-heading: #0f172a;     /* Prominent Dark Charcoal/Navy for Primary Headings */
+  --alpha-sidebar-text: #334155;        /* Accessible Dark Grey/Navy for Submenu items */
+  --alpha-sidebar-icon: #1e293b;        /* Prominent Dark Icon Color */
+  --alpha-sidebar-sub-icon: #475569;    /* Sufficiently Visible Submenu Icon Color */
+  --alpha-sidebar-active-text: #1e40af; /* Dark Blue Text for Active Item */
+  --alpha-sidebar-active-bg: #eff6ff;   /* Subtle Light Blue Background for Active Item */
+  --alpha-sidebar-active-border: #bfdbfe; /* Subtle Light Blue Border for Active Item */
+  --alpha-sidebar-active-icon: #2563eb; /* Visible Blue Icon for Active Item */
 
   /* Borders & Dividers */
   --alpha-border-subtle: #f1f5f9;       /* Slate 100 */
