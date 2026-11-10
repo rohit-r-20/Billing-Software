@@ -17,23 +17,22 @@ if _venv_python.exists() and sys.executable != str(_venv_python):
         os.execv(str(_venv_python), [str(_venv_python)] + sys.argv)
 
 # Set Chromium command-line flags BEFORE PyQt5/QWebEngine initialization.
-# On Windows, --no-sandbox is required to prevent QtWebEngineProcess renderer crash (STATUS_BREAKPOINT -2147483645).
+# On Windows, --no-sandbox is required to prevent QtWebEngineProcess renderer crash.
 existing_flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
 if '--no-sandbox' not in existing_flags:
     os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = f'{existing_flags} --no-sandbox --disable-logging'.strip()
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from core.configuration import config
 from core.logging_config import logger
 from db.database import db_manager
-from services.migration_service import migration_service
 from desktop.main_window import MainWindow
 
 
 def main():
-    logger.info(f"Starting {config.APP_DISPLAY_NAME} v{config.VERSION}...")
+    logger.info(f"Starting {config.APP_DISPLAY_NAME} v{config.VERSION} [{config.get_database_env()}]...")
 
     # Enable High DPI display scaling for modern 4K/Retina screens
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
@@ -43,23 +42,23 @@ def main():
     app.setApplicationName(config.APP_NAME)
     app.setOrganizationName(config.VENDOR_NAME)
 
-    # 1. Initialize and run database migrations
-    try:
-        applied = db_manager.run_migrations()
-        if applied:
-            logger.info(f"Database migrations applied: {applied}")
-        
-        # Verify default company exists
-        with db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM companies;")
-            count = cursor.fetchone()[0]
-            if count == 0:
-                logger.info("Initializing fresh database with default company...")
-                migration_service.import_localstorage_payload({})
-    except Exception as e:
-        logger.error(f"Database initialization failure: {e}")
-        sys.exit(1)
+    # 1. Connection Health Check (Decoupled from DDL migrations)
+    health = db_manager.check_health()
+    if health.get("healthy"):
+        logger.info(
+            f"Database connected: {health.get('dialect')} ({health.get('database')}.{health.get('schema')}) "
+            f"latency: {health.get('latency_ms')}ms [{health.get('url_masked')}]"
+        )
+        try:
+            from services.company_service import company_service
+            admin_info = company_service.provision_initial_administrator()
+            if admin_info.get("created"):
+                logger.info("Provisioned initial administrator account for primary company.")
+        except Exception as e:
+            logger.debug(f"Initial administrator provisioning note: {e}")
+    else:
+        logger.error(f"Database connection error: {health.get('error')}")
+        # Note: Do not abort ungracefully; allow UI to present diagnostic connection screen if offline
 
     # 2. Launch Main Desktop Window in Maximized State
     try:
@@ -73,4 +72,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -17,14 +17,11 @@ class BillingService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company if empty."""
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
+        Rejects missing, empty, or unresolvable company contexts."""
         cid = str(company_id or "").strip()
         if not cid:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-                c_default = cursor.fetchone()
-                return c_default["id"] if c_default else ""
+            raise ValueError("Company context is required. Missing company identifier.")
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -32,7 +29,7 @@ class BillingService:
             c_row = cursor.fetchone()
             if c_row:
                 return c_row["id"]
-            return cid
+        raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _ensure_voucher_sequence_table(self, cursor):
         """Ensure voucher_sequences table exists in both SQLite and PostgreSQL."""

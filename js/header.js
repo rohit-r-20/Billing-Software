@@ -21,13 +21,22 @@ class HeaderManager {
     this.bindUserProfileMenu();
     this.bindZoomControls();
     this.bindMobileToggle();
-    this.updateContextDisplays();
 
-    // Listen to BusinessContext changes
+    // Listen to BusinessContext authentication & context changes
     if (window.BusinessContext) {
+      window.BusinessContext.on("auth-state-changed", (data) => this.handleAuthState(data));
+      window.BusinessContext.on("auth-changed", (data) => this.handleAuthState(data));
       window.BusinessContext.on("context-changed", () => {
-        this.updateContextDisplays();
+        if (window.BusinessContext.isAuthenticatedSession()) {
+          this.updateContextDisplays();
+        }
       });
+    }
+
+    if (window.BusinessContext && window.BusinessContext.isAuthenticatedSession()) {
+      this.showAuthenticatedHeader();
+    } else {
+      this.hideAuthenticatedHeader();
     }
 
     // Close any open dropdown on click outside
@@ -39,6 +48,35 @@ class HeaderManager {
         this.closeAllDropdowns();
       }
     });
+  }
+
+  handleAuthState(data) {
+    if (data && (data.state === "AUTHENTICATED" || data.isAuthenticated)) {
+      this.showAuthenticatedHeader();
+    } else {
+      this.hideAuthenticatedHeader();
+    }
+  }
+
+  showAuthenticatedHeader() {
+    const topHeader = document.getElementById("alpha-top-header");
+    if (topHeader) topHeader.style.display = "flex";
+    this.updateContextDisplays();
+  }
+
+  hideAuthenticatedHeader() {
+    const topHeader = document.getElementById("alpha-top-header");
+    if (topHeader) topHeader.style.display = "none";
+    this.closeAllDropdowns();
+
+    const compValEl = document.getElementById("header-company-val");
+    if (compValEl) { compValEl.textContent = ""; compValEl.title = ""; }
+    const branchValEl = document.getElementById("header-branch-val");
+    if (branchValEl) { branchValEl.textContent = ""; branchValEl.title = ""; }
+    const userNameEl = document.getElementById("header-user-name");
+    if (userNameEl) userNameEl.textContent = "";
+    const userAvatarEl = document.getElementById("header-user-avatar");
+    if (userAvatarEl) userAvatarEl.textContent = "--";
   }
 
   populateHeaderIcons() {
@@ -92,9 +130,13 @@ class HeaderManager {
   }
 
   updateContextDisplays() {
-    if (!window.BusinessContext) return;
+    if (!window.BusinessContext || !window.BusinessContext.isAuthenticatedSession()) {
+      this.hideAuthenticatedHeader();
+      return;
+    }
     const comp = window.BusinessContext.getActiveCompany();
     const branch = window.BusinessContext.getActiveBranch();
+    const user = window.BusinessContext.getCurrentUser();
 
     const compValEl = document.getElementById("header-company-val");
     if (compValEl && comp) {
@@ -106,6 +148,16 @@ class HeaderManager {
     if (branchValEl && branch) {
       branchValEl.textContent = branch.name;
       branchValEl.title = branch.name;
+    }
+
+    const userNameEl = document.getElementById("header-user-name");
+    if (userNameEl && user) {
+      userNameEl.textContent = user.displayName || user.username || "User";
+    }
+
+    const userAvatarEl = document.getElementById("header-user-avatar");
+    if (userAvatarEl && user) {
+      userAvatarEl.textContent = user.avatarInitials || "--";
     }
   }
 
@@ -315,11 +367,17 @@ class HeaderManager {
     userBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggleDropdown(userMenu, () => {
+        const user = window.BusinessContext ? window.BusinessContext.getCurrentUser() : null;
+        const displayName = user ? (user.displayName || user.username) : "User";
+        const username = user ? user.username : "user";
+        const role = user ? (user.role || "Administrator") : "User";
+        const email = user ? (user.email || `${username.toLowerCase()}@alphabilling.local`) : "user@alphabilling.local";
+
         userMenu.innerHTML = `
           <div style="padding: 10px 14px; border-bottom: 1px solid var(--alpha-border-default);">
-            <div style="font-size: 13.5px; font-weight: 700; color: var(--alpha-text-primary);">Administrator</div>
-            <div style="font-size: 11px; color: var(--alpha-text-muted);">admin@alphabilling.local</div>
-            <span class="status-pill status-pill-success" style="margin-top: 6px;">Super Admin</span>
+            <div style="font-size: 13.5px; font-weight: 700; color: var(--alpha-text-primary);">${displayName}</div>
+            <div style="font-size: 11px; color: var(--alpha-text-muted);">${email}</div>
+            <span class="status-pill status-pill-success" style="margin-top: 6px;">${role}</span>
           </div>
           <button type="button" class="dropdown-item-btn" id="btn-user-settings">
             <span>Settings & Preferences</span>
@@ -345,10 +403,12 @@ class HeaderManager {
 
         userMenu.querySelector("#btn-user-logout")?.addEventListener("click", () => {
           this.closeAllDropdowns();
-          window.showToast("Signing out of Alpha Billing...");
-          setTimeout(() => {
+          if (typeof window.logoutUser === "function") {
+            window.logoutUser();
+          } else if (window.BusinessContext) {
+            window.BusinessContext.clearAuthenticatedSession("logout");
             if (typeof window.showScreen === "function") window.showScreen("view-login");
-          }, 400);
+          }
         });
       });
     });
@@ -360,7 +420,7 @@ class HeaderManager {
     } else {
       const zoomInBtn = document.getElementById("btn-zoom-in");
       const zoomOutBtn = document.getElementById("btn-zoom-out");
-      if (zoomInBtn && !zoomInBtn.dataset.zoomBound) {
+      if (zoomInBtn && zoomInBtn.dataset && !zoomInBtn.dataset.zoomBound) {
         zoomInBtn.dataset.zoomBound = "true";
         zoomInBtn.addEventListener("click", () => {
           if (window.ZoomController) {
@@ -371,7 +431,7 @@ class HeaderManager {
           }
         });
       }
-      if (zoomOutBtn && !zoomOutBtn.dataset.zoomBound) {
+      if (zoomOutBtn && zoomOutBtn.dataset && !zoomOutBtn.dataset.zoomBound) {
         zoomOutBtn.dataset.zoomBound = "true";
         zoomOutBtn.addEventListener("click", () => {
           if (window.ZoomController) {

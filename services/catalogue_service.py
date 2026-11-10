@@ -13,14 +13,11 @@ class CatalogueService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company if empty."""
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
+        Rejects missing, empty, or unresolvable company contexts."""
         cid = str(company_id or "").strip()
         if not cid:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-                c_default = cursor.fetchone()
-                return c_default["id"] if c_default else ""
+            raise ValueError("Company context is required. Missing company identifier.")
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -28,7 +25,7 @@ class CatalogueService:
             c_row = cursor.fetchone()
             if c_row:
                 return c_row["id"]
-            return cid
+        raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _compute_is_verified(self, res: Dict[str, Any]) -> int:
         """Determines if product is verified and safe for checkout."""
@@ -269,8 +266,15 @@ class CatalogueService:
             actual_company_id = self._resolve_company_id(arg1)
             item_id = arg2
         else:
-            actual_company_id = self._resolve_company_id(None)
             item_id = arg1
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT company_id FROM items WHERE id = ? LIMIT 1;", (item_id,))
+                row = cursor.fetchone()
+                if row:
+                    actual_company_id = row["company_id"] if isinstance(row, dict) or hasattr(row, "keys") else row[0]
+                else:
+                    return None
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()

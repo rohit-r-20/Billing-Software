@@ -22,7 +22,7 @@ let filteredCompanies = [...companies];
 let selectedIndex = 0;
 let activeCompany = null;
 let currentPendingCompany = null;
-let currentScreen = "view-companies"; // view-companies | view-dashboard | view-add-account-master | view-add-item-master | view-sales-voucher | view-sales-list
+let currentScreen = "view-login"; // view-login is the default startup screen
 let uiZoom = parseFloat(localStorage.getItem("alpha_ui_zoom") || "1.0");
 
 // Dual Billing Mode & Tabs State
@@ -626,6 +626,16 @@ ZoomController.bindControls();
 // SCREEN VIEW ROUTER
 // =============================================================
 function showScreen(screenId) {
+  // Authentication Route Guard
+  const isAuth = window.BusinessContext ? window.BusinessContext.isAuthenticatedSession() : false;
+  if (!isAuth && screenId !== "view-login") {
+    console.warn(`[RouteGuard] Blocked access to ${screenId} for unauthenticated session.`);
+    if (typeof showNotification === "function") {
+      showNotification("Authentication required. Please sign in.", "warning");
+    }
+    screenId = "view-login";
+  }
+
   currentScreen = screenId;
   const allViews = [
     viewLogin,
@@ -661,7 +671,7 @@ function showScreen(screenId) {
 
   // Manage internal application tab bar visibility & mode state
   if (appTabsBar) {
-    if (isStandalone) {
+    if (isStandalone || !isAuth) {
       appTabsBar.style.display = "none";
     } else {
       appTabsBar.style.display = "flex";
@@ -669,10 +679,16 @@ function showScreen(screenId) {
     }
   }
 
-  // Manage Sidebar: Fast Billing cashier workspace hides sidebar for distraction-free 100% width
+  // Manage Top Header visibility: Only visible for authenticated non-standalone screens
+  const alphaTopHeader = document.getElementById("alpha-top-header");
+  if (alphaTopHeader) {
+    alphaTopHeader.style.display = isAuth && !isStandalone ? "flex" : "none";
+  }
+
+  // Manage Sidebar: Fast Billing cashier workspace hides sidebar; unauthenticated hides sidebar
   const alphaSidebar = document.getElementById("alpha-sidebar");
   if (alphaSidebar) {
-    if (isStandalone || isFastBilling) {
+    if (!isAuth || isStandalone || isFastBilling) {
       alphaSidebar.style.display = "none";
     } else {
       alphaSidebar.style.display = "";
@@ -971,45 +987,77 @@ function handleMainLoginSubmit() {
 
   setLoginLoading(true);
   hideLoginAlert();
+  if (window.BusinessContext) {
+    window.BusinessContext.setAuthenticating();
+  }
+
+  const applyAuthSuccess = (authData) => {
+    const sessionData = {
+      user: {
+        id: authData.userId || authData.id,
+        username: authData.username || username,
+        displayName: authData.displayName || authData.username || username,
+        role: authData.role || "Administrator",
+        email: authData.email
+      },
+      company: {
+        id: authData.id || authData.companyId,
+        code: authData.code || companyCode,
+        name: authData.name,
+        finYear: authData.finYear || "2026-2027",
+        taxNo: authData.taxNo || authData.gstin,
+        state: authData.state
+      }
+    };
+
+    if (window.BusinessContext) {
+      window.BusinessContext.setAuthenticatedSession(sessionData);
+    }
+    if (window.DashboardManager) {
+      window.DashboardManager.initForSession();
+    }
+    activeCompany = window.BusinessContext ? window.BusinessContext.getActiveCompany() : authData;
+    if (loginPwdInput) loginPwdInput.value = "";
+    openBillingModeSelection(activeCompany);
+  };
+
+  const applyAuthFailure = (errMsg) => {
+    if (window.BusinessContext) {
+      window.BusinessContext.clearAuthenticatedSession("invalid_credentials");
+    }
+    showLoginAlert(errMsg || "Invalid User ID or Password. Please try again.");
+    if (loginPwdInput) {
+      loginPwdInput.select();
+      loginPwdInput.focus();
+    }
+  };
 
   if (window.backend && window.backend.authenticateUser) {
     window.backend.authenticateUser(companyCode, username, password, (resp) => {
       setLoginLoading(false);
       try {
-        const res = JSON.parse(resp);
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
         if (res.success && res.data) {
-          activeCompany = res.data;
-          if (loginPwdInput) loginPwdInput.value = "";
-          openBillingModeSelection(activeCompany);
+          applyAuthSuccess(res.data);
         } else {
-          showLoginAlert(res.error || "Invalid User ID or Password. Please try again.");
-          if (loginPwdInput) {
-            loginPwdInput.select();
-            loginPwdInput.focus();
-          }
+          applyAuthFailure(res.error);
         }
       } catch (e) {
-        showLoginAlert("Authentication error: " + e.message);
+        applyAuthFailure("Authentication error: " + e.message);
       }
     });
   } else if (window.backend && window.backend.authenticateCompany) {
     window.backend.authenticateCompany(companyCode, password, (resp) => {
       setLoginLoading(false);
       try {
-        const res = JSON.parse(resp);
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
         if (res.success && res.data) {
-          activeCompany = res.data;
-          if (loginPwdInput) loginPwdInput.value = "";
-          openBillingModeSelection(activeCompany);
+          applyAuthSuccess(res.data);
         } else {
-          showLoginAlert(res.error || "Invalid User ID or Password. Please try again.");
-          if (loginPwdInput) {
-            loginPwdInput.select();
-            loginPwdInput.focus();
-          }
+          applyAuthFailure(res.error);
         }
       } catch (e) {
-        showLoginAlert("Authentication error: " + e.message);
+        applyAuthFailure("Authentication error: " + e.message);
       }
     });
   } else {
@@ -1023,18 +1071,18 @@ function handleMainLoginSubmit() {
         const matchUser = username.toUpperCase() === expectedUser.toUpperCase();
         const matchPass = password === expectedPass || (expectedPass === "a" && password === "a");
         if (matchUser && matchPass) {
-          activeCompany = comp;
-          if (loginPwdInput) loginPwdInput.value = "";
-          openBillingModeSelection(activeCompany);
+          applyAuthSuccess({
+            ...comp,
+            userId: `usr-${comp.code}`,
+            username: username,
+            displayName: comp.name ? `${comp.name} Admin` : username,
+            role: "Administrator"
+          });
         } else {
-          showLoginAlert("Invalid User ID or Password. Please try again.");
-          if (loginPwdInput) {
-            loginPwdInput.select();
-            loginPwdInput.focus();
-          }
+          applyAuthFailure("Invalid User ID or Password. Please try again.");
         }
       } else {
-        showLoginAlert("Selected company not found. Please select a valid company.");
+        applyAuthFailure("Selected company not found. Please select a valid company.");
       }
     }, 150);
   }
@@ -1072,9 +1120,36 @@ function logoutUser() {
       return;
     }
   }
+
+  // Clear authenticated session and state
+  if (window.BusinessContext) {
+    window.BusinessContext.clearAuthenticatedSession("logout");
+  }
+
+  // Clear backend authenticated session
+  if (window.backend && typeof window.backend.logout === "function") {
+    try {
+      window.backend.logout();
+    } catch (e) {
+      console.warn("Backend logout notification note:", e);
+    }
+  }
+
+  // Clear dashboard components and stop live updates
+  if (window.DashboardManager) {
+    window.DashboardManager.clearDashboard();
+  }
+
   activeCompany = null;
   if (loginPwdInput) loginPwdInput.value = "";
   hideLoginAlert();
+
+  // Hide top header and sidebar
+  const alphaTopHeader = document.getElementById("alpha-top-header");
+  if (alphaTopHeader) alphaTopHeader.style.display = "none";
+  const alphaSidebar = document.getElementById("alpha-sidebar");
+  if (alphaSidebar) alphaSidebar.style.display = "none";
+
   showScreen("view-login");
   showNotification("Logged out successfully.");
 }
@@ -9861,17 +9936,8 @@ if (window.HeaderManager) window.HeaderManager.init();
 if (window.DashboardManager) window.DashboardManager.init();
 if (window.GlobalSearchManager) window.GlobalSearchManager.init();
 
-if (!window.activeCompany) {
-  window.activeCompany = {
-    id: "COMP0001",
-    code: "COMP0001",
-    name: "ANTI MATRIX RETAIL & WHOLESALE",
-    fin_year: "2026-2027"
-  };
-}
-if (!activeCompany) {
-  activeCompany = window.activeCompany;
-}
+window.activeCompany = null;
+activeCompany = null;
 
 renderCompanyTable();
 populateLoginCompanies();
@@ -10294,4 +10360,4 @@ setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
 initBarcodeModule();
 ZoomController.init();
-showScreen("view-dashboard");
+showScreen("view-login");

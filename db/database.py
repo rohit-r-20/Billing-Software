@@ -1,16 +1,18 @@
 """
 Database Management Layer for Alpha Billing ERP.
-Supports both PostgreSQL (Supabase / Self-Managed) via SQLAlchemy 2.x & Psycopg 3,
-and local SQLite with seamless dialect translation and connection pooling.
+Supports PostgreSQL (Supabase / Self-Managed / Cloud) via SQLAlchemy 2.x & Psycopg 3,
+and local SQLite with dialect translation, connection pooling, and ACID transaction safety.
 """
 
 import os
 import re
 import sqlite3
 import shutil
+import time
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple, Union
+from contextlib import contextmanager
+from typing import Optional, List, Dict, Any, Tuple, Union, Generator
 
 from sqlalchemy import create_engine, Engine, text
 from sqlalchemy.orm import sessionmaker, Session
@@ -117,7 +119,6 @@ class PostgresCursorAdapter:
     def execute(self, query: str, params: Optional[Union[Tuple, List, Dict]] = None):
         translated = translate_placeholders_to_percent_s(query)
         if params is not None:
-            # If params is list, cast to tuple
             param_tuple = tuple(params) if isinstance(params, (list, tuple)) else params
             return self._cursor.execute(translated, param_tuple)
         return self._cursor.execute(translated)
@@ -210,9 +211,13 @@ class PostgresConnectionAdapter:
 
 class DatabaseManager:
     """
-    Central database manager supporting both PostgreSQL and SQLite.
-    Provides DBAPI connections for existing service layers and SQLAlchemy 2.x
-    sessions for modern ORM and Alembic migrations.
+    Central database manager supporting PostgreSQL (Supabase / Self-Managed)
+    and SQLite via environment-driven configuration.
+    Provides:
+    - Single SQLAlchemy 2.x engine factory with configurable connection pooling.
+    - Single session factory with transactional scope context manager.
+    - DBAPI connections for existing service layers with automatic dialect translation.
+    - Safe connection disposal and health check diagnostics.
     """
     def __init__(self, database_url: Optional[Union[str, Path]] = None):
         if database_url is not None:
@@ -222,6 +227,7 @@ class DatabaseManager:
         self.is_postgres = self._detect_postgres(self.database_url)
         self.is_sqlite = not self.is_postgres
         self.dialect = "postgresql" if self.is_postgres else "sqlite"
+        self.env = config.get_database_env()
 
         # SQLite path setup
         if self.is_sqlite:
@@ -242,7 +248,7 @@ class DatabaseManager:
         return u.startswith("postgres://") or u.startswith("postgresql://") or u.startswith("postgresql+")
 
     def _normalize_sqlalchemy_url(self, url: str) -> str:
-        """Ensures the driver prefix is postgresql+psycopg for PostgreSQL."""
+        """Ensures driver prefix is postgresql+psycopg for SQLAlchemy 2.x."""
         if url.startswith("postgres://"):
             return "postgresql+psycopg://" + url[len("postgres://"):]
         if url.startswith("postgresql://"):
@@ -253,28 +259,35 @@ class DatabaseManager:
         """Strips SQLAlchemy driver prefix for direct psycopg.connect."""
         if url.startswith("postgresql+psycopg://"):
             return "postgresql://" + url[len("postgresql+psycopg://"):]
+        if url.startswith("postgresql+psycopg2://"):
+            return "postgresql://" + url[len("postgresql+psycopg2://"):]
         return url
 
     def _init_engine(self):
-        """Initializes the SQLAlchemy 2.x engine and session factory."""
+        """Initializes the central SQLAlchemy 2.x engine and session factory."""
         try:
             norm_url = self._normalize_sqlalchemy_url(self.database_url)
             if self.is_postgres:
+                pool_opts = config.get_pool_config()
                 self._engine = create_engine(
                     norm_url,
-                    pool_pre_ping=True,
-                    pool_size=10,
-                    max_overflow=20,
-                    pool_recycle=300
+                    pool_pre_ping=pool_opts["pool_pre_ping"],
+                    pool_size=pool_opts["pool_size"],
+                    max_overflow=pool_opts["max_overflow"],
+                    pool_timeout=pool_opts["pool_timeout"],
+                    pool_recycle=pool_opts["pool_recycle"],
                 )
             else:
+                if not (norm_url.startswith("sqlite:///") or norm_url.startswith("sqlite://")):
+                    norm_url = f"sqlite:///{norm_url}"
                 self._engine = create_engine(norm_url)
             self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
         except Exception as e:
-            logger.warning(f"Could not initialize SQLAlchemy engine for {self.database_url}: {e}")
+            logger.warning(f"Could not initialize SQLAlchemy engine for {config.mask_database_url(self.database_url)}: {e}")
 
     @property
     def engine(self) -> Engine:
+        """Returns the central SQLAlchemy Engine."""
         if self._engine is None:
             self._init_engine()
         return self._engine
@@ -284,6 +297,24 @@ class DatabaseManager:
         if self._session_factory is None:
             self._init_engine()
         return self._session_factory()
+
+    @contextmanager
+    def session_scope(self) -> Generator[Session, None, None]:
+        """
+        Transactional scope context manager for SQLAlchemy 2.x sessions.
+        Automatically commits on successful block exit, rolls back on exception,
+        and ensures session closure.
+        """
+        session = self.get_session()
+        try:
+            yield session
+            session.commit()
+        except Exception as err:
+            session.rollback()
+            logger.error(f"Transaction rolled back due to error: {err}")
+            raise
+        finally:
+            session.close()
 
     def get_connection(self):
         """
@@ -308,8 +339,24 @@ class DatabaseManager:
             conn.execute("PRAGMA synchronous = NORMAL;")
             return conn
 
-    def test_connection(self) -> Dict[str, Any]:
-        """Validates database connectivity and returns metadata."""
+    def dispose(self):
+        """Safely disposes all active connections in the pool and closes engine."""
+        if self._engine is not None:
+            try:
+                self._engine.dispose()
+                logger.info("Database connection pool safely disposed.")
+            except Exception as e:
+                logger.warning(f"Error during engine disposal: {e}")
+            finally:
+                self._engine = None
+                self._session_factory = None
+
+    def check_health(self) -> Dict[str, Any]:
+        """
+        Diagnostic connection health check:
+        Measures round-trip latency, queries database version, and reports connection status.
+        """
+        start = time.time()
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
@@ -320,28 +367,49 @@ class DatabaseManager:
                 if self.is_postgres:
                     cursor.execute("SELECT version();")
                     version_str = cursor.fetchone()[0]
+                    cursor.execute("SELECT current_database(), current_schema();")
+                    db_name, schema_name = cursor.fetchone()
                 else:
                     cursor.execute("SELECT sqlite_version();")
                     version_str = f"SQLite {cursor.fetchone()[0]}"
+                    db_name = str(self.db_path.name) if self.db_path else "memory"
+                    schema_name = "main"
 
-            # Mask credentials for safe logging and status reporting
-            masked_url = re.sub(r"://([^:@]+):([^@]+)@", r"://\1:****@", self.database_url)
+            latency_ms = round((time.time() - start) * 1000, 2)
             return {
-                "success": alive,
+                "healthy": alive,
+                "environment": self.env,
                 "dialect": self.dialect,
+                "database": db_name,
+                "schema": schema_name,
                 "version": version_str,
-                "url": masked_url,
-                "is_postgres": self.is_postgres,
-                "is_sqlite": self.is_sqlite
+                "latency_ms": latency_ms,
+                "url_masked": config.mask_database_url(self.database_url),
             }
         except Exception as e:
-            logger.error(f"Database connection test failed: {e}")
+            latency_ms = round((time.time() - start) * 1000, 2)
+            logger.error(f"Health check failed for {config.mask_database_url(self.database_url)}: {e}")
             return {
-                "success": False,
-                "error": str(e),
+                "healthy": False,
+                "environment": self.env,
                 "dialect": self.dialect,
-                "is_postgres": self.is_postgres
+                "error": str(e),
+                "latency_ms": latency_ms,
+                "url_masked": config.mask_database_url(self.database_url),
             }
+
+    def test_connection(self) -> Dict[str, Any]:
+        """Validates database connectivity and returns metadata."""
+        health = self.check_health()
+        return {
+            "success": health.get("healthy", False),
+            "dialect": health.get("dialect"),
+            "version": health.get("version"),
+            "url": health.get("url_masked"),
+            "error": health.get("error"),
+            "is_postgres": self.is_postgres,
+            "is_sqlite": self.is_sqlite,
+        }
 
     def run_alembic_migrations(self) -> bool:
         """Executes Alembic migrations programmatically up to 'head'."""
@@ -354,10 +422,9 @@ class DatabaseManager:
 
         alembic_cfg = AlembicConfig(str(ini_path))
         norm_url = self._normalize_sqlalchemy_url(self.database_url)
-        # ConfigParser in alembic treats '%' as interpolation token, so escape '%' to '%%'
         escaped_url = norm_url.replace("%", "%%")
         alembic_cfg.set_main_option("sqlalchemy.url", escaped_url)
-        logger.info(f"Running Alembic migrations on {self.dialect} ({norm_url.split('@')[-1]})...")
+        logger.info(f"Running Alembic migrations on {self.dialect} ({config.mask_database_url(norm_url)})...")
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migrations completed successfully.")
         return True
@@ -371,7 +438,6 @@ class DatabaseManager:
             self.run_alembic_migrations()
             return ["alembic_head"]
 
-        # SQLite fallback migrations
         mig_dir = migrations_dir or (Path(__file__).resolve().parent / "migrations")
         if not mig_dir.exists():
             return []
@@ -437,7 +503,6 @@ class DatabaseManager:
                     dest_conn.close()
             return backup_file
         else:
-            # PostgreSQL dump export
             backup_file = dest_dir / f"backup_alpha_billing_pg_{timestamp}.sql"
             with self.get_connection() as conn:
                 cur = conn.cursor()
@@ -454,7 +519,7 @@ class DatabaseManager:
             raise FileNotFoundError(f"Backup file not found: {backup_path}")
 
         if self.is_sqlite:
-            if self.db_path.exists():
+            if self.db_path and self.db_path.exists():
                 safety_copy = self.backup_database(config.BACKUP_DIR / "pre_restore_safety")
                 logger.info(f"Pre-restore safety snapshot saved to {safety_copy}")
 
@@ -472,5 +537,4 @@ class DatabaseManager:
             return True
 
 
-# Default application-wide database manager instance
 db_manager = DatabaseManager()

@@ -4,8 +4,17 @@
  * Prevents cross-contamination between businesses.
  */
 
+const AuthState = Object.freeze({
+  UNAUTHENTICATED: "UNAUTHENTICATED",
+  AUTHENTICATING: "AUTHENTICATING",
+  AUTHENTICATED: "AUTHENTICATED",
+  SESSION_EXPIRED: "SESSION_EXPIRED"
+});
+
 class BusinessContextManager {
   constructor() {
+    this.AuthState = AuthState;
+    this.authState = AuthState.UNAUTHENTICATED;
     this.listeners = new Map();
 
     // Default seeded companies
@@ -59,20 +68,15 @@ class BusinessContextManager {
       console.warn("Could not parse persisted companies:", e);
     }
 
-    // Current State
-    this.activeCompanyId = localStorage.getItem("alpha_active_company_id") || "COMP0001";
-    this.activeBranchId = localStorage.getItem("alpha_active_branch_id") || "BR-HQ";
-    this.currentUser = {
-      username: "Admin",
-      displayName: "Administrator",
-      role: "Super Administrator",
-      avatarInitials: "AD",
-      status: "online"
-    };
+    // Initial Authentication & Context State (Clean Startup: Not Authenticated)
+    this.isAuthenticated = false;
+    this.activeCompanyId = null;
+    this.activeBranchId = null;
+    this.currentUser = null;
   }
 
   init() {
-    // Sync with backend if available
+    // Sync company catalog with backend if available for company selection dropdown
     if (window.backend && typeof window.backend.listCompanies === "function") {
       try {
         const resStr = window.backend.listCompanies();
@@ -102,18 +106,133 @@ class BusinessContextManager {
       }
     }
 
-    // Ensure active company exists
-    if (!this.getActiveCompany()) {
-      this.activeCompanyId = this.companies[0].id;
+    // Do NOT automatically activate company or user on startup before login
+    console.log(`[BusinessContext] Initialized in unauthenticated mode. Awaiting user login.`);
+  }
+
+  getAuthState() {
+    return this.authState;
+  }
+
+  setAuthenticating() {
+    this.authState = AuthState.AUTHENTICATING;
+    this.emit("auth-state-changed", { state: this.authState });
+  }
+
+  isAuthenticatedSession() {
+    return this.authState === AuthState.AUTHENTICATED && Boolean(this.currentUser && this.activeCompanyId);
+  }
+
+  setAuthenticatedSession(sessionData) {
+    if (!sessionData) return false;
+
+    this.authState = AuthState.AUTHENTICATED;
+    this.isAuthenticated = true;
+
+    // 1. Dynamic User Identity
+    const user = sessionData.user || {};
+    const rawName = (user.displayName || user.username || "").trim();
+    const parts = rawName.split(/\s+/).filter(Boolean);
+    let initials = "--";
+    if (parts.length >= 2) {
+      initials = (parts[0][0] + parts[1][0]).toUpperCase();
+    } else if (parts.length === 1 && parts[0].length >= 2) {
+      initials = parts[0].substring(0, 2).toUpperCase();
+    } else if (parts.length === 1 && parts[0].length === 1) {
+      initials = parts[0].toUpperCase();
     }
 
-    // Ensure active branch exists
-    if (!this.getActiveBranch()) {
-      const branches = this.getBranches();
-      this.activeBranchId = branches.length > 0 ? branches[0].id : "DEFAULT";
-    }
+    this.currentUser = {
+      id: user.id || user.userId || `usr-${Date.now()}`,
+      username: user.username || "User",
+      displayName: user.displayName || user.username || "User",
+      role: user.role || "User",
+      avatarInitials: initials,
+      status: "online"
+    };
 
-    console.log(`[BusinessContext] Active Company: ${this.getActiveCompany().name} | Branch: ${this.getActiveBranch() ? this.getActiveBranch().name : "None"}`);
+    // 2. Dynamic Company Context
+    const comp = sessionData.company || 
+      this.companies.find(c => c.id === sessionData.companyId || c.code === sessionData.companyCode) || 
+      this.companies[0];
+    if (comp && !this.companies.some(c => c.id === comp.id || (c.code && comp.code && c.code === comp.code))) {
+      this.companies.push(comp);
+    }
+    this.activeCompanyId = comp ? comp.id : null;
+
+    // 3. Dynamic Branch Context
+    const branch = sessionData.branch || (comp && comp.branches ? comp.branches[0] : null);
+    if (comp && branch) {
+      if (!Array.isArray(comp.branches)) comp.branches = [];
+      if (!comp.branches.some(b => b.id === branch.id)) {
+        comp.branches.push(branch);
+      }
+    }
+    this.activeBranchId = branch ? branch.id : null;
+
+    // Legacy compatibility global reference
+    window.activeCompany = comp ? {
+      id: comp.id,
+      code: comp.code,
+      name: comp.name,
+      fin_year: comp.finYear
+    } : null;
+
+    console.log(`[BusinessContext] Authenticated: ${this.currentUser?.displayName || "User"} (${this.currentUser?.role || "User"}) @ ${comp ? comp.name : "N/A"}`);
+    this.emit("auth-state-changed", {
+      state: this.authState,
+      isAuthenticated: true,
+      user: this.currentUser,
+      company: comp,
+      branch: branch
+    });
+    this.emit("auth-changed", { 
+      isAuthenticated: true, 
+      user: this.currentUser, 
+      company: comp, 
+      branch: branch 
+    });
+    this.emit("context-changed", { company: comp, branch: branch });
+    return true;
+  }
+
+  clearAuthenticatedSession(reason = "logout") {
+    console.log(`[BusinessContext] Clearing authenticated session (reason: ${reason}).`);
+    this.authState = (reason === "session_expired" || reason === AuthState.SESSION_EXPIRED) 
+      ? AuthState.SESSION_EXPIRED 
+      : AuthState.UNAUTHENTICATED;
+    this.isAuthenticated = false;
+    this.currentUser = null;
+    this.activeCompanyId = null;
+    this.activeBranchId = null;
+    window.activeCompany = null;
+
+    try {
+      localStorage.removeItem("alpha_active_company_id");
+      localStorage.removeItem("alpha_active_branch_id");
+    } catch (e) {}
+
+    this.emit("auth-state-changed", { 
+      state: this.authState, 
+      reason: reason, 
+      isAuthenticated: false, 
+      user: null, 
+      company: null, 
+      branch: null 
+    });
+    this.emit("auth-changed", { 
+      isAuthenticated: false, 
+      state: this.authState, 
+      reason: reason, 
+      user: null, 
+      company: null, 
+      branch: null 
+    });
+    this.emit("context-changed", { company: null, branch: null });
+  }
+
+  expireSession() {
+    this.clearAuthenticatedSession("session_expired");
   }
 
   getCompanies() {
@@ -121,10 +240,15 @@ class BusinessContextManager {
   }
 
   getActiveCompany() {
-    return this.companies.find(c => c.id === this.activeCompanyId) || this.companies[0];
+    if (!this.isAuthenticated || !this.activeCompanyId) return null;
+    return this.companies.find(c => c.id === this.activeCompanyId) || null;
   }
 
   setActiveCompany(companyId) {
+    if (!this.isAuthenticated) {
+      console.warn("[BusinessContext] Cannot switch company while unauthenticated.");
+      return false;
+    }
     const target = this.companies.find(c => c.id === companyId || c.code === companyId);
     if (!target) {
       console.error(`[BusinessContext] Company not found: ${companyId}`);
@@ -133,12 +257,10 @@ class BusinessContextManager {
 
     if (this.activeCompanyId !== target.id) {
       this.activeCompanyId = target.id;
-      localStorage.setItem("alpha_active_company_id", target.id);
 
       // Default branch of new company
       const defaultBranch = (target.branches && target.branches.find(b => b.isDefault)) || (target.branches && target.branches[0]);
       this.activeBranchId = defaultBranch ? defaultBranch.id : "DEFAULT";
-      localStorage.setItem("alpha_active_branch_id", this.activeBranchId);
 
       // Also set global legacy compatibility activeCompany
       window.activeCompany = {
@@ -202,11 +324,16 @@ class BusinessContextManager {
   }
 
   getActiveBranch() {
+    if (!this.isAuthenticated || !this.activeBranchId) return null;
     const branches = this.getBranches();
     return branches.find(b => b.id === this.activeBranchId) || branches[0] || null;
   }
 
   setActiveBranch(branchId) {
+    if (!this.isAuthenticated) {
+      console.warn("[BusinessContext] Cannot switch branch while unauthenticated.");
+      return false;
+    }
     const branches = this.getBranches();
     const target = branches.find(b => b.id === branchId || b.code === branchId);
     if (!target) {
@@ -216,7 +343,6 @@ class BusinessContextManager {
 
     if (this.activeBranchId !== target.id) {
       this.activeBranchId = target.id;
-      localStorage.setItem("alpha_active_branch_id", target.id);
       this.emit("branch-changed", target);
       this.emit("context-changed", { company: this.getActiveCompany(), branch: target });
     }
@@ -224,7 +350,7 @@ class BusinessContextManager {
   }
 
   getCurrentUser() {
-    return { ...this.currentUser };
+    return this.isAuthenticated && this.currentUser ? { ...this.currentUser } : null;
   }
 
   // Event Subscription

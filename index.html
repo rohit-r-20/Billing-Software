@@ -12,7 +12,7 @@
     <div class="alpha-backdrop" id="alpha-backdrop"></div>
 
     <!-- A. LEFT SIDEBAR -->
-    <aside class="alpha-sidebar" id="alpha-sidebar">
+    <aside class="alpha-sidebar" id="alpha-sidebar" style="display: none;">
       <!-- Brand Identity Header -->
       <div class="alpha-sidebar-brand">
         <div class="brand-link" id="brand-home-link" onclick="if(window.showScreen) window.showScreen('view-dashboard');">
@@ -32,14 +32,14 @@
       </nav>
 
       <!-- User Profile Footer -->
-      <div class="alpha-sidebar-footer">
-        <div class="user-avatar-badge">
-          <span>AD</span>
+      <div class="alpha-sidebar-footer" id="alpha-sidebar-footer">
+        <div class="user-avatar-badge" id="sidebar-user-avatar">
+          <span></span>
           <span class="user-status-dot"></span>
         </div>
         <div class="user-info">
-          <span class="user-name">Administrator</span>
-          <span class="user-role-badge">Super Admin</span>
+          <span class="user-name" id="sidebar-user-name"></span>
+          <span class="user-role-badge" id="sidebar-user-role"></span>
         </div>
         <button type="button" class="btn-user-action" id="btn-sidebar-logout" title="Sign Out">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -50,7 +50,7 @@
     <!-- B. MAIN CONTENT WRAPPER -->
     <div class="alpha-content-wrapper">
       <!-- TOP HEADER -->
-      <header class="alpha-top-header">
+      <header class="alpha-top-header" id="alpha-top-header" style="display: none;">
         <div class="header-left-group">
           <button type="button" class="btn-mobile-menu-toggle" id="btn-mobile-menu-toggle" aria-label="Toggle Navigation">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
@@ -75,7 +75,7 @@
               <span class="context-icon"></span>
               <div class="context-label-box">
                 <span class="context-tag">Company</span>
-                <span class="context-value" id="header-company-val">ANTI MATRIX (COMP0001)</span>
+                <span class="context-value" id="header-company-val"></span>
               </div>
               <span class="context-chevron"></span>
             </button>
@@ -88,7 +88,7 @@
               <span class="context-icon"></span>
               <div class="context-label-box">
                 <span class="context-tag">Branch</span>
-                <span class="context-value" id="header-branch-val">Main Branch (HQ)</span>
+                <span class="context-value" id="header-branch-val"></span>
               </div>
               <span class="context-chevron"></span>
             </button>
@@ -133,8 +133,8 @@
           <!-- User Profile Trigger -->
           <div style="position:relative;">
             <button type="button" class="header-user-btn" id="btn-header-user">
-              <div class="header-user-avatar">AD</div>
-              <span class="header-user-name">Admin</span>
+              <div class="header-user-avatar" id="header-user-avatar"></div>
+              <span class="header-user-name" id="header-user-name"></span>
               <span class="user-chevron"></span>
             </button>
             <div class="alpha-dropdown-menu" id="dropdown-header-user"></div>
@@ -437,23 +437,23 @@
       <!-- =========================================================
            VIEW: ALPHA BILLING PREMIUM DASHBOARD
       ========================================================== -->
-      <section class="screen-view active" id="view-dashboard">
+      <section class="screen-view" id="view-dashboard">
         <!-- 1. Welcome & Business Context Section -->
         <div class="dashboard-welcome-banner">
           <div class="welcome-left-col">
             <div class="welcome-greeting-row">
-              <h2 class="welcome-heading" id="welcome-greeting-heading">Good morning, Admin</h2>
+              <h2 class="welcome-heading" id="welcome-greeting-heading"></h2>
               <span class="business-data-mode-badge" id="business-data-mode-badge">
                 <span class="mode-pulse-dot"></span>
-                Sample Business Data (Active Context)
+                <span id="business-data-mode-text">Awaiting Authentication</span>
               </span>
             </div>
             <div class="welcome-context-meta">
-              <span class="meta-pill">Company: <strong id="welcome-ctx-company">ANTI MATRIX RETAIL & WHOLESALE</strong></span>
+              <span class="meta-pill">Company: <strong id="welcome-ctx-company">--</strong></span>
               <span class="meta-sep">&bull;</span>
-              <span class="meta-pill">Branch: <strong id="welcome-ctx-branch">Main Branch (HQ)</strong></span>
+              <span class="meta-pill">Branch: <strong id="welcome-ctx-branch">--</strong></span>
               <span class="meta-sep">&bull;</span>
-              <span class="meta-pill">FY: <strong id="welcome-ctx-year">2026-2027</strong></span>
+              <span class="meta-pill">FY: <strong id="welcome-ctx-year">--</strong></span>
               <span class="meta-sep">&bull;</span>
               <span class="meta-pill">Currency: <strong>INR (₹)</strong></span>
             </div>

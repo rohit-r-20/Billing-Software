@@ -25,17 +25,19 @@ class PurchaseService:
         self.supplier_service = SupplierService(self.db)
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
+        Rejects missing, empty, or unresolvable company contexts."""
         cid = str(company_id or "").strip()
+        if not cid:
+            raise ValueError("Company context is required. Missing company identifier.")
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            if cid:
-                cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-                c_row = cursor.fetchone()
-                if c_row:
-                    return c_row["id"]
-            cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-            c_default = cursor.fetchone()
-            return c_default["id"] if c_default else cid
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+            c_row = cursor.fetchone()
+            if c_row:
+                return c_row["id"]
+        raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _get_default_branch_id(self, company_id: str) -> Optional[str]:
         with self.db.get_connection() as conn:
