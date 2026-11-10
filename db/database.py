@@ -537,4 +537,27 @@ class DatabaseManager:
             return True
 
 
-db_manager = DatabaseManager()
+class _DatabaseManagerProxy:
+    """
+    Lazy proxy for the db_manager singleton.
+    This ensures the DatabaseManager is created only when first accessed,
+    after environment variables are set (e.g., by pytest_configure or test setup).
+    """
+    _instance = None
+
+    def _get_instance(self):
+        if self._instance is None:
+            self._instance = DatabaseManager()
+        return self._instance
+
+    def __getattr__(self, name):
+        return getattr(self._get_instance(), name)
+
+    def __setattr__(self, name, value):
+        if name.startswith('_instance') or name == '_get_instance':
+            super().__setattr__(name, value)
+        else:
+            setattr(self._get_instance(), name, value)
+
+
+db_manager = _DatabaseManagerProxy()
