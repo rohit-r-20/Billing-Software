@@ -48,57 +48,75 @@ def _get_default_branch(company_id: str) -> str:
         return new_id
 
 
+def _create_test_customer(
+    company_id: str,
+    customer_name: str,
+    customer_category: str = "Direct Customer"
+) -> tuple:
+    """Create a customer master record in the accounts table for non-cash sales testing.
+    Appends a unique suffix to the customer name to ensure test isolation.
+
+    Returns tuple of (account_id, unique_customer_name) for proper test isolation.
+    """
+    account_id = str(uuid.uuid4())
+    unique_suffix = uuid.uuid4().hex[:6].upper()
+    unique_name = f"{customer_name}-{unique_suffix}"
+    with db_manager.get_connection() as conn:
+        conn.execute("""
+            INSERT INTO accounts (
+                id, company_id, name, alias, print_name, account_group,
+                customer_category, is_active
+            ) VALUES (?, ?, ?, ?, ?, 'Sundry Debtors', ?, 1);
+        """, (account_id, company_id, unique_name, '', unique_name, customer_category))
+        conn.commit()
+    return account_id, unique_name
+
+
 def _create_configured_item(
     company_id: str,
     branch_id: str,
-    initial_qty: float = 20.0,
+    initial_qty: float,
     reorder_level: float = 15.0,
     min_stock_level: float = 10.0,
-    reorder_qty: float = 50.0,
-    max_stock_level: float = 100.0,
-    alert_enabled: int = 1
+    reorder_qty: float = 25.0,
+    max_stock_level: float = None,
+    alert_enabled: int = 1,
 ) -> dict:
-    item_id = str(uuid.uuid4())
-    unique_name = f"PRODUCT-{uuid.uuid4().hex[:8].upper()}"
-    barcode = f"890{uuid.uuid4().hex[:10].upper()}"
+    """Create a configured item with specific stock thresholds for low-stock notification testing."""
+    item_name = f"TEST-ITEM-{uuid.uuid4().hex[:8].upper()}"
+    barcode = f"BARCODE-{uuid.uuid4().hex[:12].upper()}"
 
-    with db_manager.get_connection() as conn:
-        conn.execute("""
-            INSERT INTO items (
-                id, company_id, name, alias, print_name, item_group, unit,
-                op_stock_qty, op_stock_val, tax_category, hsn, sales_price,
-                purc_price, mrp, min_sales_price, is_active,
-                min_stock_alert_level, reorder_level, reorder_qty, max_stock_level, alert_enabled
-            ) VALUES (?, ?, ?, ?, ?, 'Groceries', 'Pcs.', ?, ?, 'GST 18%', '1905', 100.0, 70.0, 120.0, 90.0, 1,
-                      ?, ?, ?, ?, ?);
-        """, (
-            item_id, company_id, unique_name, barcode, unique_name,
-            initial_qty, initial_qty * 70.0,
-            min_stock_level, reorder_level, reorder_qty, max_stock_level, alert_enabled
-        ))
+    item_data = {
+        "company_id": company_id,
+        "name": item_name,
+        "alias": barcode,
+        "branch_id": branch_id,
+        "op_stock_qty": initial_qty,
+        "min_stock_level": min_stock_level,
+        "reorder_level": reorder_level,
+        "reorder_qty": reorder_qty,
+        "max_stock_level": max_stock_level,
+        "alert_enabled": alert_enabled,
+        "sales_price": 100.0,
+        "purc_price": 65.0,
+    }
 
-        conn.execute("""
-            INSERT INTO item_barcodes (id, item_id, company_id, barcode, is_primary)
-            VALUES (?, ?, ?, ?, 1);
-        """, (str(uuid.uuid4()), item_id, company_id, barcode))
+    result = catalogue_service.save_item(company_id, item_data)
 
-        conn.execute("""
-            INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(branch_id, item_id) DO UPDATE SET current_qty = excluded.current_qty;
-        """, (str(uuid.uuid4()), company_id, branch_id, item_id, initial_qty))
-        conn.commit()
+    actual_stock = inventory_service.get_stock(company_id, result["id"], branch_id)
 
     return {
-        "id": item_id,
-        "name": unique_name,
+        "id": result["id"],
+        "name": item_name,
         "barcode": barcode,
         "branch_id": branch_id,
         "initial_qty": initial_qty,
         "reorder_level": reorder_level,
         "min_stock_level": min_stock_level,
         "reorder_qty": reorder_qty,
-        "max_stock_level": max_stock_level
+        "max_stock_level": max_stock_level,
+        "alert_enabled": alert_enabled,
+        "current_stock": actual_stock,
     }
 
 
@@ -119,12 +137,15 @@ def test_criterion_1_notification_triggers_when_reaching_reorder_level():
     alerts = inventory_service.evaluate_low_stock_alerts(COMPANY_ID, branch_id)
     assert not any(a["item_id"] == item["id"] for a in alerts)
 
+    # Create customer master for non-cash sale
+    _, customer_name = _create_test_customer(COMPANY_ID, "REACH THRESHOLD CUSTOMER")
+
     # Sale of exactly 5.0 -> stock becomes exactly 15.0 (Available Stock == Reorder Level)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 5.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="REACH THRESHOLD CUSTOMER",
+        party_name=customer_name,
         series="Main"
     )
 
@@ -153,12 +174,15 @@ def test_criterion_2_notification_triggers_when_falling_below_reorder_level():
         max_stock_level=50.0
     )
 
+    # Create customer master for non-cash sale
+    _, customer_name = _create_test_customer(COMPANY_ID, "FALL BELOW CUSTOMER")
+
     # Sale of 12.0 -> stock becomes 8.0 (below reorder level 15.0 and below min stock 10.0)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 12.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="FALL BELOW CUSTOMER",
+        party_name=customer_name,
         series="Main"
     )
 
@@ -192,12 +216,16 @@ def test_criterion_3_notifications_not_duplicated_continuously():
     assert len(matching1) == 1
     first_alert_id = matching1[0]["alert_id"]
 
+    # Create customer masters for non-cash sales
+    _, customer_name1 = _create_test_customer(COMPANY_ID, "SUBSEQUENT SALE 1")
+    _, customer_name2 = _create_test_customer(COMPANY_ID, "SUBSEQUENT SALE 2")
+
     # Subsequent sale 1: sell 2 units (stock 12.0)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 2.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="SUBSEQUENT SALE 1",
+        party_name=customer_name1,
         series="Main"
     )
 
@@ -206,7 +234,7 @@ def test_criterion_3_notifications_not_duplicated_continuously():
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 3.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="SUBSEQUENT SALE 2",
+        party_name=customer_name2,
         series="Main"
     )
 
@@ -261,12 +289,15 @@ def test_criterion_4_resolved_alerts_handled_correctly():
     assert matching_resolved[0]["status"] == "RESOLVED"
     assert matching_resolved[0]["resolved_at"] != ""
 
+    # Create customer master for non-cash sale
+    _, customer_name = _create_test_customer(COMPANY_ID, "RE-BREACH CUSTOMER")
+
     # Now drop stock below threshold again (sale of 20 units -> stock becomes 12.0 <= 15.0)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 20.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="RE-BREACH CUSTOMER",
+        party_name=customer_name,
         series="Main"
     )
 
@@ -351,11 +382,12 @@ def test_criterion_6_failed_transactions_do_not_trigger_false_notifications():
 
     # Ensure negative stock is disabled so overselling triggers rollback
     with db_manager.get_connection() as conn:
-        conn.execute("""
-            INSERT INTO company_configs (company_id, allow_negative_stock)
-            VALUES (?, 0)
-            ON CONFLICT(company_id) DO UPDATE SET allow_negative_stock = 0;
-        """, (COMPANY_ID,))
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM company_configs WHERE company_id = ?;", (COMPANY_ID,))
+        if cursor.fetchone():
+            cursor.execute("UPDATE company_configs SET allow_negative_stock = 0 WHERE company_id = ?;", (COMPANY_ID,))
+        else:
+            cursor.execute("INSERT INTO company_configs (company_id, allow_negative_stock) VALUES (?, 0);", (COMPANY_ID,))
         conn.commit()
 
     # Attempt a transaction that oversells (requesting 9999.0 when only 30.0 available)
@@ -381,26 +413,40 @@ def test_criterion_6_failed_transactions_do_not_trigger_false_notifications():
 # Criterion 7: Fast Billing cashiers cannot access restricted inventory alerts
 # ---------------------------------------------------------------------------
 def test_criterion_7_fast_billing_cashiers_cannot_access_restricted_inventory_alerts():
+    import tests.test_phase4_security_and_authorization as auth_tests
+
+    # Test 1: Unauthenticated user gets authentication error
     bridge = BackendBridge()
+    unauth_resp_raw = bridge.getLowStockNotifications(COMPANY_ID, "all", None)
+    unauth_resp = json.loads(unauth_resp_raw)
+    assert unauth_resp["success"] is False
+    assert "Authentication" in unauth_resp["error"] or "authenticated" in unauth_resp["error"].lower(), \
+        "Unauthenticated user must receive authentication error."
 
-    # Cashier attempts to access low-stock notifications
-    cashier_resp_raw = bridge.getLowStockNotifications(COMPANY_ID, "all", "cashier")
-    cashier_resp = json.loads(cashier_resp_raw)
-    assert cashier_resp["success"] is False
-    assert "Access Denied" in cashier_resp["error"], "Fast Billing cashier must be denied access to stock notifications."
-
-    # POS Cashier variant
-    pos_cashier_raw = bridge.getLowStockNotifications(COMPANY_ID, "critical", "pos_cashier")
-    pos_cashier_resp = json.loads(pos_cashier_raw)
-    assert pos_cashier_resp["success"] is False
-
-    # Authorised user (Administrator) gets full access
-    admin_resp_raw = bridge.getLowStockNotifications(COMPANY_ID, "all", "Administrator")
+    # Test 2: Administrator (authenticated) gets full access to low stock notifications
+    admin_bridge = auth_tests.create_authenticated_bridge("Administrator")
+    admin_resp_raw = admin_bridge.getLowStockNotifications(COMPANY_ID, "all", None)
     admin_resp = json.loads(admin_resp_raw)
-    assert admin_resp["success"] is True
+    assert admin_resp["success"] is True, f"Administrator should get access, got error: {admin_resp}"
     assert isinstance(admin_resp["data"], list)
 
-    # Cashier barcode search strictly hides valuation and stock metrics
+    # Test 3: POS Cashier (authenticated) gets denied access
+    pos_cashier_bridge = auth_tests.create_authenticated_bridge("POS_Cashier")
+    pos_cashier_raw = pos_cashier_bridge.getLowStockNotifications(COMPANY_ID, "critical", None)
+    pos_cashier_resp = json.loads(pos_cashier_raw)
+    assert pos_cashier_resp["success"] is False
+    assert "Access Denied" in pos_cashier_resp["error"], \
+        "POS Cashier must be denied access to stock notifications."
+
+    # Test 4: Fast Billing Cashier (authenticated) gets denied access
+    fb_cashier_bridge = auth_tests.create_authenticated_bridge("Fast_Billing_Cashier")
+    fb_cashier_raw = fb_cashier_bridge.getLowStockNotifications(COMPANY_ID, "all", None)
+    fb_cashier_resp = json.loads(fb_cashier_raw)
+    assert fb_cashier_resp["success"] is False
+    assert "Access Denied" in fb_cashier_resp["error"], \
+        "Fast Billing Cashier must be denied access to stock notifications."
+
+    # Test 5: Cashier barcode search strictly hides valuation and stock metrics
     branch_id = _get_default_branch(COMPANY_ID)
     item = _create_configured_item(COMPANY_ID, branch_id, initial_qty=50.0)
     cashier_item = catalogue_service.get_cashier_item_by_barcode(COMPANY_ID, item["barcode"])

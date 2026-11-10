@@ -25,17 +25,19 @@ class PurchaseService:
         self.supplier_service = SupplierService(self.db)
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
+        Rejects missing, empty, or unresolvable company contexts."""
         cid = str(company_id or "").strip()
+        if not cid:
+            raise ValueError("Company context is required. Missing company identifier.")
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            if cid:
-                cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-                c_row = cursor.fetchone()
-                if c_row:
-                    return c_row["id"]
-            cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-            c_default = cursor.fetchone()
-            return c_default["id"] if c_default else cid
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+            c_row = cursor.fetchone()
+            if c_row:
+                return c_row["id"]
+        raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _get_default_branch_id(self, company_id: str) -> Optional[str]:
         with self.db.get_connection() as conn:
@@ -150,7 +152,58 @@ class PurchaseService:
             )
 
         # Supplier resolution / automatic registration
-        supp_obj = self.supplier_service.find_supplier_by_name(actual_comp_id, supplier_name)
+        supplier_id = (data.get("supplier_id") or data.get("supplierId") or "").strip()
+        supp_obj = None
+        if supplier_id:
+            supp_obj = self.supplier_service.get_supplier_by_id(actual_comp_id, supplier_id)
+            if not supp_obj:
+                with self.db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM accounts WHERE company_id = ? AND id = ?;", (actual_comp_id, supplier_id))
+                    acc_row = cursor.fetchone()
+                    if acc_row:
+                        supp_obj = dict(acc_row)
+                        # Ensure mirrored in suppliers table to satisfy foreign key constraint
+                        code = f"SUP-{supplier_id[:6].upper()}"
+                        cursor.execute("""
+                            INSERT INTO suppliers (
+                                id, company_id, code, name, contact_person, mobile, email, gstin,
+                                pan, address, city, state, pincode, opening_balance, current_balance,
+                                payment_terms, is_active
+                            ) VALUES (?, ?, ?, ?, ?, ?, '', ?, '', ?, '', ?, ?, 0.0, 0.0, 30, 1)
+                            ON CONFLICT(company_id, name) DO NOTHING;
+                        """, (
+                            supplier_id, actual_comp_id, code, acc_row["name"], acc_row["alias"],
+                            acc_row["mobile"] or "", acc_row["gstin"] or "", acc_row["address"] or "",
+                            acc_row["state"] or "Tamilnadu", acc_row["pincode"] or ""
+                        ))
+                        conn.commit()
+
+        if not supp_obj:
+            supp_obj = self.supplier_service.find_supplier_by_name(actual_comp_id, supplier_name)
+            if not supp_obj:
+                with self.db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM accounts WHERE company_id = ? AND UPPER(name) = ?;", (actual_comp_id, supplier_name.upper()))
+                    acc_row = cursor.fetchone()
+                    if acc_row:
+                        supp_obj = dict(acc_row)
+                        sup_acc_id = acc_row["id"]
+                        code = f"SUP-{sup_acc_id[:6].upper()}"
+                        cursor.execute("""
+                            INSERT INTO suppliers (
+                                id, company_id, code, name, contact_person, mobile, email, gstin,
+                                pan, address, city, state, pincode, opening_balance, current_balance,
+                                payment_terms, is_active
+                            ) VALUES (?, ?, ?, ?, ?, ?, '', ?, '', ?, '', ?, ?, 0.0, 0.0, 30, 1)
+                            ON CONFLICT(company_id, name) DO NOTHING;
+                        """, (
+                            sup_acc_id, actual_comp_id, code, acc_row["name"], acc_row["alias"],
+                            acc_row["mobile"] or "", acc_row["gstin"] or "", acc_row["address"] or "",
+                            acc_row["state"] or "Tamilnadu", acc_row["pincode"] or ""
+                        ))
+                        conn.commit()
+
         if not supp_obj:
             saved_supp = self.supplier_service.save_supplier(actual_comp_id, {
                 "name": supplier_name,
@@ -163,7 +216,7 @@ class PurchaseService:
             supplier_id = supp_obj["id"]
 
         supplier_gstin = data.get("supplier_gstin") or (supp_obj.get("gstin") if supp_obj else "")
-        supplier_state = data.get("supplier_state") or (supp_obj.get("state") if supp_obj else "Tamilnadu")
+        supplier_state = (data.get("supplier_state") or (supp_obj.get("state") if supp_obj and supp_obj.get("state") else "Tamilnadu") or "Tamilnadu").strip()
         place_of_supply = data.get("place_of_supply") or supplier_state
 
         # Calculate Items & Taxes
@@ -171,9 +224,9 @@ class PurchaseService:
             cursor = conn.cursor()
             cursor.execute("SELECT state FROM companies WHERE id = ?;", (actual_comp_id,))
             comp_state_row = cursor.fetchone()
-            company_state = comp_state_row["state"] if comp_state_row else "Tamilnadu"
+            company_state = (comp_state_row["state"] if comp_state_row and comp_state_row["state"] else "Tamilnadu").strip()
 
-        is_interstate = (company_state.strip().lower() != supplier_state.strip().lower())
+        is_interstate = (company_state.lower() != supplier_state.lower())
 
         calculated_items = []
         gross_subtotal = Decimal("0")
@@ -312,7 +365,7 @@ class PurchaseService:
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty + excluded.current_qty,
+                            current_qty = stock_balances.current_qty + excluded.current_qty,
                             last_updated = CURRENT_TIMESTAMP;
                     """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, total_inward))
 
@@ -426,7 +479,10 @@ class PurchaseService:
 
         if not is_draft:
             try:
-                self.inventory_service.evaluate_low_stock_alerts(actual_comp_id)
+                for line in valid_items:
+                    it_id = line.get("item_id")
+                    if it_id:
+                        self.inventory_service.evaluate_low_stock_alerts(actual_comp_id, branch_id=actual_branch, item_id=it_id)
             except Exception as e:
                 logger.debug(f"evaluate_low_stock_alerts after purchase: {e}")
 
@@ -737,7 +793,7 @@ class PurchaseService:
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                            current_qty = current_qty + excluded.current_qty,
+                            current_qty = stock_balances.current_qty + excluded.current_qty,
                             last_updated = CURRENT_TIMESTAMP;
                     """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, total_inward))
 

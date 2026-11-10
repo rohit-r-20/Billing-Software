@@ -70,26 +70,94 @@ class DashboardManager {
   }
 
   init() {
+    this.clearDashboard();
+
+    // Listen to authentication & context events
+    if (window.BusinessContext) {
+      window.BusinessContext.on("auth-state-changed", (data) => {
+        if (data && data.state === "AUTHENTICATED") {
+          this.initForSession();
+        } else {
+          this.clearDashboard();
+        }
+      });
+      window.BusinessContext.on("context-changed", () => {
+        if (window.BusinessContext.isAuthenticatedSession()) {
+          this.renderWelcome();
+          this.loadLiveBackendData();
+        }
+      });
+    }
+
+    if (window.BusinessContext && window.BusinessContext.isAuthenticatedSession()) {
+      this.initForSession();
+    }
+  }
+
+  initForSession() {
+    if (!window.BusinessContext || !window.BusinessContext.isAuthenticatedSession()) {
+      this.clearDashboard();
+      return;
+    }
     this.renderWelcome();
     this.renderKPIs();
     this.renderCharts();
     this.renderActivities();
     this.renderQuickActions();
     this.startLiveClock();
-
-    // Listen to business context change to update context and KPIs
-    if (window.BusinessContext) {
-      window.BusinessContext.on("context-changed", () => {
-        this.renderWelcome();
-        this.renderKPIs();
-      });
-    }
-
-    // Attempt to merge live DB totals if backend is available
     this.loadLiveBackendData();
   }
 
+  stopLiveClock() {
+    if (this.clockInterval) {
+      clearInterval(this.clockInterval);
+      this.clockInterval = null;
+    }
+  }
+
+  clearDashboard() {
+    this.stopLiveClock();
+    this.isLiveMode = false;
+
+    const greetingHeading = document.getElementById("welcome-greeting-heading");
+    if (greetingHeading) greetingHeading.textContent = "";
+
+    const ctxCompany = document.getElementById("welcome-ctx-company");
+    if (ctxCompany) ctxCompany.textContent = "--";
+
+    const ctxBranch = document.getElementById("welcome-ctx-branch");
+    if (ctxBranch) ctxBranch.textContent = "--";
+
+    const ctxYear = document.getElementById("welcome-ctx-year");
+    if (ctxYear) ctxYear.textContent = "--";
+
+    const modeBadge = document.getElementById("business-data-mode-badge");
+    if (modeBadge) {
+      modeBadge.innerHTML = `<span class="mode-pulse-dot" style="background-color: var(--alpha-text-muted);"></span> Awaiting Authentication`;
+    }
+
+    const dateEl = document.getElementById("welcome-current-date");
+    if (dateEl) dateEl.textContent = "";
+    const timeEl = document.getElementById("welcome-current-time");
+    if (timeEl) timeEl.textContent = "";
+
+    // Clear KPI display elements to blank / placeholder
+    const kpiFields = [
+      "dash-kpi-sales", "dash-kpi-sales-count", "dash-kpi-sales-delta",
+      "dash-kpi-purchases", "dash-kpi-purchases-count", "dash-kpi-purchases-delta",
+      "dash-kpi-stock", "dash-kpi-stock-count", "dash-kpi-stock-reorder",
+      "dash-kpi-receivables", "dash-kpi-receivables-count", "dash-kpi-receivables-badge",
+      "dash-kpi-payables", "dash-kpi-payables-count", "dash-kpi-payables-badge",
+      "dash-kpi-expenses", "dash-kpi-held-bills"
+    ];
+    kpiFields.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = "--";
+    });
+  }
+
   startLiveClock() {
+    this.stopLiveClock();
     const updateTime = () => {
       const now = new Date();
       const dateEl = document.getElementById("welcome-current-date");
@@ -104,10 +172,14 @@ class DashboardManager {
       }
     };
     updateTime();
-    setInterval(updateTime, 1000);
+    this.clockInterval = setInterval(updateTime, 1000);
   }
 
   renderWelcome() {
+    const comp = window.BusinessContext ? window.BusinessContext.getActiveCompany() : null;
+    const branch = window.BusinessContext ? window.BusinessContext.getActiveBranch() : null;
+    const user = window.BusinessContext ? window.BusinessContext.getCurrentUser() : null;
+
     const hour = new Date().getHours();
     let greeting = "Good morning";
     if (hour >= 12 && hour < 17) greeting = "Good afternoon";
@@ -115,21 +187,17 @@ class DashboardManager {
 
     const greetingHeading = document.getElementById("welcome-greeting-heading");
     if (greetingHeading) {
-      const user = window.BusinessContext ? window.BusinessContext.getCurrentUser() : { displayName: "Admin" };
-      greetingHeading.textContent = `${greeting}, ${user.displayName}`;
+      greetingHeading.textContent = user ? `${greeting}, ${user.displayName || user.username}` : "";
     }
 
-    const comp = window.BusinessContext ? window.BusinessContext.getActiveCompany() : null;
-    const branch = window.BusinessContext ? window.BusinessContext.getActiveBranch() : null;
-
     const ctxCompany = document.getElementById("welcome-ctx-company");
-    if (ctxCompany && comp) ctxCompany.textContent = comp.name;
+    if (ctxCompany) ctxCompany.textContent = comp ? comp.name : "--";
 
     const ctxBranch = document.getElementById("welcome-ctx-branch");
-    if (ctxBranch && branch) ctxBranch.textContent = branch.name;
+    if (ctxBranch) ctxBranch.textContent = branch ? branch.name : "--";
 
     const ctxYear = document.getElementById("welcome-ctx-year");
-    if (ctxYear && comp) ctxYear.textContent = comp.finYear || "2026-2027";
+    if (ctxYear) ctxYear.textContent = comp ? (comp.finYear || "2026-2027") : "--";
   }
 
   renderKPIs() {
@@ -144,7 +212,7 @@ class DashboardManager {
     ];
     iconMap.forEach(m => {
       const el = document.getElementById(m.id);
-      if (el && !el.hasChildNodes()) {
+      if (el && !el.hasChildNodes() && typeof window.getLucideIcon === "function") {
         el.innerHTML = window.getLucideIcon(m.icon, "", 16);
       }
     });
@@ -459,7 +527,7 @@ class DashboardManager {
 
     let html = "";
     quickActions.forEach(qa => {
-      const iconSvg = window.getLucideIcon(qa.icon, "", 18);
+      const iconSvg = typeof window.getLucideIcon === "function" ? window.getLucideIcon(qa.icon, "", 18) : "";
       html += `
         <button type="button" class="quick-action-tile" id="${qa.id}">
           <div class="tile-icon-box">${iconSvg}</div>
@@ -481,9 +549,13 @@ class DashboardManager {
 
   loadLiveBackendData() {
     if (!window.backend) return;
+    if (!window.BusinessContext || !window.BusinessContext.isAuthenticatedSession()) {
+      return;
+    }
 
-    const comp = window.BusinessContext ? window.BusinessContext.getActiveCompany() : null;
-    const cid = comp ? (comp.id || comp.code) : "COMP0001";
+    const comp = window.BusinessContext.getActiveCompany();
+    if (!comp) return;
+    const cid = comp.id || comp.code;
 
     try {
       // 1. Inventory Dashboard
@@ -492,12 +564,10 @@ class DashboardManager {
         const invRes = typeof invResStr === "string" ? JSON.parse(invResStr) : invResStr;
         if (invRes && invRes.success && invRes.data) {
           const inv = invRes.data;
-          if (inv.total_stock_valuation > 0) {
-            this.mockData.kpi.stockValue = inv.total_stock_valuation;
-            this.mockData.kpi.stockItemsCount = inv.total_active_products;
-            this.mockData.kpi.lowStockCount = inv.low_stock_count;
-            this.isLiveMode = true;
-          }
+          this.mockData.kpi.stockValue = Number(inv.total_stock_valuation || 0);
+          this.mockData.kpi.stockItemsCount = Number(inv.total_active_products || 0);
+          this.mockData.kpi.lowStockCount = Number(inv.low_stock_count || 0);
+          this.isLiveMode = true;
         }
       }
 
@@ -505,13 +575,16 @@ class DashboardManager {
       if (typeof window.backend.getReport === "function") {
         const reportResStr = window.backend.getReport(cid, "daily_sales");
         const reportRes = typeof reportResStr === "string" ? JSON.parse(reportResStr) : reportResStr;
-        if (reportRes && reportRes.success && Array.isArray(reportRes.data) && reportRes.data.length > 0) {
-          const latestDay = reportRes.data[0];
-          if (latestDay && latestDay.total_revenue > 0) {
-            this.mockData.kpi.todaySales = latestDay.total_revenue;
-            this.mockData.kpi.todaySalesCount = latestDay.total_bills;
-            this.isLiveMode = true;
+        if (reportRes && reportRes.success && Array.isArray(reportRes.data)) {
+          if (reportRes.data.length > 0) {
+            const latestDay = reportRes.data[0];
+            this.mockData.kpi.todaySales = Number(latestDay.total_revenue || 0);
+            this.mockData.kpi.todaySalesCount = Number(latestDay.total_bills || 0);
+          } else {
+            this.mockData.kpi.todaySales = 0.00;
+            this.mockData.kpi.todaySalesCount = 0;
           }
+          this.isLiveMode = true;
         }
       }
 
@@ -520,7 +593,7 @@ class DashboardManager {
         this.renderKPIs();
         const modeBadge = document.getElementById("business-data-mode-badge");
         if (modeBadge) {
-          modeBadge.innerHTML = `<span class="mode-pulse-dot" style="background-color: var(--alpha-success);"></span> Mode: Live Backend Connected`;
+          modeBadge.innerHTML = `<span class="mode-pulse-dot" style="background-color: var(--alpha-success);"></span> Mode: Live Database Connected (${comp.code})`;
         }
       }
     } catch (err) {

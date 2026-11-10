@@ -3,7 +3,7 @@ Catalogue Service for Anti Matrix Billing ERP.
 Manages Items, Units, HSN, Tax Categories, and Multi-Barcode Lookup.
 """
 import uuid
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from db.database import db_manager, DatabaseManager
 from core.logging_config import logger
 
@@ -13,14 +13,11 @@ class CatalogueService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001), falling back to primary company if empty."""
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
+        Rejects missing, empty, or unresolvable company contexts."""
         cid = str(company_id or "").strip()
         if not cid:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-                c_default = cursor.fetchone()
-                return c_default["id"] if c_default else ""
+            raise ValueError("Company context is required. Missing company identifier.")
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -28,7 +25,7 @@ class CatalogueService:
             c_row = cursor.fetchone()
             if c_row:
                 return c_row["id"]
-            return cid
+        raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _compute_is_verified(self, res: Dict[str, Any]) -> int:
         """Determines if product is verified and safe for checkout."""
@@ -40,16 +37,24 @@ class CatalogueService:
             return 0
         return 1
 
-    def find_by_barcode(self, company_id: str, barcode: str) -> Optional[Dict[str, Any]]:
+    def find_by_barcode(self, *args, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Looks up a product by exact barcode in the active company.
-        Also returns current stock balance for the default branch.
+        Supports find_by_barcode(company_id, barcode) and find_by_barcode(barcode, company_id=...).
         """
-        code_str = str(barcode).strip().upper()
+        cid = kwargs.get("company_id")
+        if len(args) == 2:
+            cid = args[0]
+            code_str = str(args[1]).strip().upper()
+        elif len(args) == 1:
+            code_str = str(args[0]).strip().upper()
+        else:
+            return None
+
         if not code_str:
             return None
 
-        actual_company_id = self._resolve_company_id(company_id)
+        actual_company_id = self._resolve_company_id(cid)
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -61,7 +66,7 @@ class CatalogueService:
                 JOIN items i ON b.item_id = i.id
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
                 LEFT JOIN stock_balances sb ON sb.branch_id = br.id AND sb.item_id = i.id
-                WHERE b.company_id = ? AND b.barcode = ? AND i.is_active = 1
+                WHERE b.company_id = ? AND b.barcode = ? AND (i.is_active = 1 OR i.is_active IS NULL)
                 LIMIT 1;
             """, (actual_company_id, code_str))
             row = cursor.fetchone()
@@ -77,7 +82,7 @@ class CatalogueService:
                 FROM items i
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
                 LEFT JOIN stock_balances sb ON sb.branch_id = br.id AND sb.item_id = i.id
-                WHERE i.company_id = ? AND (i.alias = ? OR i.name = ?) AND i.is_active = 1
+                WHERE i.company_id = ? AND (i.alias = ? OR i.name = ?) AND (i.is_active = 1 OR i.is_active IS NULL)
                 LIMIT 1;
             """, (actual_company_id, code_str, code_str))
             row2 = cursor.fetchone()
@@ -88,16 +93,34 @@ class CatalogueService:
 
         return None
 
-    def get_cashier_item_by_barcode(self, company_id: str, barcode: str) -> Optional[Dict[str, Any]]:
+    def get_cashier_item_by_barcode(self, *args, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Fast lookup by barcode for Fast Billing Cashier counter with strictly restricted fields.
         Does NOT expose stock balances, valuation, purchase cost, or inventory metrics.
+        Supports:
+          get_cashier_item_by_barcode(company_id, barcode)
+          get_cashier_item_by_barcode(barcode, branch_id, company_id)
+          get_cashier_item_by_barcode(barcode, company_id=...)
         """
-        code_str = str(barcode).strip().upper()
+        cid = kwargs.get("company_id")
+        if len(args) == 3:
+            code_str = str(args[0]).strip().upper()
+            cid = args[2] or cid
+        elif len(args) == 2:
+            if cid is not None:
+                code_str = str(args[0]).strip().upper()
+            else:
+                cid = args[0]
+                code_str = str(args[1]).strip().upper()
+        elif len(args) == 1:
+            code_str = str(args[0]).strip().upper()
+        else:
+            return None
+
         if not code_str:
             return None
 
-        actual_company_id = self._resolve_company_id(company_id)
+        actual_company_id = self._resolve_company_id(cid)
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -107,7 +130,7 @@ class CatalogueService:
                        b.barcode as matched_barcode, i.description
                 FROM item_barcodes b
                 JOIN items i ON i.id = b.item_id
-                WHERE b.company_id = ? AND UPPER(b.barcode) = ? AND i.is_active = 1
+                WHERE b.company_id = ? AND UPPER(b.barcode) = ? AND (i.is_active = 1 OR i.is_active IS NULL)
                 LIMIT 1;
             """, (actual_company_id, code_str))
             row = cursor.fetchone()
@@ -118,7 +141,7 @@ class CatalogueService:
                     SELECT i.id, i.name, i.alias, i.unit, i.tax_category, i.sales_price, i.mrp,
                            i.alias as matched_barcode, i.description
                     FROM items i
-                    WHERE i.company_id = ? AND (UPPER(i.alias) = ? OR UPPER(i.name) = ?) AND i.is_active = 1
+                    WHERE i.company_id = ? AND (UPPER(i.alias) = ? OR UPPER(i.name) = ?) AND (i.is_active = 1 OR i.is_active IS NULL)
                     LIMIT 1;
                 """, (actual_company_id, code_str, code_str))
                 row = cursor.fetchone()
@@ -208,7 +231,7 @@ class CatalogueService:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT i.*, 
-                       COALESCE(sb.current_qty, 0.0) as current_stock,
+                       COALESCE(MAX(sb.current_qty), 0.0) as current_stock,
                        GROUP_CONCAT(b.barcode, ', ') as barcodes
                 FROM items i
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
@@ -236,14 +259,28 @@ class CatalogueService:
                 items.append(it)
             return items
 
-    def get_item_by_id(self, company_id: str, item_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve full item details by item ID."""
-        actual_company_id = self._resolve_company_id(company_id)
+    def get_item_by_id(self, arg1: str, arg2: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Retrieve full item details by item ID.
+        Supports get_item_by_id(company_id, item_id) and get_item_by_id(item_id)."""
+        if arg2 is not None:
+            actual_company_id = self._resolve_company_id(arg1)
+            item_id = arg2
+        else:
+            item_id = arg1
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT company_id FROM items WHERE id = ? LIMIT 1;", (item_id,))
+                row = cursor.fetchone()
+                if row:
+                    actual_company_id = row["company_id"] if isinstance(row, dict) or hasattr(row, "keys") else row[0]
+                else:
+                    return None
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT i.*, 
-                       COALESCE(sb.current_qty, 0.0) as current_stock,
+                       COALESCE(MAX(sb.current_qty), 0.0) as current_stock,
                        GROUP_CONCAT(b.barcode, ', ') as barcodes
                 FROM items i
                 LEFT JOIN branches br ON br.company_id = i.company_id AND br.is_default = 1
@@ -257,19 +294,43 @@ class CatalogueService:
             if row:
                 res = dict(row)
                 res["is_verified"] = self._compute_is_verified(res)
+
+                # Fetch structured barcode list for multi-barcode support
+                cursor.execute("""
+                    SELECT barcode, is_primary FROM item_barcodes
+                    WHERE company_id = ? AND item_id = ?
+                    ORDER BY is_primary DESC, created_at ASC;
+                """, (actual_company_id, item_id))
+                b_rows = cursor.fetchall()
+                res["barcode_list"] = [r["barcode"] for r in b_rows] if b_rows else ([res["alias"]] if res.get("alias") else [])
+                res["primary_barcode"] = res.get("alias") or (b_rows[0]["barcode"] if b_rows else "")
+                res["alternate_barcodes"] = [r["barcode"] for r in b_rows if not r["is_primary"] and r["barcode"] != res["primary_barcode"]]
                 return res
             return None
 
-    def save_item(self, company_id: str, item_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create or update an item master record and its barcode mappings."""
+    def save_item(self, arg1: Union[str, Dict[str, Any]], arg2: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create or update an item master record and its barcode mappings.
+        Supports save_item(company_id, item_data) and save_item(item_data)."""
+        if arg2 is not None:
+            company_id = str(arg1)
+            item_data = arg2
+        else:
+            item_data = arg1
+            company_id = item_data.get("company_id") or ""
+
         name = (item_data.get("name") or "").strip().upper()
         if not name:
             raise ValueError("Item name cannot be empty.")
 
+        raw_print_name = (item_data.get("print_name") or item_data.get("printName") or "").strip()
+        if raw_print_name and raw_print_name.upper() != name:
+            raise ValueError("Receipt Print Name must match Product Name.")
+
+        # In Item Master, Receipt Print Name is automatically synchronised with Product Name
+        print_name = name
         actual_company_id = self._resolve_company_id(company_id)
         item_id = item_data.get("id") or str(uuid.uuid4())
         alias = (item_data.get("alias") or "").strip()
-        print_name = item_data.get("print_name") or item_data.get("printName") or name
         group = item_data.get("item_group") or item_data.get("group") or "General"
         unit = item_data.get("unit") or "Pcs."
         op_qty = float(item_data.get("op_stock_qty") or item_data.get("opStockQty") or 0.0)
@@ -335,37 +396,56 @@ class CatalogueService:
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            # Check default branch
-            cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (actual_company_id,))
-            branch_row = cursor.fetchone()
-            branch_id = branch_row["id"] if branch_row else None
+            # Check branch: explicit branch_id > default branch > first branch in company
+            branch_id = item_data.get("branch_id")
+            if not branch_id:
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (actual_company_id,))
+                branch_row = cursor.fetchone()
+                branch_id = branch_row["id"] if branch_row else None
+            if not branch_id:
+                cursor.execute("SELECT id FROM branches WHERE company_id = ? ORDER BY is_default DESC, id ASC LIMIT 1;", (actual_company_id,))
+                first_branch = cursor.fetchone()
+                if first_branch:
+                    branch_id = first_branch["id"]
 
-            # Validate: Prevent duplicate item codes across different items
+            # Validate: Prevent duplicate item codes or barcodes across different items
+            all_barcodes_to_check = []
             if alias:
+                all_barcodes_to_check.append(alias.strip().upper())
+            raw_barcodes_check = item_data.get("barcodes") or []
+            if isinstance(raw_barcodes_check, str):
+                raw_barcodes_check = [b.strip() for b in raw_barcodes_check.split(",") if b.strip()]
+            raw_alts_check = item_data.get("alternate_barcodes") or []
+            if isinstance(raw_alts_check, str):
+                raw_alts_check = [b.strip() for b in raw_alts_check.split(",") if b.strip()]
+
+            for b in raw_barcodes_check + raw_alts_check:
+                b_clean = str(b).strip().upper()
+                if b_clean and b_clean not in all_barcodes_to_check:
+                    all_barcodes_to_check.append(b_clean)
+
+            for bcode in all_barcodes_to_check:
+                # 1. Check item_barcodes table
+                cursor.execute("""
+                    SELECT ib.barcode, i.name 
+                    FROM item_barcodes ib
+                    JOIN items i ON i.id = ib.item_id
+                    WHERE ib.company_id = ? AND UPPER(ib.barcode) = ? AND ib.item_id != ?;
+                """, (actual_company_id, bcode, item_id))
+                dup_bar = cursor.fetchone()
+                if dup_bar:
+                    if alias and bcode == alias.strip().upper() and bcode not in [str(x).strip().upper() for x in raw_barcodes_check]:
+                        raise ValueError(f"Item code / SKU '{bcode}' is already assigned to item '{dup_bar['name']}'.")
+                    raise ValueError(f"Conflicting barcode '{bcode}' is already registered to item '{dup_bar['name']}'.")
+
+                # 2. Check items.alias across different items
                 cursor.execute("""
                     SELECT id, name FROM items 
                     WHERE company_id = ? AND UPPER(alias) = ? AND id != ?;
-                """, (actual_company_id, alias.upper(), item_id))
+                """, (actual_company_id, bcode, item_id))
                 dup_code = cursor.fetchone()
                 if dup_code:
-                    raise ValueError(f"Item code / SKU '{alias}' is already assigned to item '{dup_code['name']}'.")
-
-            # Validate: Prevent conflicting barcodes across different items
-            barcodes_to_check = item_data.get("barcodes") or ([alias] if alias else [])
-            if isinstance(barcodes_to_check, str):
-                barcodes_to_check = [b.strip() for b in barcodes_to_check.split(",") if b.strip()]
-            for bcode in barcodes_to_check:
-                b_str = str(bcode).strip().upper()
-                if b_str:
-                    cursor.execute("""
-                        SELECT ib.barcode, i.name 
-                        FROM item_barcodes ib
-                        JOIN items i ON i.id = ib.item_id
-                        WHERE ib.company_id = ? AND UPPER(ib.barcode) = ? AND ib.item_id != ?;
-                    """, (actual_company_id, b_str, item_id))
-                    dup_bar = cursor.fetchone()
-                    if dup_bar:
-                        raise ValueError(f"Conflicting barcode '{b_str}' is already registered to item '{dup_bar['name']}'.")
+                    raise ValueError(f"Item code / SKU '{bcode}' is already assigned to item '{dup_code['name']}'.")
 
             # Check if item exists by item_id
             cursor.execute("SELECT id FROM items WHERE company_id = ? AND id = ?;", (actual_company_id, item_id))
@@ -391,7 +471,8 @@ class CatalogueService:
                         alert_enabled = ?,
                         reorder_level = ?,
                         reorder_qty = ?,
-                        max_stock_level = ?
+                        max_stock_level = ?,
+                        is_active = 1
                     WHERE company_id = ? AND id = ?;
                 """, (
                     name, alias, print_name, group,
@@ -410,8 +491,8 @@ class CatalogueService:
                         unit, op_stock_qty, op_stock_val, tax_category, hsn,
                         sales_price, purc_price, mrp, min_sales_price, description,
                         min_stock_alert_level, alert_enabled,
-                        reorder_level, reorder_qty, max_stock_level
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        reorder_level, reorder_qty, max_stock_level, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     ON CONFLICT(company_id, name) DO UPDATE SET
                         alias = excluded.alias,
                         print_name = excluded.print_name,
@@ -428,7 +509,8 @@ class CatalogueService:
                         alert_enabled = excluded.alert_enabled,
                         reorder_level = excluded.reorder_level,
                         reorder_qty = excluded.reorder_qty,
-                        max_stock_level = excluded.max_stock_level;
+                        max_stock_level = excluded.max_stock_level,
+                        is_active = 1;
                 """, (
                     item_id, actual_company_id, name, alias, print_name, group,
                     unit, op_qty, op_val, tax_cat, hsn,
@@ -441,19 +523,34 @@ class CatalogueService:
                 cursor.execute("SELECT id FROM items WHERE company_id = ? AND name = ?;", (actual_company_id, name))
                 actual_id = cursor.fetchone()["id"]
 
-            # Manage primary barcode if supplied in alias or barcodes field
-            barcodes = item_data.get("barcodes") or ([alias] if alias else [])
-            if isinstance(barcodes, str):
-                barcodes = [b.strip() for b in barcodes.split(",") if b.strip()]
+            # Manage primary barcode and alternate barcodes
+            all_barcodes = []
+            if alias:
+                all_barcodes.append(alias.strip().upper())
+            for b in raw_barcodes_check + raw_alts_check:
+                b_clean = str(b).strip().upper()
+                if b_clean and b_clean not in all_barcodes:
+                    all_barcodes.append(b_clean)
 
-            for idx, bcode in enumerate(barcodes):
-                b_str = str(bcode).strip().upper()
-                if b_str:
-                    cursor.execute("""
-                        INSERT INTO item_barcodes (id, item_id, company_id, barcode, is_primary)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(company_id, barcode) DO UPDATE SET item_id = excluded.item_id;
-                    """, (str(uuid.uuid4()), actual_id, actual_company_id, b_str, 1 if idx == 0 else 0))
+            # Sync item_barcodes table: delete removed barcodes, upsert remaining
+            if all_barcodes:
+                placeholders = ", ".join(["?"] * len(all_barcodes))
+                cursor.execute(f"""
+                    DELETE FROM item_barcodes
+                    WHERE company_id = ? AND item_id = ? AND UPPER(barcode) NOT IN ({placeholders});
+                """, tuple([actual_company_id, actual_id] + all_barcodes))
+            else:
+                cursor.execute("DELETE FROM item_barcodes WHERE company_id = ? AND item_id = ?;", (actual_company_id, actual_id))
+
+            for b_str in all_barcodes:
+                is_pri = 1 if (alias and b_str == alias.strip().upper()) else (1 if b_str == all_barcodes[0] else 0)
+                cursor.execute("""
+                    INSERT INTO item_barcodes (id, item_id, company_id, barcode, is_primary)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(company_id, barcode) DO UPDATE SET
+                        item_id = excluded.item_id,
+                        is_primary = excluded.is_primary;
+                """, (str(uuid.uuid4()), actual_id, actual_company_id, b_str, is_pri))
 
             # Ensure stock balance entry exists
             if branch_id:
@@ -461,7 +558,7 @@ class CatalogueService:
                     INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                        current_qty = CASE WHEN current_qty = 0 THEN ? ELSE current_qty END;
+                        current_qty = CASE WHEN stock_balances.current_qty = 0 THEN ? ELSE stock_balances.current_qty END;
                 """, (str(uuid.uuid4()), actual_company_id, branch_id, actual_id, op_qty, op_qty))
 
             conn.commit()
@@ -469,7 +566,7 @@ class CatalogueService:
         # Trigger automatic low-stock evaluation after item configuration change
         try:
             from services.inventory_service import inventory_service
-            inventory_service.evaluate_low_stock_alerts(actual_company_id)
+            inventory_service.evaluate_low_stock_alerts(actual_company_id, branch_id=branch_id, item_id=actual_id)
         except Exception as e:
             logger.debug(f"evaluate_low_stock_alerts after save_item: {e}")
 
@@ -477,6 +574,8 @@ class CatalogueService:
         return {
             "id": actual_id,
             "name": name,
+            "print_name": print_name,
+            "printName": print_name,
             "alias": alias,
             "sales_price": sales_price,
             "unit": unit,
@@ -580,6 +679,8 @@ class CatalogueService:
                 ORDER BY b.name ASC;
             """, (actual_comp_id, item_id))
             return [dict(r) for r in cursor.fetchall()]
+
+    get_cashier_product_by_barcode = get_cashier_item_by_barcode
 
 
 catalogue_service = CatalogueService()

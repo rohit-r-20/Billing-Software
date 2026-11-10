@@ -342,6 +342,64 @@ class SidebarNavigationManager {
 
     // Keyboard navigation
     this.bindKeyboardNavigation();
+
+    // Bind sidebar logout button
+    const logoutBtn = document.getElementById("btn-sidebar-logout");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        if (typeof window.logoutUser === "function") {
+          window.logoutUser();
+        } else if (window.BusinessContext) {
+          window.BusinessContext.clearAuthenticatedSession("logout");
+          if (typeof window.showScreen === "function") window.showScreen("view-login");
+        }
+      });
+    }
+
+    // Subscribe to BusinessContext authentication changes
+    if (window.BusinessContext) {
+      window.BusinessContext.on("auth-state-changed", (data) => this.handleAuthState(data));
+      window.BusinessContext.on("auth-changed", (data) => this.handleAuthState(data));
+    }
+
+    if (window.BusinessContext && window.BusinessContext.isAuthenticatedSession()) {
+      this.showSidebar();
+    } else {
+      this.hideSidebar();
+    }
+  }
+
+  handleAuthState(data) {
+    if (data && (data.state === "AUTHENTICATED" || data.isAuthenticated)) {
+      this.showSidebar();
+    } else {
+      this.hideSidebar();
+    }
+  }
+
+  showSidebar() {
+    if (this.sidebarEl) this.sidebarEl.style.display = "";
+    this.updateUserFooter();
+  }
+
+  hideSidebar() {
+    if (this.sidebarEl) this.sidebarEl.style.display = "none";
+    const nameEl = document.getElementById("sidebar-user-name");
+    const roleEl = document.getElementById("sidebar-user-role");
+    const avatarEl = document.querySelector("#sidebar-user-avatar span");
+    if (nameEl) nameEl.textContent = "";
+    if (roleEl) roleEl.textContent = "";
+    if (avatarEl) avatarEl.textContent = "--";
+  }
+
+  updateUserFooter() {
+    const user = window.BusinessContext ? window.BusinessContext.getCurrentUser() : null;
+    const nameEl = document.getElementById("sidebar-user-name");
+    const roleEl = document.getElementById("sidebar-user-role");
+    const avatarEl = document.querySelector("#sidebar-user-avatar span");
+    if (nameEl && user) nameEl.textContent = user.displayName || user.username || "User";
+    if (roleEl && user) roleEl.textContent = user.role || "User";
+    if (avatarEl && user) avatarEl.textContent = user.avatarInitials || "--";
   }
 
   ensureFlyoutContainer() {
@@ -549,6 +607,18 @@ class SidebarNavigationManager {
 
   executeAction(sub) {
     console.log(`[Navigation] Action triggered:`, sub);
+
+    const isAuth = window.BusinessContext ? window.BusinessContext.isAuthenticatedSession() : false;
+    if (!isAuth && sub.targetView !== "view-login" && sub.targetView !== "view-companies") {
+      console.warn("[Navigation] Blocked unauthenticated action:", sub);
+      if (typeof window.showToast === "function") {
+        window.showToast("Authentication required. Please sign in.");
+      }
+      if (typeof window.showScreen === "function") {
+        window.showScreen("view-login");
+      }
+      return;
+    }
 
     if (sub.action === "open-view") {
       if (typeof window.showScreen === "function") {

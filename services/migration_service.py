@@ -269,7 +269,7 @@ class MigrationService:
                     cursor.execute("""
                         INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                         VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(branch_id, item_id) DO UPDATE SET current_qty = current_qty + excluded.current_qty;
+                        ON CONFLICT(branch_id, item_id) DO UPDATE SET current_qty = stock_balances.current_qty + excluded.current_qty;
                     """, (str(uuid.uuid4()), comp_id, default_branch_id, it_id, op_qty))
 
                     # Record Opening Stock Movement

@@ -22,7 +22,7 @@ let filteredCompanies = [...companies];
 let selectedIndex = 0;
 let activeCompany = null;
 let currentPendingCompany = null;
-let currentScreen = "view-companies"; // view-companies | view-dashboard | view-add-account-master | view-add-item-master | view-sales-voucher | view-sales-list
+let currentScreen = "view-login"; // view-login is the default startup screen
 let uiZoom = parseFloat(localStorage.getItem("alpha_ui_zoom") || "1.0");
 
 // Dual Billing Mode & Tabs State
@@ -33,6 +33,7 @@ let lastFastBillingScreen = "view-fast-billing";
 let isSavingPosSale = false;
 let currentPrintVchId = null;
 let currentPrintVchData = null;
+let printSourceScreen = "view-fast-billing";
 let currentPrintPaperFormat = "thermal-80";
 let currentPrintOrientation = "portrait";
 let todaySalesHistoryData = [];
@@ -217,6 +218,7 @@ const btnItemOpenList = document.getElementById("btn-item-open-list");
 const btnItemViewListBottom = document.getElementById("btn-item-view-list-bottom");
 const btnItemBackList = document.getElementById("btn-item-back-list");
 const itemName = document.getElementById("item-name");
+const itemPrintName = document.getElementById("item-print-name");
 
 // DOM Elements - Products & Inventory Catalogue (View 7)
 const itemsListSearch = document.getElementById("items-list-search");
@@ -624,6 +626,16 @@ ZoomController.bindControls();
 // SCREEN VIEW ROUTER
 // =============================================================
 function showScreen(screenId) {
+  // Authentication Route Guard
+  const isAuth = window.BusinessContext ? window.BusinessContext.isAuthenticatedSession() : false;
+  if (!isAuth && screenId !== "view-login") {
+    console.warn(`[RouteGuard] Blocked access to ${screenId} for unauthenticated session.`);
+    if (typeof showNotification === "function") {
+      showNotification("Authentication required. Please sign in.", "warning");
+    }
+    screenId = "view-login";
+  }
+
   currentScreen = screenId;
   const allViews = [
     viewLogin,
@@ -659,7 +671,7 @@ function showScreen(screenId) {
 
   // Manage internal application tab bar visibility & mode state
   if (appTabsBar) {
-    if (isStandalone) {
+    if (isStandalone || !isAuth) {
       appTabsBar.style.display = "none";
     } else {
       appTabsBar.style.display = "flex";
@@ -667,10 +679,16 @@ function showScreen(screenId) {
     }
   }
 
-  // Manage Sidebar: Fast Billing cashier workspace hides sidebar for distraction-free 100% width
+  // Manage Top Header visibility: Only visible for authenticated non-standalone screens
+  const alphaTopHeader = document.getElementById("alpha-top-header");
+  if (alphaTopHeader) {
+    alphaTopHeader.style.display = isAuth && !isStandalone ? "flex" : "none";
+  }
+
+  // Manage Sidebar: Fast Billing cashier workspace hides sidebar; unauthenticated hides sidebar
   const alphaSidebar = document.getElementById("alpha-sidebar");
   if (alphaSidebar) {
-    if (isStandalone || isFastBilling) {
+    if (!isAuth || isStandalone || isFastBilling) {
       alphaSidebar.style.display = "none";
     } else {
       alphaSidebar.style.display = "";
@@ -769,7 +787,9 @@ function showScreen(screenId) {
   } else if (screenId === "view-add-item-master") {
     itemName.focus();
   } else if (screenId === "view-sales-voucher") {
-    initSalesVoucherScreen();
+    if (!isSalesModifyMode) {
+      initSalesVoucherScreen();
+    }
   } else if (screenId === "view-sales-list") {
     renderSalesRegister();
   } else if (screenId === "view-items-list") {
@@ -967,45 +987,77 @@ function handleMainLoginSubmit() {
 
   setLoginLoading(true);
   hideLoginAlert();
+  if (window.BusinessContext) {
+    window.BusinessContext.setAuthenticating();
+  }
+
+  const applyAuthSuccess = (authData) => {
+    const sessionData = {
+      user: {
+        id: authData.userId || authData.id,
+        username: authData.username || username,
+        displayName: authData.displayName || authData.username || username,
+        role: authData.role || "Administrator",
+        email: authData.email
+      },
+      company: {
+        id: authData.id || authData.companyId,
+        code: authData.code || companyCode,
+        name: authData.name,
+        finYear: authData.finYear || "2026-2027",
+        taxNo: authData.taxNo || authData.gstin,
+        state: authData.state
+      }
+    };
+
+    if (window.BusinessContext) {
+      window.BusinessContext.setAuthenticatedSession(sessionData);
+    }
+    if (window.DashboardManager) {
+      window.DashboardManager.initForSession();
+    }
+    activeCompany = window.BusinessContext ? window.BusinessContext.getActiveCompany() : authData;
+    if (loginPwdInput) loginPwdInput.value = "";
+    openBillingModeSelection(activeCompany);
+  };
+
+  const applyAuthFailure = (errMsg) => {
+    if (window.BusinessContext) {
+      window.BusinessContext.clearAuthenticatedSession("invalid_credentials");
+    }
+    showLoginAlert(errMsg || "Invalid User ID or Password. Please try again.");
+    if (loginPwdInput) {
+      loginPwdInput.select();
+      loginPwdInput.focus();
+    }
+  };
 
   if (window.backend && window.backend.authenticateUser) {
     window.backend.authenticateUser(companyCode, username, password, (resp) => {
       setLoginLoading(false);
       try {
-        const res = JSON.parse(resp);
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
         if (res.success && res.data) {
-          activeCompany = res.data;
-          if (loginPwdInput) loginPwdInput.value = "";
-          openBillingModeSelection(activeCompany);
+          applyAuthSuccess(res.data);
         } else {
-          showLoginAlert(res.error || "Invalid User ID or Password. Please try again.");
-          if (loginPwdInput) {
-            loginPwdInput.select();
-            loginPwdInput.focus();
-          }
+          applyAuthFailure(res.error);
         }
       } catch (e) {
-        showLoginAlert("Authentication error: " + e.message);
+        applyAuthFailure("Authentication error: " + e.message);
       }
     });
   } else if (window.backend && window.backend.authenticateCompany) {
     window.backend.authenticateCompany(companyCode, password, (resp) => {
       setLoginLoading(false);
       try {
-        const res = JSON.parse(resp);
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
         if (res.success && res.data) {
-          activeCompany = res.data;
-          if (loginPwdInput) loginPwdInput.value = "";
-          openBillingModeSelection(activeCompany);
+          applyAuthSuccess(res.data);
         } else {
-          showLoginAlert(res.error || "Invalid User ID or Password. Please try again.");
-          if (loginPwdInput) {
-            loginPwdInput.select();
-            loginPwdInput.focus();
-          }
+          applyAuthFailure(res.error);
         }
       } catch (e) {
-        showLoginAlert("Authentication error: " + e.message);
+        applyAuthFailure("Authentication error: " + e.message);
       }
     });
   } else {
@@ -1019,18 +1071,18 @@ function handleMainLoginSubmit() {
         const matchUser = username.toUpperCase() === expectedUser.toUpperCase();
         const matchPass = password === expectedPass || (expectedPass === "a" && password === "a");
         if (matchUser && matchPass) {
-          activeCompany = comp;
-          if (loginPwdInput) loginPwdInput.value = "";
-          openBillingModeSelection(activeCompany);
+          applyAuthSuccess({
+            ...comp,
+            userId: `usr-${comp.code}`,
+            username: username,
+            displayName: comp.name ? `${comp.name} Admin` : username,
+            role: "Administrator"
+          });
         } else {
-          showLoginAlert("Invalid User ID or Password. Please try again.");
-          if (loginPwdInput) {
-            loginPwdInput.select();
-            loginPwdInput.focus();
-          }
+          applyAuthFailure("Invalid User ID or Password. Please try again.");
         }
       } else {
-        showLoginAlert("Selected company not found. Please select a valid company.");
+        applyAuthFailure("Selected company not found. Please select a valid company.");
       }
     }, 150);
   }
@@ -1068,9 +1120,36 @@ function logoutUser() {
       return;
     }
   }
+
+  // Clear authenticated session and state
+  if (window.BusinessContext) {
+    window.BusinessContext.clearAuthenticatedSession("logout");
+  }
+
+  // Clear backend authenticated session
+  if (window.backend && typeof window.backend.logout === "function") {
+    try {
+      window.backend.logout();
+    } catch (e) {
+      console.warn("Backend logout notification note:", e);
+    }
+  }
+
+  // Clear dashboard components and stop live updates
+  if (window.DashboardManager) {
+    window.DashboardManager.clearDashboard();
+  }
+
   activeCompany = null;
   if (loginPwdInput) loginPwdInput.value = "";
   hideLoginAlert();
+
+  // Hide top header and sidebar
+  const alphaTopHeader = document.getElementById("alpha-top-header");
+  if (alphaTopHeader) alphaTopHeader.style.display = "none";
+  const alphaSidebar = document.getElementById("alpha-sidebar");
+  if (alphaSidebar) alphaSidebar.style.display = "none";
+
   showScreen("view-login");
   showNotification("Logged out successfully.");
 }
@@ -1204,9 +1283,10 @@ function openFastBillingReprint() {
   }
 }
 
-function openFastBillingPrint(vchId, vchData = null) {
+function openFastBillingPrint(vchId, vchData = null, sourceScreen = "view-fast-billing") {
   currentPrintVchId = vchId;
   currentPrintVchData = vchData;
+  printSourceScreen = sourceScreen;
   lastFastBillingScreen = "view-fast-billing-print";
 
   if (posPrintCompany && activeCompany) {
@@ -1913,6 +1993,8 @@ function openModifyAccountMaster(accId) {
     if (opTypeEl) opTypeEl.value = acc.op_type || acc.opType || "D";
     const addr1El = document.getElementById("acc-addr1");
     if (addr1El) addr1El.value = acc.address || "";
+    const countryEl = document.getElementById("acc-country");
+    if (countryEl) countryEl.value = acc.country || "India";
     const stateEl = document.getElementById("acc-state");
     if (stateEl) stateEl.value = acc.state || "Tamilnadu";
     const dealerEl = document.getElementById("acc-dealer-type");
@@ -1922,12 +2004,18 @@ function openModifyAccountMaster(accId) {
     if (accGstin) accGstin.value = acc.gstin || "";
     const mobEl = document.getElementById("acc-mobile");
     if (mobEl) mobEl.value = acc.mobile || "";
+    const waEl = document.getElementById("acc-whatsapp");
+    if (waEl) waEl.value = acc.whatsapp || "";
     const bankNameEl = document.getElementById("acc-bank-name");
     if (bankNameEl) bankNameEl.value = acc.bank_name || acc.bankName || "";
     const bankAccEl = document.getElementById("acc-bank-acc");
     if (bankAccEl) bankAccEl.value = acc.bank_acc || acc.bankAcc || "";
     const ifscEl = document.getElementById("acc-bank-ifsc");
     if (ifscEl) ifscEl.value = acc.ifsc || "";
+    const pinEl = document.getElementById("acc-pincode");
+    if (pinEl) pinEl.value = acc.pincode || "";
+    const notesEl = document.getElementById("acc-extra-info");
+    if (notesEl) notesEl.value = acc.notes || "";
     const titleEl = document.getElementById("account-master-screen-title");
     if (titleEl) titleEl.textContent = `Modify Account Master: ${acc.name}`;
     showScreen("view-add-account-master");
@@ -1979,7 +2067,17 @@ function renderAccountMasterList(searchQuery, groupFilter) {
                            (acc.mobile && acc.mobile.includes(q)) || 
                            (acc.gstin && acc.gstin.toLowerCase().includes(q)) ||
                            (acc.account_group && acc.account_group.toLowerCase().includes(q));
-      const matchG = !g || acc.account_group === g || acc.group === g;
+      let matchG = true;
+      if (g) {
+        const ag = acc.account_group || acc.group || "";
+        if (g === "Sundry Debtors") {
+          matchG = ag === "Sundry Debtors" || ag.includes("Both");
+        } else if (g === "Sundry Creditors") {
+          matchG = ag === "Sundry Creditors" || ag.includes("Both");
+        } else {
+          matchG = ag === g;
+        }
+      }
       return matchQ && matchG;
     });
 
@@ -1994,10 +2092,25 @@ function renderAccountMasterList(searchQuery, groupFilter) {
     filtered.forEach((acc, idx) => {
       const tr = document.createElement("tr");
       const bal = parseFloat(acc.current_balance ?? acc.op_bal ?? acc.opBal ?? 0) || 0;
+      const rawGrp = acc.account_group || acc.group || "Sundry Debtors";
+      let badgeStyle = "background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;";
+      let badgeLabel = rawGrp;
+      if (rawGrp === "Sundry Debtors") {
+        badgeStyle = "background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;";
+        badgeLabel = "Customer";
+      } else if (rawGrp === "Sundry Creditors") {
+        badgeStyle = "background: #fef3c7; color: #92400e; border: 1px solid #fde68a;";
+        badgeLabel = "Supplier";
+      } else if (rawGrp.includes("Both")) {
+        badgeStyle = "background: #ede9fe; color: #6b21a8; border: 1px solid #ddd6fe;";
+        badgeLabel = "Customer & Supplier";
+      }
+      const inactiveTag = acc.is_active === 0 ? '<span style="display: inline-block; margin-left: 6px; font-size: 10px; padding: 1px 5px; background: #fee2e2; color: #991b1b; border-radius: 3px; font-weight: 700;">INACTIVE</span>' : '';
+
       tr.innerHTML = `
         <td style="text-align: center; color: #64748b;">${idx + 1}</td>
-        <td><strong>${escapeHtml(acc.name)}</strong></td>
-        <td><span class="badge-category">${escapeHtml(acc.account_group || acc.group || "Sundry Debtors")}</span></td>
+        <td><strong>${escapeHtml(acc.name)}</strong>${inactiveTag}</td>
+        <td><span class="badge-category" style="${badgeStyle}">${escapeHtml(badgeLabel)}</span></td>
         <td>${escapeHtml(acc.customer_category || acc.customerCategory || "Direct Customer")}</td>
         <td>${escapeHtml(acc.gstin || acc.state || "-")}</td>
         <td>${escapeHtml(acc.mobile || "-")}</td>
@@ -2088,13 +2201,17 @@ function handleSaveAccountMaster() {
       document.getElementById("acc-addr1") ? document.getElementById("acc-addr1").value.trim() : "",
       document.getElementById("acc-addr2") ? document.getElementById("acc-addr2").value.trim() : ""
     ].filter(Boolean).join(", "),
+    country: document.getElementById("acc-country") ? document.getElementById("acc-country").value.trim() : "India",
     state: document.getElementById("acc-state") ? document.getElementById("acc-state").value.trim() : "Tamilnadu",
     dealerType: document.getElementById("acc-dealer-type") ? document.getElementById("acc-dealer-type").value : "Unregistered",
     gstin: accGstin ? accGstin.value.trim().toUpperCase() : "",
     mobile: document.getElementById("acc-mobile") ? document.getElementById("acc-mobile").value.trim() : "",
+    whatsapp: document.getElementById("acc-whatsapp") ? document.getElementById("acc-whatsapp").value.trim() : "",
     bankName: document.getElementById("acc-bank-name") ? document.getElementById("acc-bank-name").value.trim() : "",
     bankAcc: document.getElementById("acc-bank-acc") ? document.getElementById("acc-bank-acc").value.trim() : "",
     ifsc: document.getElementById("acc-bank-ifsc") ? document.getElementById("acc-bank-ifsc").value.trim().toUpperCase() : "",
+    pincode: document.getElementById("acc-pincode") ? document.getElementById("acc-pincode").value.trim() : "",
+    notes: document.getElementById("acc-extra-info") ? document.getElementById("acc-extra-info").value.trim() : "",
     createdAt: new Date().toISOString()
   };
   if (existingAccId) {
@@ -2191,13 +2308,416 @@ function validateGstinOnline() {
 }
 
 // =============================================================
+// AUTOMATIC UNIQUE BARCODE GENERATOR & LABEL PRINTING
+// =============================================================
+let currentAlternateBarcodes = [];
+
+function initBarcodeModule() {
+  const btnGen = document.getElementById("btn-generate-barcode");
+  const aliasInput = document.getElementById("item-alias");
+  const btnPrint = document.getElementById("btn-print-barcode-label");
+  const btnAddAlt = document.getElementById("btn-add-alternate-barcode");
+  const altInput = document.getElementById("item-alternate-barcodes-input");
+
+  // 1. Generate Barcode Button
+  if (btnGen && !btnGen.dataset.bound) {
+    btnGen.dataset.bound = "true";
+    btnGen.addEventListener("click", () => {
+      handleGenerateBarcodeClick();
+    });
+  }
+
+  // 2. Barcode Input Live Validation & Preview
+  if (aliasInput && !aliasInput.dataset.bound) {
+    aliasInput.dataset.bound = "true";
+    let debounceTimer = null;
+    aliasInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const val = aliasInput.value.trim().toUpperCase();
+        aliasInput.value = val;
+        if (val) {
+          updateBarcodePreview(val);
+        } else {
+          const prev = document.getElementById("item-barcode-preview-container");
+          if (prev) prev.style.display = "none";
+        }
+      }, 250);
+    });
+  }
+
+  // 3. Add Alternate Barcode
+  if (btnAddAlt && !btnAddAlt.dataset.bound) {
+    btnAddAlt.dataset.bound = "true";
+    btnAddAlt.addEventListener("click", () => {
+      handleAddAlternateBarcode();
+    });
+  }
+  if (altInput && !altInput.dataset.bound) {
+    altInput.dataset.bound = "true";
+    altInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAddAlternateBarcode();
+      }
+    });
+  }
+
+  // 4. Print Barcode Label
+  if (btnPrint && !btnPrint.dataset.bound) {
+    btnPrint.dataset.bound = "true";
+    btnPrint.addEventListener("click", () => {
+      openBarcodeLabelModal();
+    });
+  }
+
+  // Modal event bindings
+  initBarcodeModalEvents();
+}
+
+function handleGenerateBarcodeClick() {
+  const aliasInput = document.getElementById("item-alias");
+  const currentVal = aliasInput ? aliasInput.value.trim() : "";
+
+  // Requirement 1: Do not overwrite an existing manually entered barcode without confirmation
+  if (currentVal) {
+    const ok = confirm(`The Barcode / SKU field already contains "${currentVal}".\n\nDo you want to generate a new unique barcode and replace it?`);
+    if (!ok) return;
+  }
+
+  const compId = activeCompany ? activeCompany.id : "COMP0001";
+  if (window.backend && window.backend.generateUniqueBarcode) {
+    window.backend.generateUniqueBarcode(compId, (resp) => {
+      try {
+        const res = JSON.parse(resp);
+        if (res.success && res.data) {
+          const genCode = res.data.barcode;
+          if (aliasInput) aliasInput.value = genCode;
+          showNotification(`Generated unique Code 128 barcode: ${genCode}`);
+          updateBarcodePreview(genCode, res.data.svg, res.data.standard);
+        } else {
+          alert(`Error generating barcode: ${res.error || "Unknown error"}`);
+        }
+      } catch (e) {
+        console.error("Barcode generator response parse error:", e);
+      }
+    });
+  } else {
+    // Standalone fallback: simulate atomic AB sequence
+    const fallbackCode = "AB" + String(Date.now()).slice(-12);
+    if (aliasInput) aliasInput.value = fallbackCode;
+    updateBarcodePreview(fallbackCode);
+  }
+}
+
+function updateBarcodePreview(barcode, preRenderedSvg, standardName) {
+  const container = document.getElementById("item-barcode-preview-container");
+  const svgWrapper = document.getElementById("item-barcode-svg-wrapper");
+  const humanText = document.getElementById("item-barcode-human-text");
+  const badge = document.getElementById("item-barcode-standard-badge");
+  const statusText = document.getElementById("item-barcode-status-text");
+
+  if (!container || !barcode) {
+    if (container) container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "flex";
+  if (humanText) humanText.textContent = barcode;
+
+  const currentItemId = document.getElementById("item-id")?.value.trim() || "";
+  const compId = activeCompany ? activeCompany.id : "";
+
+  // Render SVG graphic
+  if (preRenderedSvg && svgWrapper) {
+    svgWrapper.innerHTML = preRenderedSvg;
+    if (badge && standardName) badge.textContent = standardName;
+  } else if (window.backend && window.backend.renderBarcodeSvg) {
+    window.backend.renderBarcodeSvg(barcode, "", (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.svg && svgWrapper) {
+          svgWrapper.innerHTML = r.svg;
+        }
+      } catch (e) {}
+    });
+  }
+
+  // Validate format & checksum
+  if (window.backend && window.backend.validateBarcode) {
+    window.backend.validateBarcode(barcode, (resp) => {
+      try {
+        const valRes = JSON.parse(resp);
+        if (valRes.success && valRes.data) {
+          const d = valRes.data;
+          if (badge) badge.textContent = d.standard || "Code 128";
+          if (!d.is_valid) {
+            if (statusText) {
+              statusText.style.color = "#dc2626";
+              statusText.textContent = `⚠️ ${d.message || "Invalid Check Digit"}`;
+            }
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // Check database uniqueness across all products
+      if (compId && window.backend.checkBarcodeAvailability) {
+        window.backend.checkBarcodeAvailability(compId, barcode, currentItemId, (availResp) => {
+          try {
+            const aRes = JSON.parse(availResp);
+            if (aRes.success && aRes.data) {
+              if (aRes.data.is_unique) {
+                if (statusText) {
+                  statusText.style.color = "#166534";
+                  statusText.textContent = "✓ Unique & Available in Database";
+                }
+              } else {
+                const dupItem = aRes.data.existing_product ? aRes.data.existing_product.name : "another item";
+                if (statusText) {
+                  statusText.style.color = "#dc2626";
+                  statusText.textContent = `❌ Conflicting: Already assigned to "${dupItem}"`;
+                }
+              }
+            }
+          } catch (e) {}
+        });
+      }
+    });
+  }
+}
+
+function handleAddAlternateBarcode() {
+  const altInput = document.getElementById("item-alternate-barcodes-input");
+  const val = altInput ? altInput.value.trim().toUpperCase() : "";
+  if (!val) return;
+
+  const primary = document.getElementById("item-alias")?.value.trim().toUpperCase();
+  if (val === primary) {
+    alert(`"${val}" is already entered as the primary barcode.`);
+    return;
+  }
+  if (currentAlternateBarcodes.includes(val)) {
+    alert(`"${val}" is already added to alternate barcodes.`);
+    return;
+  }
+
+  const currentItemId = document.getElementById("item-id")?.value.trim() || "";
+  const compId = activeCompany ? activeCompany.id : "";
+
+  // Check backend availability
+  if (compId && window.backend && window.backend.checkBarcodeAvailability) {
+    window.backend.checkBarcodeAvailability(compId, val, currentItemId, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data && !r.data.is_unique) {
+          const item = r.data.existing_product ? r.data.existing_product.name : "another product";
+          alert(`Cannot add barcode "${val}": Already assigned to "${item}".`);
+          return;
+        }
+      } catch (e) {}
+      currentAlternateBarcodes.push(val);
+      if (altInput) altInput.value = "";
+      renderAlternateBarcodesList();
+    });
+  } else {
+    currentAlternateBarcodes.push(val);
+    if (altInput) altInput.value = "";
+    renderAlternateBarcodesList();
+  }
+}
+
+function removeAlternateBarcode(bcode) {
+  currentAlternateBarcodes = currentAlternateBarcodes.filter(x => x !== bcode);
+  renderAlternateBarcodesList();
+}
+
+function renderAlternateBarcodesList() {
+  const listEl = document.getElementById("item-alternate-barcodes-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  currentAlternateBarcodes.forEach((b) => {
+    const badge = document.createElement("span");
+    badge.className = "alternate-barcode-badge";
+    badge.innerHTML = `<span>${b}</span><button type="button" class="remove-barcode-btn" title="Remove barcode" onclick="removeAlternateBarcode('${b}')">&times;</button>`;
+    listEl.appendChild(badge);
+  });
+}
+
+function openBarcodeLabelModal() {
+  const modal = document.getElementById("modal-barcode-label-print");
+  const barcode = document.getElementById("item-alias")?.value.trim();
+  if (!barcode) {
+    alert("Please enter or generate a Barcode / SKU first before printing labels.");
+    return;
+  }
+  if (modal) {
+    modal.style.display = "flex";
+    modal.classList.add("show");
+    updateBarcodeLabelLivePreview();
+  }
+}
+
+function closeBarcodeLabelModal() {
+  const modal = document.getElementById("modal-barcode-label-print");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("show");
+  }
+}
+
+function updateBarcodeLabelLivePreview() {
+  const previewBox = document.getElementById("barcode-label-live-preview");
+  if (!previewBox) return;
+
+  const barcode = document.getElementById("item-alias")?.value.trim() || "AB000000000001";
+  const name = document.getElementById("item-name")?.value.trim() || "Product Name";
+  const salesPrice = parseFloat(document.getElementById("item-sales-price")?.value || "0");
+  const mrp = parseFloat(document.getElementById("item-mrp")?.value || "0");
+  const sku = document.getElementById("item-alias")?.value.trim() || "";
+
+  const sizeKey = document.getElementById("barcode-label-size-select")?.value || "50x25";
+  const incName = document.getElementById("chk-label-include-name")?.checked ?? true;
+  const incPrice = document.getElementById("chk-label-include-price")?.checked ?? true;
+  const incMrp = document.getElementById("chk-label-include-mrp")?.checked ?? true;
+  const incSku = document.getElementById("chk-label-include-sku")?.checked ?? true;
+
+  const itemData = {
+    name: name,
+    barcode: barcode,
+    alias: sku,
+    sales_price: salesPrice,
+    mrp: mrp
+  };
+  const opts = {
+    size: sizeKey,
+    include_name: incName,
+    include_price: incPrice,
+    include_mrp: incMrp,
+    include_sku: incSku,
+    copies: 1
+  };
+
+  if (window.backend && window.backend.generateBarcodeLabelHtml) {
+    window.backend.generateBarcodeLabelHtml(JSON.stringify(itemData), JSON.stringify(opts), (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.html) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(r.html, "text/html");
+          const labelEl = doc.querySelector(".physical-barcode-label");
+          if (labelEl) {
+            previewBox.innerHTML = labelEl.outerHTML;
+          }
+        }
+      } catch (e) {}
+    });
+  }
+}
+
+function initBarcodeModalEvents() {
+  const btnClose = document.getElementById("btn-close-barcode-modal");
+  const btnCancel = document.getElementById("btn-cancel-barcode-modal");
+  const btnPrintNow = document.getElementById("btn-execute-print-barcode");
+
+  if (btnClose && !btnClose.dataset.bound) {
+    btnClose.dataset.bound = "true";
+    btnClose.addEventListener("click", closeBarcodeLabelModal);
+  }
+  if (btnCancel && !btnCancel.dataset.bound) {
+    btnCancel.dataset.bound = "true";
+    btnCancel.addEventListener("click", closeBarcodeLabelModal);
+  }
+
+  ["barcode-label-size-select", "chk-label-include-name", "chk-label-include-price", "chk-label-include-mrp", "chk-label-include-sku"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.bound) {
+      el.dataset.bound = "true";
+      el.addEventListener("change", updateBarcodeLabelLivePreview);
+    }
+  });
+
+  if (btnPrintNow && !btnPrintNow.dataset.bound) {
+    btnPrintNow.dataset.bound = "true";
+    btnPrintNow.addEventListener("click", executeBarcodeLabelPrint);
+  }
+}
+
+function executeBarcodeLabelPrint() {
+  const barcode = document.getElementById("item-alias")?.value.trim() || "";
+  const name = document.getElementById("item-name")?.value.trim() || "Product";
+  const salesPrice = parseFloat(document.getElementById("item-sales-price")?.value || "0");
+  const mrp = parseFloat(document.getElementById("item-mrp")?.value || "0");
+  const sku = document.getElementById("item-alias")?.value.trim() || "";
+
+  const sizeKey = document.getElementById("barcode-label-size-select")?.value || "50x25";
+  const incName = document.getElementById("chk-label-include-name")?.checked ?? true;
+  const incPrice = document.getElementById("chk-label-include-price")?.checked ?? true;
+  const incMrp = document.getElementById("chk-label-include-mrp")?.checked ?? true;
+  const incSku = document.getElementById("chk-label-include-sku")?.checked ?? true;
+  const copies = parseInt(document.getElementById("barcode-label-copies")?.value || "1", 10);
+
+  const itemData = { name, barcode, alias: sku, sales_price: salesPrice, mrp };
+  const opts = { size: sizeKey, include_name: incName, include_price: incPrice, include_mrp: incMrp, include_sku: incSku, copies };
+
+  if (window.backend && window.backend.generateBarcodeLabelHtml) {
+    window.backend.generateBarcodeLabelHtml(JSON.stringify(itemData), JSON.stringify(opts), (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.html) {
+          // Open decoupled print iframe
+          let printIframe = document.getElementById("barcode-print-iframe");
+          if (!printIframe) {
+            printIframe = document.createElement("iframe");
+            printIframe.id = "barcode-print-iframe";
+            printIframe.style.position = "fixed";
+            printIframe.style.right = "0";
+            printIframe.style.bottom = "0";
+            printIframe.style.width = "0";
+            printIframe.style.height = "0";
+            printIframe.style.border = "0";
+            document.body.appendChild(printIframe);
+          }
+          const doc = printIframe.contentWindow.document;
+          doc.open();
+          doc.write(r.html);
+          doc.close();
+          setTimeout(() => {
+            printIframe.contentWindow.focus();
+            printIframe.contentWindow.print();
+            closeBarcodeLabelModal();
+            showNotification(`Sent ${copies} barcode label(s) to printer.`);
+          }, 300);
+        }
+      } catch (e) {
+        alert("Print error: " + e.message);
+      }
+    });
+  } else {
+    window.print();
+    closeBarcodeLabelModal();
+  }
+}
+
+// =============================================================
 // ITEM MASTER & PRODUCTS CATALOGUE MANAGEMENT
 // =============================================================
+
+function syncItemPrintName() {
+  const nameEl = document.getElementById("item-name");
+  const printEl = document.getElementById("item-print-name");
+  if (nameEl && printEl) {
+    printEl.value = nameEl.value;
+  }
+}
 
 function resetProductMasterForm() {
   if (formItemMaster) formItemMaster.reset();
   const idEl = document.getElementById("item-id");
   if (idEl) idEl.value = "";
+  if (itemName) itemName.value = "";
+  if (itemPrintName) itemPrintName.value = "";
+  syncItemPrintName();
   const minStockEl = document.getElementById("item-min-stock-level");
   if (minStockEl) minStockEl.value = "";
   const reorderLvlEl = document.getElementById("item-reorder-level");
@@ -2210,10 +2730,16 @@ function resetProductMasterForm() {
   if (alertEnabledEl) alertEnabledEl.checked = true;
   const titleEl = document.getElementById("item-master-screen-title");
   if (titleEl) titleEl.textContent = "Add Product";
+
+  // Reset Barcode Preview & Alternates
+  const prev = document.getElementById("item-barcode-preview-container");
+  if (prev) prev.style.display = "none";
+  currentAlternateBarcodes = [];
+  renderAlternateBarcodesList();
 }
 
-function loadProductForEditing(itemId) {
-  fetchItemById(itemId, (item) => {
+function loadProductForEditing(itemOrId) {
+  function applyItem(item) {
     if (!item) {
       alert("Product not found.");
       return;
@@ -2223,9 +2749,27 @@ function loadProductForEditing(itemId) {
     
     if (itemName) itemName.value = item.name || "";
     const aliasEl = document.getElementById("item-alias");
-    if (aliasEl) aliasEl.value = item.barcodes || item.alias || "";
+    const primaryBar = item.primary_barcode || item.alias || (item.barcodes ? item.barcodes.split(",")[0].trim() : "");
+    if (aliasEl) aliasEl.value = primaryBar;
+
+    currentAlternateBarcodes = [];
+    if (item.alternate_barcodes && Array.isArray(item.alternate_barcodes)) {
+      currentAlternateBarcodes = item.alternate_barcodes.filter(b => b && b !== primaryBar);
+    } else if (item.barcodes && typeof item.barcodes === "string") {
+      const parts = item.barcodes.split(",").map(s => s.trim()).filter(Boolean);
+      currentAlternateBarcodes = parts.filter(b => b !== primaryBar);
+    }
+    renderAlternateBarcodesList();
+
+    if (primaryBar) {
+      updateBarcodePreview(primaryBar);
+    } else {
+      const prev = document.getElementById("item-barcode-preview-container");
+      if (prev) prev.style.display = "none";
+    }
     const printEl = document.getElementById("item-print-name");
-    if (printEl) printEl.value = item.print_name || item.printName || item.name || "";
+    if (printEl) printEl.value = item.name || item.print_name || item.printName || "";
+    syncItemPrintName();
     const groupEl = document.getElementById("item-group");
     if (groupEl) groupEl.value = item.item_group || item.group || "General";
     const unitEl = document.getElementById("item-unit");
@@ -2275,7 +2819,14 @@ function loadProductForEditing(itemId) {
 
     showScreen("view-add-item-master");
     if (itemName) itemName.focus();
-  });
+  }
+
+  if (typeof itemOrId === "object" && itemOrId !== null) {
+    applyItem(itemOrId);
+    return;
+  }
+
+  fetchItemById(itemOrId, applyItem);
 }
 
 function handleSaveItemMaster() {
@@ -2285,6 +2836,9 @@ function handleSaveItemMaster() {
     itemName.focus();
     return;
   }
+
+  // Ensure Receipt Print Name is synchronized and matches Product Name
+  syncItemPrintName();
 
   const existingId = document.getElementById("item-id")?.value.trim() || undefined;
 
@@ -2311,12 +2865,17 @@ function handleSaveItemMaster() {
     parsedMaxStock = Math.max(0, parseFloat(rawMaxStock));
   }
 
+  const primaryBarcode = document.getElementById("item-alias") ? document.getElementById("item-alias").value.trim() : "";
+  const allBarcodes = [primaryBarcode, ...currentAlternateBarcodes].filter(Boolean);
+
   const itemData = {
     id: existingId,
     name: name,
-    alias: document.getElementById("item-alias").value.trim(),
-    printName: document.getElementById("item-print-name").value.trim(),
-    print_name: document.getElementById("item-print-name").value.trim(),
+    alias: primaryBarcode,
+    barcodes: allBarcodes,
+    alternate_barcodes: currentAlternateBarcodes,
+    printName: name,
+    print_name: name,
     group: document.getElementById("item-group").value,
     item_group: document.getElementById("item-group").value,
     unit: document.getElementById("item-unit").value,
@@ -2425,8 +2984,10 @@ function fallbackLocalItems(query, callback) {
 }
 
 function fetchItemById(itemId, callback) {
-  if (window.backend && activeCompany) {
-    window.backend.getItemById(activeCompany.id, itemId, (resp) => {
+  const comp = activeCompany || window.activeCompany;
+  if (!activeCompany && comp) activeCompany = comp;
+  if (window.backend && comp) {
+    window.backend.getItemById(comp.id, itemId, (resp) => {
       try {
         const res = JSON.parse(resp);
         if (res.success && res.data) {
@@ -2610,50 +3171,387 @@ function isVoucherNumberUsed(vchNum) {
   return vouchers.some((v) => v.vchNo.trim() === vchNum.trim());
 }
 
+// =============================================================
+// REBUILT SALES INVOICE WORKFLOW & MASTER INTEGRATION
+// =============================================================
+
+// Party Autocomplete & Customer Masters State
+let currentPartySuggestions = [];
+let activePartySuggestionIndex = -1;
+let partyDebounceTimer = null;
+
+function setupPartyAutocomplete() {
+  if (!vchPartyInput) return;
+  const popup = document.getElementById("vch-party-autocomplete-popup");
+  if (!popup) return;
+
+  function renderSuggestions(list, query) {
+    popup.innerHTML = "";
+    currentPartySuggestions = list;
+    activePartySuggestionIndex = -1;
+
+    if (!list || list.length === 0) {
+      const noMatch = document.createElement("div");
+      noMatch.className = "vch-party-no-match";
+      noMatch.textContent = "No customer master found. Please create this customer in Administration → Masters → Add.";
+      popup.appendChild(noMatch);
+      popup.style.display = "block";
+      return;
+    }
+
+    list.forEach((acc, idx) => {
+      const itemEl = document.createElement("div");
+      itemEl.className = "vch-party-sugg-item";
+      itemEl.dataset.index = idx;
+
+      const isCash = (acc.id === "CASH" || (acc.name && acc.name.toUpperCase() === "CASH"));
+      const name = isCash ? "CASH" : (acc.name || "");
+      const alias = acc.alias ? ` (${acc.alias})` : "";
+      const gstin = acc.gstin ? `GST: ${acc.gstin}` : "";
+      const mobile = (acc.mobile || acc.mobile_no) ? `Mob: ${acc.mobile || acc.mobile_no}` : "";
+      const cat = acc.customer_category || acc.customerCategory || (isCash ? "Direct Customer" : "Customer");
+      const subParts = [alias ? alias.trim() : "", gstin, mobile].filter(Boolean).join(" | ");
+
+      itemEl.innerHTML = `
+        <div class="vch-party-sugg-primary">
+          <div class="vch-party-sugg-name">${escapeHtml(name)}${escapeHtml(alias)}</div>
+          <div class="vch-party-sugg-meta">${escapeHtml(subParts || (isCash ? "Direct Walk-in Retail Customer" : cat))}</div>
+        </div>
+        <div class="vch-party-badge ${isCash ? 'cash' : 'customer'}">${isCash ? 'Walk-in' : escapeHtml(cat)}</div>
+      `;
+
+      itemEl.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectPartyItem(acc);
+      });
+
+      popup.appendChild(itemEl);
+    });
+
+    popup.style.display = "block";
+  }
+
+  function selectPartyItem(acc) {
+    const isCash = (acc.id === "CASH" || (acc.name && acc.name.toUpperCase() === "CASH"));
+    if (isCash) {
+      vchPartyInput.value = "CASH";
+      delete vchPartyInput.dataset.accountId;
+    } else {
+      vchPartyInput.value = acc.name || "";
+      vchPartyInput.dataset.accountId = acc.id || "";
+    }
+    updateVoucherPartyCategory();
+    hidePartyPopup();
+
+    // Focus row 1 Item field immediately after selecting customer
+    const firstRowItem = vchItemsTbody ? vchItemsTbody.querySelector('.vch-item-input[data-row="1"]') : null;
+    if (firstRowItem) {
+      firstRowItem.focus();
+    }
+  }
+
+  function hidePartyPopup() {
+    popup.style.display = "none";
+    currentPartySuggestions = [];
+    activePartySuggestionIndex = -1;
+  }
+
+  function highlightPartySuggestion(idx) {
+    const items = popup.querySelectorAll(".vch-party-sugg-item");
+    items.forEach((el, i) => {
+      el.classList.toggle("active", i === idx);
+      if (i === idx) el.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function filterEligibleCustomers(query) {
+    const q = (query || "").trim().toUpperCase();
+    const cashOption = {
+      id: "CASH",
+      name: "CASH",
+      account_group: "Sundry Debtors",
+      classification: "Customer",
+      customer_category: "Direct Customer"
+    };
+
+    const eligible = (cachedAccountsList || []).filter((acc) => {
+      const grp = acc.account_group || acc.group || "";
+      const isCust = grp === "Sundry Debtors" || grp.includes("Both") || grp === "Customer" ||
+                     acc.classification === "Customer" || acc.classification === "Both (Customer & Supplier)";
+      return isCust || !grp;
+    });
+
+    let results = [];
+    if (!q) {
+      results = [cashOption, ...eligible.slice(0, 10)];
+    } else {
+      if ("CASH".includes(q) || "DIRECT".includes(q)) {
+        results.push(cashOption);
+      }
+      const matched = eligible.filter((acc) => {
+        const name = (acc.name || "").toUpperCase();
+        const printName = (acc.print_name || acc.printName || "").toUpperCase();
+        const alias = (acc.alias || "").toUpperCase();
+        const gstin = (acc.gstin || "").toUpperCase();
+        const mobile = (acc.mobile || acc.mobile_no || "").toUpperCase();
+        return name.includes(q) || printName.includes(q) || alias.includes(q) || gstin.includes(q) || mobile.includes(q);
+      });
+      results.push(...matched);
+    }
+    return results;
+  }
+
+  vchPartyInput.addEventListener("input", () => {
+    const q = vchPartyInput.value.trim();
+    clearTimeout(partyDebounceTimer);
+    partyDebounceTimer = setTimeout(() => {
+      if (window.backend && window.backend.searchCustomers && activeCompany && q) {
+        window.backend.searchCustomers(activeCompany.id, q, (resp) => {
+          try {
+            const r = JSON.parse(resp);
+            if (r.success && Array.isArray(r.data)) {
+              let list = r.data;
+              if ("CASH".includes(q.toUpperCase())) {
+                list = [{ id: "CASH", name: "CASH", customer_category: "Direct Customer" }, ...list];
+              }
+              renderSuggestions(list, q);
+              return;
+            }
+          } catch (e) {}
+          renderSuggestions(filterEligibleCustomers(q), q);
+        });
+      } else {
+        renderSuggestions(filterEligibleCustomers(q), q);
+      }
+    }, 120);
+  });
+
+  vchPartyInput.addEventListener("focus", () => {
+    const q = vchPartyInput.value.trim();
+    renderSuggestions(filterEligibleCustomers(q), q);
+  });
+
+  vchPartyInput.addEventListener("keydown", (e) => {
+    if (popup.style.display !== "none") {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (currentPartySuggestions.length > 0) {
+          activePartySuggestionIndex = (activePartySuggestionIndex + 1) % currentPartySuggestions.length;
+          highlightPartySuggestion(activePartySuggestionIndex);
+        }
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (currentPartySuggestions.length > 0) {
+          activePartySuggestionIndex = (activePartySuggestionIndex - 1 + currentPartySuggestions.length) % currentPartySuggestions.length;
+          highlightPartySuggestion(activePartySuggestionIndex);
+        }
+        return;
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activePartySuggestionIndex >= 0 && currentPartySuggestions[activePartySuggestionIndex]) {
+          selectPartyItem(currentPartySuggestions[activePartySuggestionIndex]);
+          return;
+        } else if (currentPartySuggestions.length === 1) {
+          selectPartyItem(currentPartySuggestions[0]);
+          return;
+        } else {
+          const text = vchPartyInput.value.trim().toUpperCase();
+          if (text === "CASH" || text === "CASH SALE") {
+            selectPartyItem({ id: "CASH", name: "CASH" });
+            return;
+          }
+          const exactMatch = (cachedAccountsList || []).find(a => 
+            (a.name || "").toUpperCase() === text || 
+            (a.alias || "").toUpperCase() === text
+          );
+          if (exactMatch) {
+            selectPartyItem(exactMatch);
+            return;
+          }
+          alert("No customer master found. Please create this customer in Administration → Masters → Add.");
+          vchPartyInput.focus();
+          return;
+        }
+      } else if (e.key === "Escape") {
+        hidePartyPopup();
+        return;
+      }
+    } else {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const text = vchPartyInput.value.trim().toUpperCase();
+        if (text === "CASH" || text === "CASH SALE" || text === "") {
+          selectPartyItem({ id: "CASH", name: "CASH" });
+          return;
+        }
+        const exactMatch = (cachedAccountsList || []).find(a => 
+          (a.name || "").toUpperCase() === text || 
+          (a.alias || "").toUpperCase() === text
+        );
+        if (exactMatch) {
+          selectPartyItem(exactMatch);
+          return;
+        }
+        alert("No customer master found. Please create this customer in Administration → Masters → Add.");
+        vchPartyInput.focus();
+      }
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!popup.contains(e.target) && e.target !== vchPartyInput) {
+      hidePartyPopup();
+    }
+  });
+}
+
 // Initialize Sales Billing Screen
 function initSalesVoucherScreen() {
-  const nextNo = getNextVoucherNumber();
-  vchNumber.value = nextNo;
-  infoVchNo.textContent = nextNo;
+  isSalesModifyMode = false;
+  currentModifySaleVchId = null;
+  const modIn = document.getElementById("sales-modify-vch-id");
+  if (modIn) modIn.value = "";
+  const titleEl = document.getElementById("sales-voucher-screen-title");
+  if (titleEl) titleEl.textContent = "Add Sales Voucher";
 
-  // Set today's date
+  // Request next available sequential voucher number from database atomically
+  if (window.backend && window.backend.getNextVoucherNumber && activeCompany) {
+    const series = vchSeries ? (vchSeries.value || "Main") : "Main";
+    window.backend.getNextVoucherNumber(activeCompany.id, series, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          if (vchNumber) vchNumber.value = r.data;
+          if (infoVchNo) infoVchNo.textContent = r.data;
+          return;
+        }
+      } catch (e) {}
+      const fallbackNo = getNextVoucherNumber();
+      if (vchNumber) vchNumber.value = fallbackNo;
+      if (infoVchNo) infoVchNo.textContent = fallbackNo;
+    });
+  } else {
+    const nextNo = getNextVoucherNumber();
+    if (vchNumber) vchNumber.value = nextNo;
+    if (infoVchNo) infoVchNo.textContent = nextNo;
+  }
+
+  // Preserve header defaults: Series, Date, Mat Centre, Sale Type
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, "0");
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const yyyy = now.getFullYear();
-  vchDate.value = `${dd}-${mm}-${yyyy}`;
-
+  if (vchDate && !vchDate.value) {
+    vchDate.value = `${dd}-${mm}-${yyyy}`;
+  }
   const days = ["(Sun)", "(Mon)", "(Tue)", "(Wed)", "(Thu)", "(Fri)", "(Sat)"];
-  vchDayLabel.textContent = days[now.getDay()];
+  if (vchDayLabel) vchDayLabel.textContent = days[now.getDay()];
 
-  // Reset inputs
-  vchPartyInput.value = "CASH";
-  vchNarration.value = "";
+  if (vchSeries && !vchSeries.value) vchSeries.value = "Main";
+  if (vchMatCentre && !vchMatCentre.value) vchMatCentre.value = "Main Store";
+  if (vchSaleType && !vchSaleType.value) vchSaleType.value = "L/GST-18%";
+
+  // Reset inputs and party
+  if (vchPartyInput) {
+    vchPartyInput.value = "CASH";
+    delete vchPartyInput.dataset.accountId;
+  }
+  if (vchNarration) vchNarration.value = "";
   updateVoucherPartyCategory();
 
-  // Populate Party autocomplete list from Account Masters
-  partyDatalist.innerHTML = "";
-  const optCash = document.createElement("option");
-  optCash.value = "CASH";
-  partyDatalist.appendChild(optCash);
-
+  // Load customer accounts from permanent database
   if (activeCompany) {
-    const key = `alpha_accounts_${activeCompany.code}`;
-    const accounts = JSON.parse(localStorage.getItem(key) || "[]");
-    accounts.forEach((acc) => {
-      const opt = document.createElement("option");
-      opt.value = acc.name;
-      opt.label = `${acc.group} | GST: ${acc.gstin || "N/A"}`;
-      partyDatalist.appendChild(opt);
-    });
+    if (window.backend && window.backend.searchCustomers) {
+      window.backend.searchCustomers(activeCompany.id, "", (resp) => {
+        try {
+          const r = JSON.parse(resp);
+          if (r.success && Array.isArray(r.data)) {
+            cachedAccountsList = r.data;
+            return;
+          }
+        } catch (e) {}
+        const key = `alpha_accounts_${activeCompany.code}`;
+        cachedAccountsList = JSON.parse(localStorage.getItem(key) || "[]");
+      });
+    } else {
+      const key = `alpha_accounts_${activeCompany.code}`;
+      cachedAccountsList = JSON.parse(localStorage.getItem(key) || "[]");
+    }
   }
 
-  // Render 11 item rows
+  // Render 11 item rows and recalculate totals
   renderVoucherItemRows();
   recalculateVoucherTotals();
-  vchPartyInput.focus();
+
+  // Focus party input automatically
+  setTimeout(() => {
+    if (vchPartyInput) {
+      vchPartyInput.focus();
+      vchPartyInput.select();
+    }
+  }, 60);
 }
 
+// Product Lookup by Barcode or Name
+function resolveItemByBarcodeOrName(val, callback) {
+  if (!val) {
+    callback(null);
+    return;
+  }
+  const clean = val.trim();
+  const upper = clean.toUpperCase();
+
+  // 1. Try barcode bridge first if available
+  if (window.backend && window.backend.findByBarcode && activeCompany) {
+    window.backend.findByBarcode(activeCompany.id, clean, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          callback(r.data);
+          return;
+        }
+      } catch (e) {}
+      searchCatalogFallback();
+    });
+  } else {
+    searchCatalogFallback();
+  }
+
+  function searchCatalogFallback() {
+    fetchAllItems(clean, (items) => {
+      if (!items || items.length === 0) {
+        callback(null);
+        return;
+      }
+      // Exact barcode match
+      let found = items.find(it => 
+        (it.barcodes && it.barcodes.toUpperCase() === upper) || 
+        (it.barcode && it.barcode.toUpperCase() === upper)
+      );
+      // Exact SKU / alias match
+      if (!found) {
+        found = items.find(it => it.alias && it.alias.toUpperCase() === upper);
+      }
+      // Exact name match
+      if (!found) {
+        found = items.find(it => it.name && it.name.toUpperCase() === upper);
+      }
+      // Prefix name match
+      if (!found) {
+        found = items.find(it => it.name && it.name.toUpperCase().startsWith(upper));
+      }
+      // First matching item
+      if (!found && items.length > 0) {
+        found = items[0];
+      }
+      callback(found || null);
+    });
+  }
+}
+
+// Populate line item row with product data from Item Master
 function populateVoucherRowWithItem(rowNum, item) {
   const rowInput = vchItemsTbody.querySelector(`.vch-item-input[data-row="${rowNum}"]`);
   const unitEl = vchItemsTbody.querySelector(`.vch-unit-input[data-row="${rowNum}"]`);
@@ -2663,8 +3561,12 @@ function populateVoucherRowWithItem(rowNum, item) {
   if (rowInput) {
     rowInput.value = item.name || "";
     rowInput.dataset.itemId = item.id || "";
+    rowInput.dataset.productBarcode = item.barcodes || item.barcode || item.alias || "";
   }
-  if (unitEl && item.unit) unitEl.value = item.unit;
+  // Standard Unit loaded automatically from Item Master (read-only)
+  if (unitEl) {
+    unitEl.value = item.unit || "Pcs.";
+  }
   const price = parseFloat(item.sales_price ?? item.salesPrice ?? 0);
   if (priceEl && price > 0) priceEl.value = price.toFixed(2);
 
@@ -2684,6 +3586,7 @@ function populateVoucherRowWithItem(rowNum, item) {
   }
 
   showNotification(`Selected ${item.name}`);
+  // Enter key from Item moves focus directly to Quantity field, skipping read-only Unit field!
   if (qtyEl) {
     qtyEl.focus();
     qtyEl.select();
@@ -2721,30 +3624,66 @@ function setupVoucherAutocomplete(input, row) {
   });
 
   input.addEventListener("keydown", (e) => {
-    if (!vchItemAutocompletePopup || vchItemAutocompletePopup.style.display === "none") {
-      if (e.key === "F1") {
-        e.preventDefault();
-        openProductSearchModal("VOUCHER", row);
-      }
+    if (e.key === "F1") {
+      e.preventDefault();
+      openProductSearchModal("VOUCHER", row);
       return;
     }
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      activeVchSuggestionIndex = (activeVchSuggestionIndex + 1) % currentVchSuggestions.length;
-      highlightVchSuggestion(activeVchSuggestionIndex);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      activeVchSuggestionIndex = (activeVchSuggestionIndex - 1 + currentVchSuggestions.length) % currentVchSuggestions.length;
-      highlightVchSuggestion(activeVchSuggestionIndex);
-    } else if (e.key === "Enter" && activeVchSuggestionIndex >= 0) {
+    const popupVisible = vchItemAutocompletePopup && vchItemAutocompletePopup.style.display !== "none";
+
+    if (popupVisible) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        activeVchSuggestionIndex = (activeVchSuggestionIndex + 1) % currentVchSuggestions.length;
+        highlightVchSuggestion(activeVchSuggestionIndex);
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        activeVchSuggestionIndex = (activeVchSuggestionIndex - 1 + currentVchSuggestions.length) % currentVchSuggestions.length;
+        highlightVchSuggestion(activeVchSuggestionIndex);
+        return;
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        hideVchAutocompletePopup();
+        return;
+      }
+    }
+
+    if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      const chosen = currentVchSuggestions[activeVchSuggestionIndex];
-      populateVoucherRowWithItem(row, chosen);
+
+      // Case 1: Active suggestion highlighted in popup
+      if (popupVisible && activeVchSuggestionIndex >= 0 && currentVchSuggestions[activeVchSuggestionIndex]) {
+        const chosen = currentVchSuggestions[activeVchSuggestionIndex];
+        hideVchAutocompletePopup();
+        populateVoucherRowWithItem(row, chosen);
+        return;
+      }
+
+      // Case 2: User scanned a barcode or entered a product name / SKU
+      const val = input.value.trim();
+      if (!val) {
+        const nextRow = parseInt(row, 10) + 1;
+        const nextItem = vchItemsTbody.querySelector(`.vch-item-input[data-row="${nextRow}"]`);
+        if (nextItem) nextItem.focus();
+        else if (btnSaveSalesVoucher) btnSaveSalesVoucher.focus();
+        return;
+      }
+
       hideVchAutocompletePopup();
-    } else if (e.key === "Escape") {
-      hideVchAutocompletePopup();
+
+      resolveItemByBarcodeOrName(val, (matchedItem) => {
+        if (matchedItem) {
+          populateVoucherRowWithItem(row, matchedItem);
+        } else {
+          // Prevent adding unregistered products
+          alert(`Product "${val}" not found in Item Master. Only registered products can be added to the invoice.`);
+          input.focus();
+          input.select();
+        }
+      });
     }
   });
 }
@@ -2816,28 +3755,31 @@ document.addEventListener("click", (e) => {
 
 // Render 11 item rows into billing table
 function renderVoucherItemRows() {
+  if (!vchItemsTbody) return;
   vchItemsTbody.innerHTML = "";
 
   for (let i = 1; i <= 11; i++) {
     const tr = document.createElement("tr");
     tr.dataset.row = i;
 
+    // Ordered columns: S.N. | Item | Unit | Qty. | Price (Rs.) | Amount (Rs.)
+    // Note: Unit is visibly read-only, populated from Item Master, with tabindex="-1" so keyboard flow skips directly to Qty!
     tr.innerHTML = `
       <td class="col-vch-sn">${i}</td>
       <td class="col-vch-item">
-        <input type="text" class="vch-item-input" data-row="${i}" placeholder="${i === 1 ? 'Type or select product (F1 to search)' : ''}" autocomplete="off" />
+        <input type="text" class="vch-item-input" data-row="${i}" placeholder="${i === 1 ? 'Scan barcode or type product name (F1 to search)...' : ''}" autocomplete="off" />
+      </td>
+      <td class="col-vch-unit">
+        <input type="text" class="vch-unit-input input-readonly" data-row="${i}" value="Pcs." readonly tabindex="-1" title="Unit from Item Master (Automatic &amp; Read-Only)" />
       </td>
       <td class="col-vch-qty">
         <input type="number" step="1" min="0" class="vch-qty-input" data-row="${i}" placeholder="0" />
-      </td>
-      <td class="col-vch-unit">
-        <input type="text" class="vch-unit-input" data-row="${i}" value="Pcs." />
       </td>
       <td class="col-vch-price">
         <input type="number" step="0.01" min="0" class="vch-price-input" data-row="${i}" placeholder="0.00" />
       </td>
       <td class="col-vch-amount">
-        <input type="text" class="vch-amount-input" data-row="${i}" value="0.00" readonly style="font-weight: 700; color: #1e40af;" />
+        <input type="text" class="vch-amount-input" data-row="${i}" value="0.00" readonly tabindex="-1" style="font-weight: 700; color: #1e40af;" />
       </td>
     `;
 
@@ -2853,6 +3795,34 @@ function renderVoucherItemRows() {
     });
   });
 
+  // Attach Enter navigation on Quantity inputs:
+  // Enter confirms line item, recalculates line amount and totals, and moves focus directly to next row's Item field!
+  vchItemsTbody.querySelectorAll(".vch-qty-input").forEach((qtyInput) => {
+    qtyInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = parseInt(qtyInput.dataset.row, 10);
+        const val = parseFloat(qtyInput.value);
+        if (isNaN(val) || val <= 0) {
+          qtyInput.value = "1";
+        }
+        calcRowAmount(row);
+        recalculateVoucherTotals();
+
+        // Move directly to next row's Item field
+        const nextRow = row + 1;
+        const nextItemInput = vchItemsTbody.querySelector(`.vch-item-input[data-row="${nextRow}"]`);
+        if (nextItemInput) {
+          nextItemInput.focus();
+        } else {
+          // If on the last row, focus Save button
+          if (btnSaveSalesVoucher) btnSaveSalesVoucher.focus();
+        }
+      }
+    });
+  });
+
   // Attach autocomplete & selection listeners
   vchItemsTbody.querySelectorAll(".vch-item-input").forEach((input) => {
     const row = input.dataset.row;
@@ -2860,20 +3830,9 @@ function renderVoucherItemRows() {
 
     input.addEventListener("focus", (e) => {
       const val = e.target.value.trim();
-      if (val) {
+      if (val && vchItemInfo) {
         vchItemInfo.textContent = `Selected Product: ${val}`;
       }
-    });
-
-    input.addEventListener("change", (e) => {
-      const val = e.target.value.trim().toUpperCase();
-      if (!val) return;
-      fetchAllItems(val, (items) => {
-        const matched = items.find((it) => it.name.toUpperCase() === val || (it.alias && it.alias.toUpperCase() === val));
-        if (matched) {
-          populateVoucherRowWithItem(row, matched);
-        }
-      });
     });
   });
 }
@@ -2885,6 +3844,7 @@ function updateVoucherPartyCategory() {
   if (!badgeEl) return;
 
   if (!partyName || partyName === "CASH" || partyName === "CASH SALE") {
+    delete vchPartyInput.dataset.accountId;
     activeVoucherCustomerCategory = "Direct Customer";
     const discPct = cachedCategoryDiscounts["Direct Customer"] || 0.0;
     badgeEl.textContent = `Direct (${discPct}%)`;
@@ -2893,7 +3853,17 @@ function updateVoucherPartyCategory() {
     return;
   }
 
-  const foundAcc = cachedAccountsList.find(a => (a.name || "").toUpperCase() === partyName);
+  const foundAcc = (cachedAccountsList || []).find(a => 
+    (a.name || "").toUpperCase() === partyName ||
+    (a.print_name || a.printName || "").toUpperCase() === partyName ||
+    (a.alias || "").toUpperCase() === partyName
+  );
+  if (foundAcc && foundAcc.id) {
+    vchPartyInput.dataset.accountId = foundAcc.id;
+  } else {
+    delete vchPartyInput.dataset.accountId;
+  }
+
   const cat = (foundAcc && foundAcc.customer_category) ? foundAcc.customer_category : (foundAcc && foundAcc.customerCategory ? foundAcc.customerCategory : "Direct Customer");
   activeVoucherCustomerCategory = cat;
   const discPct = cachedCategoryDiscounts[cat] !== undefined ? cachedCategoryDiscounts[cat] : (cat === "Commercial" ? 5.0 : (cat === "Sub-Commercial" ? 2.5 : 0.0));
@@ -3024,7 +3994,7 @@ btnApplyTax.addEventListener("click", () => {
   showNotification("Tax & Bill Sundry recalculated.");
 });
 
-// Save Sales Voucher
+// Save Sales Voucher with atomic voucher sequence and post-save print transition
 function handleSaveSalesVoucher() {
   const party = vchPartyInput.value.trim();
   if (!party) {
@@ -3033,19 +4003,45 @@ function handleSaveSalesVoucher() {
     return;
   }
 
-  // Ensure voucher number is unique
-  let currentNo = vchNumber.value.trim();
-  if (!currentNo) currentNo = getNextVoucherNumber();
+  // 1. Party Selection - Masters Database Only Validation
+  const isDirectCash = (party.toUpperCase() === "CASH" || party.toUpperCase() === "CASH SALE" || party.toUpperCase() === "DIRECT CUSTOMER");
+  let customerAccountId = vchPartyInput.dataset.accountId;
 
-  if (isVoucherNumberUsed(currentNo)) {
-    const freshNo = getNextVoucherNumber();
-    alert(`Voucher number ${currentNo} is already used in a previous bill.\nUpdating to next unique voucher number: ${freshNo}`);
-    vchNumber.value = freshNo;
-    currentNo = freshNo;
+  if (isDirectCash) {
+    // Direct cash sale party is allowed for local retail billing,
+    // but MUST NOT be allowed for inter-state (IGST) transactions where a registered customer master is required.
+    const saleType = vchSaleType.value;
+    if (saleType && saleType.startsWith("I/GST")) {
+      alert("Direct Cash Sale (CASH) is not permitted for Inter-State (IGST) sales. Please select a registered Customer Master from Masters with a valid State and GSTIN.");
+      vchPartyInput.focus();
+      return;
+    }
+  } else {
+    // If not direct cash, party MUST exist in Customer Masters database
+    if (!customerAccountId) {
+      const match = (cachedAccountsList || []).find(a => 
+        (a.name || "").toUpperCase() === party.toUpperCase() ||
+        (a.print_name || a.printName || "").toUpperCase() === party.toUpperCase() ||
+        (a.alias || "").toUpperCase() === party.toUpperCase()
+      );
+      if (match && match.id) {
+        customerAccountId = match.id;
+        vchPartyInput.dataset.accountId = match.id;
+      }
+    }
+
+    if (!customerAccountId) {
+      alert("No customer master found. Please create this customer in Administration → Masters → Add.");
+      vchPartyInput.focus();
+      return;
+    }
   }
 
-  // Collect items
+  // 2. Validate products / line items
   const items = [];
+  let hasUnregisteredProduct = false;
+  let unregisteredProductName = "";
+
   vchItemsTbody.querySelectorAll("tr").forEach((tr) => {
     const row = tr.dataset.row;
     const nameEl = tr.querySelector(`.vch-item-input[data-row="${row}"]`);
@@ -3059,48 +4055,50 @@ function handleSaveSalesVoucher() {
     const price = parseFloat(priceEl.value) || 0;
     const amount = parseFloat(amtEl.value) || 0;
 
-    if (name && (qty > 0 || price > 0)) {
-      items.push({ 
-        sn: row, 
-        name, 
-        qty, 
-        unit: unitEl.value, 
-        price, 
-        amount,
-        item_id: nameEl.dataset.itemId || undefined
-      });
+    if (name) {
+      const itemId = nameEl.dataset.itemId;
+      if (!itemId && !nameEl.dataset.productBarcode) {
+        hasUnregisteredProduct = true;
+        unregisteredProductName = name;
+      }
+      if (qty > 0 || price > 0) {
+        items.push({ 
+          sn: row, 
+          name, 
+          qty: qty > 0 ? qty : 1, 
+          unit: unitEl ? unitEl.value : "Pcs.", 
+          price, 
+          amount: amount > 0 ? amount : (qty * price),
+          item_id: itemId || undefined
+        });
+      }
     }
   });
 
+  if (hasUnregisteredProduct) {
+    alert(`Product "${unregisteredProductName}" is not registered in Item Master. Only registered products can be added to the invoice.`);
+    return;
+  }
+
   if (items.length === 0) {
-    alert("Please add at least one item with quantity and price.");
+    alert("Please add at least one registered item with quantity and price.");
+    const firstItem = vchItemsTbody.querySelector('.vch-item-input[data-row="1"]');
+    if (firstItem) firstItem.focus();
     return;
   }
 
   const subtotal = parseFloat(vchSubtotalVal.textContent) || 0;
   const grandTotal = vchGrandTotal.textContent.replace("₹", "").trim();
 
-  const voucherRecord = {
-    vchNo: currentNo,
-    series: vchSeries.value,
-    date: vchDate.value,
-    saleType: vchSaleType.value,
-    party: party,
-    matCentre: vchMatCentre.value,
-    narration: vchNarration.value.trim(),
-    items: items,
-    subtotal: subtotal,
-    grandTotal: grandTotal,
-    createdAt: new Date().toISOString()
-  };
-
-  if (window.backend && activeCompany) {
+  // If modifying existing invoice
+  if (isSalesModifyMode && currentModifySaleVchId) {
     const payload = {
-      party_name: party,
+      party_name: isDirectCash ? "CASH" : party,
+      account_id: customerAccountId || undefined,
       customer_category: activeVoucherCustomerCategory || "Direct Customer",
       sale_type: vchSaleType.value,
       payment_method: "CASH",
-      series: vchSeries.value,
+      series: vchSeries.value || "Main",
       vch_date: vchDate.value,
       narration: vchNarration.value.trim(),
       items: items.map((it) => ({
@@ -3115,12 +4113,12 @@ function handleSaveSalesVoucher() {
       }))
     };
 
-    if (isSalesModifyMode && currentModifySaleVchId) {
+    if (window.backend && activeCompany) {
       window.backend.modifySaleInvoice(activeCompany.id, currentModifySaleVchId, JSON.stringify(payload), (resp) => {
         try {
           const r = JSON.parse(resp);
           if (r.success) {
-            showNotification(`Sales Bill #${currentNo} modified successfully! Inventory and accounts reconciled.`);
+            showNotification(`Sales Bill #${vchNumber.value} modified successfully! Inventory and accounts reconciled.`);
             checkLowStockAlerts(false);
             isSalesModifyMode = false;
             currentModifySaleVchId = null;
@@ -3134,28 +4132,85 @@ function handleSaveSalesVoucher() {
           alert(`Error: ${e.message}`);
         }
       });
-      return;
     }
+    return;
+  }
 
+  // New Invoice: Backend generates sequential voucher number atomically inside database transaction
+  const payload = {
+    party_name: isDirectCash ? "CASH" : party,
+    account_id: customerAccountId || undefined,
+    customer_category: activeVoucherCustomerCategory || "Direct Customer",
+    sale_type: vchSaleType.value,
+    payment_method: "CASH",
+    series: vchSeries.value || "Main",
+    vch_date: vchDate.value,
+    narration: vchNarration.value.trim(),
+    items: items.map((it) => ({
+      item_id: it.item_id || undefined,
+      name: it.name,
+      qty: it.qty,
+      unit: it.unit,
+      price: it.price,
+      discount_percent: it.discount_percent || (cachedCategoryDiscounts[activeVoucherCustomerCategory] || 0.0),
+      discount_amount: it.discount_amount || 0.0,
+      line_total: it.amount
+    }))
+  };
+
+  const onCommitSuccess = (savedData) => {
+    lastCompletedVoucher = savedData.vch_no;
+    lastCompletedVoucherData = savedData;
+    saveSalesVoucherRecord({
+      vchNo: savedData.vch_no,
+      series: vchSeries.value || "Main",
+      date: vchDate.value,
+      saleType: vchSaleType.value,
+      party: party,
+      matCentre: vchMatCentre.value,
+      narration: vchNarration.value.trim(),
+      items: items,
+      subtotal: subtotal,
+      grandTotal: grandTotal,
+      createdAt: new Date().toISOString()
+    });
+
+    checkLowStockAlerts(false);
+    showNotification(`Sales Bill #${savedData.vch_no} saved and committed!`);
+
+    // Automatic post-save transition to dedicated Print screen
+    printSourceScreen = "view-sales-voucher";
+    openFastBillingPrint(savedData.voucher_id || savedData.id, savedData, "view-sales-voucher");
+  };
+
+  if (window.backend && activeCompany) {
     window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
       try {
         const r = JSON.parse(resp);
         if (r.success) {
-          lastCompletedVoucher = r.data.vch_no;
-          checkLowStockAlerts(false);
+          onCommitSuccess(r.data);
+        } else {
+          alert(`Failed to save sales invoice: ${r.error}`);
         }
-      } catch (e) {}
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      }
     });
-  }
-
-  saveSalesVoucherRecord(voucherRecord);
-  showNotification(`Sales Bill #${currentNo} saved successfully!`);
-
-  // Prompt or prepare next sequential bill
-  if (confirm(`Bill #${currentNo} saved!\nCreate next bill (#${getNextVoucherNumber()})?`)) {
-    initSalesVoucherScreen();
   } else {
-    showScreen("view-sales-list");
+    // Offline / mock fallback
+    const mockVchNo = getNextVoucherNumber();
+    const mockData = {
+      id: "vch_" + Date.now(),
+      voucher_id: "vch_" + Date.now(),
+      vch_no: mockVchNo,
+      party_name: party,
+      account_id: customerAccountId,
+      vch_date: vchDate.value,
+      subtotal: subtotal,
+      grand_total: parseFloat(grandTotal.replace(/,/g, "")),
+      items: items
+    };
+    onCommitSuccess(mockData);
   }
 }
 
@@ -3174,7 +4229,14 @@ function openModifySaleInvoice(vchId) {
     if (vchNumber) vchNumber.value = vch.vch_no || "";
     if (infoVchNo) infoVchNo.textContent = vch.vch_no || "";
     if (vchDate && vch.vch_date) vchDate.value = vch.vch_date;
-    if (vchPartyInput) vchPartyInput.value = vch.party_name || "CASH";
+    if (vchPartyInput) {
+      vchPartyInput.value = vch.party_name || "CASH";
+      if (vch.account_id) {
+        vchPartyInput.dataset.accountId = vch.account_id;
+      } else {
+        delete vchPartyInput.dataset.accountId;
+      }
+    }
     if (vchSaleType && vch.sale_type) vchSaleType.value = vch.sale_type;
     if (vchNarration) vchNarration.value = vch.narration || "";
 
@@ -3191,26 +4253,47 @@ function openModifySaleInvoice(vchId) {
       const priceEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-price-input[data-row="${r}"]`) : null;
       const amtEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-amount-input[data-row="${r}"]`) : null;
       if (nameEl) {
-        nameEl.value = it ? (it.name || "") : "";
-        nameEl.dataset.itemId = it ? (it.item_id || "") : "";
+        nameEl.value = it ? (it.item_name || it.name || "") : "";
+        nameEl.dataset.itemId = it ? (it.item_id || it.id || "") : "";
       }
       if (qtyEl) qtyEl.value = it ? (it.qty || "") : "";
       if (unitEl) unitEl.value = it ? (it.unit || "Pcs.") : "Pcs.";
       if (priceEl) priceEl.value = it ? (it.price || "") : "";
       if (amtEl) amtEl.value = it ? (it.line_total || it.amount || "") : "";
     }
+    updateVoucherPartyCategory();
     recalculateVoucherTotals();
     showScreen("view-sales-voucher");
   };
 
-  if (window.backend && window.backend.listVouchers) {
+  if (window.backend && window.backend.getVoucherDetails) {
+    window.backend.getVoucherDetails(activeCompany.id, vchId, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          loadInvoice(r.data);
+          return;
+        }
+      } catch (e) {}
+      if (window.backend.listVouchers) {
+        window.backend.listVouchers(activeCompany.id, (resp2) => {
+          try {
+            const r2 = JSON.parse(resp2);
+            if (r2.success && Array.isArray(r2.data)) {
+              const found = r2.data.find(v => v.id === vchId || v.vch_no === vchId);
+              loadInvoice(found);
+            }
+          } catch (e) {}
+        });
+      }
+    });
+  } else if (window.backend && window.backend.listVouchers) {
     window.backend.listVouchers(activeCompany.id, (resp) => {
       try {
         const r = JSON.parse(resp);
         if (r.success && Array.isArray(r.data)) {
           const found = r.data.find(v => v.id === vchId || v.vch_no === vchId);
           loadInvoice(found);
-          return;
         }
       } catch (e) {}
     });
@@ -3556,7 +4639,10 @@ function initPosCustomerSelector() {
           const r = JSON.parse(resp);
           if (r.success && Array.isArray(r.data)) {
             cachedAccountsList = r.data;
-            populateOptions(r.data.filter(a => a.account_group === "Sundry Debtors" || a.group === "Sundry Debtors" || !a.account_group));
+            populateOptions(r.data.filter(a => {
+              const grp = a.account_group || a.group || "";
+              return !grp || grp === "Sundry Debtors" || grp.includes("Both") || a.classification === "Customer" || a.classification === "Both (Customer & Supplier)";
+            }));
           } else {
             populateOptions(localAccounts);
           }
@@ -4939,6 +6025,24 @@ if (accPrintName) {
 }
 
 // Item Master (Add / Edit Product)
+if (itemName) {
+  itemName.addEventListener("input", syncItemPrintName);
+  itemName.addEventListener("change", syncItemPrintName);
+  itemName.addEventListener("keyup", syncItemPrintName);
+  itemName.addEventListener("paste", () => setTimeout(syncItemPrintName, 0));
+}
+
+if (itemPrintName) {
+  itemPrintName.readOnly = true;
+  itemPrintName.setAttribute("readonly", "readonly");
+  itemPrintName.addEventListener("keydown", (e) => {
+    e.preventDefault();
+  });
+  itemPrintName.addEventListener("paste", (e) => {
+    e.preventDefault();
+  });
+}
+
 btnItemSave.addEventListener("click", handleSaveItemMaster);
 btnItemQuit.addEventListener("click", () => showScreen("view-items-list"));
 btnItemCloseTop.addEventListener("click", () => showScreen("view-dashboard"));
@@ -5180,17 +6284,27 @@ if (btnDownloadPdfPrint) {
     }
   });
 }
+function returnFromPrintScreen() {
+  if (printSourceScreen === "view-sales-voucher") {
+    printSourceScreen = "view-fast-billing";
+    initSalesVoucherScreen();
+    showScreen("view-sales-voucher");
+  } else {
+    openFastBillingNewBill();
+  }
+}
+
 if (btnPrintScreenNewBill) {
-  btnPrintScreenNewBill.addEventListener("click", () => openFastBillingNewBill());
+  btnPrintScreenNewBill.addEventListener("click", () => returnFromPrintScreen());
 }
 if (btnPrintNextBill) {
-  btnPrintNextBill.addEventListener("click", () => openFastBillingNewBill());
+  btnPrintNextBill.addEventListener("click", () => returnFromPrintScreen());
 }
 if (btnPosPrintBack) {
-  btnPosPrintBack.addEventListener("click", () => openFastBillingNewBill());
+  btnPosPrintBack.addEventListener("click", () => returnFromPrintScreen());
 }
 if (btnPosPrintClose) {
-  btnPosPrintClose.addEventListener("click", () => openFastBillingNewBill());
+  btnPosPrintClose.addEventListener("click", () => returnFromPrintScreen());
 }
 
 const customWidthInput = document.getElementById("custom-paper-width");
@@ -6403,15 +7517,12 @@ window.addEventListener("keydown", (e) => {
       openFastBillingNewBill();
     }
   } else if (currentScreen === "view-fast-billing-print") {
-    if (e.key === "F4") {
+    if (e.key === "F4" || e.key === "Escape") {
       e.preventDefault();
-      openFastBillingNewBill();
+      returnFromPrintScreen();
     } else if (e.key === "Enter" || (e.ctrlKey && (e.key === "p" || e.key === "P"))) {
       e.preventDefault();
       triggerInvoicePrint();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      openFastBillingNewBill();
     }
   } else if (currentScreen === "view-add-account-master") {
     if (e.key === "F2") {
@@ -8825,20 +9936,15 @@ if (window.HeaderManager) window.HeaderManager.init();
 if (window.DashboardManager) window.DashboardManager.init();
 if (window.GlobalSearchManager) window.GlobalSearchManager.init();
 
-if (!window.activeCompany) {
-  window.activeCompany = {
-    id: "COMP0001",
-    code: "COMP0001",
-    name: "ANTI MATRIX RETAIL & WHOLESALE",
-    fin_year: "2026-2027"
-  };
-}
+window.activeCompany = null;
+activeCompany = null;
 
 renderCompanyTable();
 populateLoginCompanies();
 updateSystemClock();
 setInterval(updateSystemClock, 10000);
 setupPosBarcodeAutocomplete();
+setupPartyAutocomplete();
 initPosTextSizeControls();
 initDailyDiscountControls();
 initPosTenderListeners();
@@ -9232,6 +10338,8 @@ function setupThreeOptionWorkflowListeners() {
 }
 
 // Global Exports
+window.syncItemPrintName = syncItemPrintName;
+window.loadProductForEditing = loadProductForEditing;
 window.renderSelectAccountModifyModal = renderSelectAccountModifyModal;
 window.renderSelectItemModifyModal = renderSelectItemModifyModal;
 window.renderSelectSalesModifyModal = renderSelectSalesModifyModal;
@@ -9241,11 +10349,15 @@ window.openModifyAccountMaster = openModifyAccountMaster;
 window.openModifySaleInvoice = openModifySaleInvoice;
 window.openModifyPurchaseVoucher = openModifyPurchaseVoucher;
 window.renderAccountMasterList = renderAccountMasterList;
+window.removeAlternateBarcode = removeAlternateBarcode;
+window.openBarcodeLabelModal = openBarcodeLabelModal;
+window.initBarcodeModule = initBarcodeModule;
 
 setupEnterpriseErpEventListeners();
 setupCompanyAndPlaceholderModalListeners();
 setupThreeOptionWorkflowListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
+initBarcodeModule();
 ZoomController.init();
-showScreen("view-dashboard");
+showScreen("view-login");

@@ -3,6 +3,7 @@ import pytest
 from db.database import DatabaseManager
 from services.billing_service import BillingService
 from services.catalogue_service import CatalogueService
+from services.account_service import AccountService
 
 
 @pytest.fixture
@@ -32,6 +33,14 @@ def initialized_db(tmp_path):
 def test_atomic_sales_invoice_creation(initialized_db):
     cat_service = CatalogueService(initialized_db)
     bill_service = BillingService(initialized_db)
+    acc_service = AccountService(initialized_db)
+
+    # 0. Register customer master
+    cust = acc_service.save_account('C1', {
+        "name": "KAVIN RETAILS",
+        "account_group": "Sundry Debtors",
+        "state": "Tamilnadu"
+    })
     
     # 1. Create a product with 100 units opening stock
     item_res = cat_service.save_item('C1', {

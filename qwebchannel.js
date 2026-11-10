@@ -185,7 +185,7 @@ function QObject(name, data, webChannel) {
             var signalName = signal[0];
             var signalId = signal[1];
             object[signalName] = {
-                connect: (function(signalName) {
+                connect: (function(signalName, signalId) {
                     return function(callback) {
                         if (typeof callback !== "function") {
                             console.error("Bad callback given to connect to signal " + signalName);
@@ -196,10 +196,29 @@ function QObject(name, data, webChannel) {
                         webChannel.exec({
                             type: QWebChannelMessageTypes.connectToSignal,
                             object: object.__id__,
-                            signal: signalName
+                            signal: signalId
                         });
                     };
-                })(signalName)
+                })(signalName, signalId),
+                disconnect: (function(signalName, signalId) {
+                    return function(callback) {
+                        if (typeof callback !== "function") {
+                            console.error("Bad callback given to disconnect from signal " + signalName);
+                            return;
+                        }
+                        if (object.__objectSignals__[signalName]) {
+                            var idx = object.__objectSignals__[signalName].indexOf(callback);
+                            if (idx !== -1) {
+                                object.__objectSignals__[signalName].splice(idx, 1);
+                            }
+                        }
+                        webChannel.exec({
+                            type: QWebChannelMessageTypes.disconnectFromSignal,
+                            object: object.__id__,
+                            signal: signalId
+                        });
+                    };
+                })(signalName, signalId)
             };
         }
     };

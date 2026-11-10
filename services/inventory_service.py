@@ -16,17 +16,19 @@ class InventoryService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
+        Rejects missing, empty, or unresolvable company contexts."""
         cid = str(company_id or "").strip()
+        if not cid:
+            raise ValueError("Company context is required. Missing company identifier.")
+
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            if cid:
-                cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-                c_row = cursor.fetchone()
-                if c_row:
-                    return c_row["id"]
-            cursor.execute("SELECT id FROM companies ORDER BY id ASC LIMIT 1;")
-            c_default = cursor.fetchone()
-            return c_default["id"] if c_default else cid
+            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+            c_row = cursor.fetchone()
+            if c_row:
+                return c_row["id"]
+        raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _get_default_branch_id(self, company_id: str) -> Optional[str]:
         with self.db.get_connection() as conn:
@@ -240,7 +242,7 @@ class InventoryService:
                 INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                    current_qty = current_qty + excluded.current_qty,
+                    current_qty = stock_balances.current_qty + excluded.current_qty,
                     last_updated = CURRENT_TIMESTAMP;
             """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, qty_delta))
 
@@ -331,7 +333,7 @@ class InventoryService:
                     INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                        current_qty = current_qty + excluded.current_qty,
+                        current_qty = stock_balances.current_qty + excluded.current_qty,
                         last_updated = CURRENT_TIMESTAMP;
                 """, (str(uuid.uuid4()), actual_comp_id, branch_id, item_id, diff_qty))
 
@@ -429,7 +431,7 @@ class InventoryService:
                     INSERT INTO stock_balances (id, company_id, branch_id, item_id, current_qty)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(branch_id, item_id) DO UPDATE SET
-                        current_qty = current_qty + excluded.current_qty,
+                        current_qty = stock_balances.current_qty + excluded.current_qty,
                         last_updated = CURRENT_TIMESTAMP;
                 """, (str(uuid.uuid4()), actual_comp_id, dst_branch, item_id, qty))
 
@@ -475,7 +477,7 @@ class InventoryService:
                 SELECT i.id, i.name, i.alias, i.item_group, i.unit, i.op_stock_qty,
                        i.op_stock_val, i.purc_price, i.sales_price,
                        i.min_stock_alert_level, i.alert_enabled,
-                       COALESCE(sb.current_qty, 0.0) as closing_stock,
+                       COALESCE(MAX(sb.current_qty), 0.0) as closing_stock,
                        GROUP_CONCAT(ib.barcode, ', ') as barcodes
                 FROM items i
                 LEFT JOIN stock_balances sb ON sb.item_id = i.id AND sb.branch_id = ?
@@ -711,7 +713,12 @@ class InventoryService:
         summary = self.get_stock_summary(actual_comp_id)
         return [r for r in summary if r["closing_stock"] <= threshold]
 
-    def evaluate_low_stock_alerts(self, company_id: str, branch_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def evaluate_low_stock_alerts(
+        self,
+        company_id: str,
+        branch_id: Optional[str] = None,
+        item_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Authoritatively evaluates items with configured low-stock thresholds against
         real-time stock balances across all branches or a designated branch.
@@ -724,9 +731,20 @@ class InventoryService:
           marks as 'RESOLVED' when stock recovers above threshold; preserves historic alerts.
         """
         actual_comp_id = self._resolve_company_id(company_id)
+        target_item_filter = item_id
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
+
+            # Preload active/dismissed alerts in one query to avoid N roundtrips
+            cursor.execute("""
+                SELECT id, item_id, branch_id, status, created_at 
+                FROM low_stock_alerts
+                WHERE company_id = ? AND status IN ('ACTIVE', 'DISMISSED');
+            """, (actual_comp_id,))
+            existing_alerts_map = {}
+            for r in cursor.fetchall():
+                existing_alerts_map[(r["item_id"], r["branch_id"])] = dict(r)
 
             # Load branch-level overrides for fast in-memory mapping
             cursor.execute("SELECT * FROM item_branch_stock_configs WHERE company_id = ?;", (actual_comp_id,))
@@ -753,27 +771,33 @@ class InventoryService:
                 target_branch_name = br["name"]
                 is_def_branch = 1 if br.get("is_default") else 0
 
-                cursor.execute("""
+                item_filter_clause = "AND i.id = ?" if target_item_filter else ""
+                query_params = [target_branch_id, actual_comp_id, is_def_branch, target_branch_id]
+                if target_item_filter:
+                    query_params.append(target_item_filter)
+
+                cursor.execute(f"""
                     SELECT i.id, i.name, i.alias, i.unit, i.item_group,
                            i.min_stock_alert_level, i.reorder_level, i.reorder_qty, i.max_stock_level, i.alert_enabled,
-                           COALESCE(sb.current_qty, 0.0) as available_qty,
+                           COALESCE(MAX(sb.current_qty), 0.0) as available_qty,
                            GROUP_CONCAT(ib.barcode, ', ') as barcodes
                     FROM items i
-                    LEFT JOIN stock_balances sb ON sb.item_id = i.id AND (? IS NULL OR sb.branch_id = ?)
+                    LEFT JOIN stock_balances sb ON sb.item_id = i.id AND sb.branch_id = ?
                     LEFT JOIN item_barcodes ib ON ib.item_id = i.id
                     WHERE i.company_id = ? AND i.is_active = 1
                       AND (? = 1 OR sb.id IS NOT NULL OR EXISTS (
                           SELECT 1 FROM item_branch_stock_configs cfg
                           WHERE cfg.branch_id = ? AND cfg.item_id = i.id
                       ))
+                      {item_filter_clause}
                     GROUP BY i.id
                     ORDER BY i.name ASC;
-                """, (target_branch_id, target_branch_id, actual_comp_id, is_def_branch, target_branch_id))
+                """, tuple(query_params))
                 items_to_check = [dict(r) for r in cursor.fetchall()]
 
                 for it in items_to_check:
-                    item_id = it["id"]
-                    override = branch_configs.get((target_branch_id, item_id))
+                    curr_item_id = it["id"]
+                    override = branch_configs.get((target_branch_id, curr_item_id))
 
                     if override:
                         alert_enabled = 1 if override.get("alert_enabled", 1) in (1, True, "1", "true") else 0
@@ -800,7 +824,7 @@ class InventoryService:
                             SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
                             WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
                               AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        """, (actual_comp_id, curr_item_id, target_branch_id, target_branch_id))
                         continue
 
                     available = float(it["available_qty"])
@@ -822,7 +846,7 @@ class InventoryService:
                             SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
                             WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
                               AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        """, (actual_comp_id, curr_item_id, target_branch_id, target_branch_id))
                         continue
 
                     if is_low_stock:
@@ -845,13 +869,8 @@ class InventoryService:
 
                         bcode = it.get("barcodes") or it.get("alias") or "-"
 
-                        # Check if active or dismissed alert already exists
-                        cursor.execute("""
-                            SELECT id, status, created_at FROM low_stock_alerts
-                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
-                              AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
-                        existing = cursor.fetchone()
+                        # Check if active or dismissed alert already exists in-memory
+                        existing = existing_alerts_map.get((curr_item_id, target_branch_id))
 
                         if existing:
                             alert_id = existing["id"]
@@ -872,12 +891,19 @@ class InventoryService:
                                     id, company_id, item_id, branch_id, threshold, min_stock_level, reorder_level,
                                     available_qty, suggested_reorder_qty, severity, status, last_evaluated_at, created_at
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-                            """, (alert_id, actual_comp_id, item_id, target_branch_id, eff_threshold, min_lvl, reorder_lvl, available, suggested_qty, severity))
+                            """, (alert_id, actual_comp_id, curr_item_id, target_branch_id, eff_threshold, min_lvl, reorder_lvl, available, suggested_qty, severity))
+                            existing_alerts_map[(curr_item_id, target_branch_id)] = {
+                                "id": alert_id,
+                                "item_id": curr_item_id,
+                                "branch_id": target_branch_id,
+                                "status": "ACTIVE",
+                                "created_at": alert_created_at
+                            }
 
                         active_alerts.append({
                             "alert_id": alert_id,
                             "id": alert_id,
-                            "item_id": item_id,
+                            "item_id": curr_item_id,
                             "product_name": it["name"],
                             "name": it["name"],
                             "item_code": it.get("alias") or it["name"][:6],
@@ -899,13 +925,15 @@ class InventoryService:
                             "created_at": str(alert_created_at)
                         })
                     else:
-                        # Stock recovered above threshold -> mark alert as RESOLVED
-                        cursor.execute("""
-                            UPDATE low_stock_alerts
-                            SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
-                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
-                              AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, item_id, target_branch_id, target_branch_id))
+                        # Stock recovered above threshold -> mark alert as RESOLVED only if currently active/dismissed
+                        existing = existing_alerts_map.get((curr_item_id, target_branch_id))
+                        if existing:
+                            cursor.execute("""
+                                UPDATE low_stock_alerts
+                                SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
+                                WHERE id = ?;
+                            """, (existing["id"],))
+                            del existing_alerts_map[(curr_item_id, target_branch_id)]
 
             conn.commit()
 
@@ -939,7 +967,7 @@ class InventoryService:
                     LEFT JOIN branches b ON b.id = a.branch_id
                     LEFT JOIN item_barcodes ib ON ib.item_id = i.id
                     WHERE a.company_id = ? AND a.status = 'RESOLVED'
-                    GROUP BY a.id
+                    GROUP BY a.id, i.name, i.alias, i.unit, b.name
                     ORDER BY a.resolved_at DESC, a.last_evaluated_at DESC
                     LIMIT 100;
                 """, (actual_comp_id,))

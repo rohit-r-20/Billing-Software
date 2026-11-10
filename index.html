@@ -12,7 +12,7 @@
     <div class="alpha-backdrop" id="alpha-backdrop"></div>
 
     <!-- A. LEFT SIDEBAR -->
-    <aside class="alpha-sidebar" id="alpha-sidebar">
+    <aside class="alpha-sidebar" id="alpha-sidebar" style="display: none;">
       <!-- Brand Identity Header -->
       <div class="alpha-sidebar-brand">
         <div class="brand-link" id="brand-home-link" onclick="if(window.showScreen) window.showScreen('view-dashboard');">
@@ -32,14 +32,14 @@
       </nav>
 
       <!-- User Profile Footer -->
-      <div class="alpha-sidebar-footer">
-        <div class="user-avatar-badge">
-          <span>AD</span>
+      <div class="alpha-sidebar-footer" id="alpha-sidebar-footer">
+        <div class="user-avatar-badge" id="sidebar-user-avatar">
+          <span></span>
           <span class="user-status-dot"></span>
         </div>
         <div class="user-info">
-          <span class="user-name">Administrator</span>
-          <span class="user-role-badge">Super Admin</span>
+          <span class="user-name" id="sidebar-user-name"></span>
+          <span class="user-role-badge" id="sidebar-user-role"></span>
         </div>
         <button type="button" class="btn-user-action" id="btn-sidebar-logout" title="Sign Out">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -50,7 +50,7 @@
     <!-- B. MAIN CONTENT WRAPPER -->
     <div class="alpha-content-wrapper">
       <!-- TOP HEADER -->
-      <header class="alpha-top-header">
+      <header class="alpha-top-header" id="alpha-top-header" style="display: none;">
         <div class="header-left-group">
           <button type="button" class="btn-mobile-menu-toggle" id="btn-mobile-menu-toggle" aria-label="Toggle Navigation">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
@@ -75,7 +75,7 @@
               <span class="context-icon"></span>
               <div class="context-label-box">
                 <span class="context-tag">Company</span>
-                <span class="context-value" id="header-company-val">ANTI MATRIX (COMP0001)</span>
+                <span class="context-value" id="header-company-val"></span>
               </div>
               <span class="context-chevron"></span>
             </button>
@@ -88,7 +88,7 @@
               <span class="context-icon"></span>
               <div class="context-label-box">
                 <span class="context-tag">Branch</span>
-                <span class="context-value" id="header-branch-val">Main Branch (HQ)</span>
+                <span class="context-value" id="header-branch-val"></span>
               </div>
               <span class="context-chevron"></span>
             </button>
@@ -133,8 +133,8 @@
           <!-- User Profile Trigger -->
           <div style="position:relative;">
             <button type="button" class="header-user-btn" id="btn-header-user">
-              <div class="header-user-avatar">AD</div>
-              <span class="header-user-name">Admin</span>
+              <div class="header-user-avatar" id="header-user-avatar"></div>
+              <span class="header-user-name" id="header-user-name"></span>
               <span class="user-chevron"></span>
             </button>
             <div class="alpha-dropdown-menu" id="dropdown-header-user"></div>
@@ -437,23 +437,23 @@
       <!-- =========================================================
            VIEW: ALPHA BILLING PREMIUM DASHBOARD
       ========================================================== -->
-      <section class="screen-view active" id="view-dashboard">
+      <section class="screen-view" id="view-dashboard">
         <!-- 1. Welcome & Business Context Section -->
         <div class="dashboard-welcome-banner">
           <div class="welcome-left-col">
             <div class="welcome-greeting-row">
-              <h2 class="welcome-heading" id="welcome-greeting-heading">Good morning, Admin</h2>
+              <h2 class="welcome-heading" id="welcome-greeting-heading"></h2>
               <span class="business-data-mode-badge" id="business-data-mode-badge">
                 <span class="mode-pulse-dot"></span>
-                Sample Business Data (Active Context)
+                <span id="business-data-mode-text">Awaiting Authentication</span>
               </span>
             </div>
             <div class="welcome-context-meta">
-              <span class="meta-pill">Company: <strong id="welcome-ctx-company">ANTI MATRIX RETAIL & WHOLESALE</strong></span>
+              <span class="meta-pill">Company: <strong id="welcome-ctx-company">--</strong></span>
               <span class="meta-sep">&bull;</span>
-              <span class="meta-pill">Branch: <strong id="welcome-ctx-branch">Main Branch (HQ)</strong></span>
+              <span class="meta-pill">Branch: <strong id="welcome-ctx-branch">--</strong></span>
               <span class="meta-sep">&bull;</span>
-              <span class="meta-pill">FY: <strong id="welcome-ctx-year">2026-2027</strong></span>
+              <span class="meta-pill">FY: <strong id="welcome-ctx-year">--</strong></span>
               <span class="meta-sep">&bull;</span>
               <span class="meta-pill">Currency: <strong>INR (₹)</strong></span>
             </div>
@@ -865,6 +865,7 @@
                   <select id="acc-group" class="select-box">
                     <option value="Sundry Debtors">Sundry Debtors (Customers)</option>
                     <option value="Sundry Creditors">Sundry Creditors (Suppliers)</option>
+                    <option value="Both (Customer & Supplier)">Both (Customer & Supplier)</option>
                     <option value="Bank Accounts">Bank Accounts</option>
                     <option value="Cash-in-hand">Cash-in-hand</option>
                     <option value="Sales Accounts">Sales Accounts</option>
@@ -981,6 +982,7 @@
               <option value="">All Groups</option>
               <option value="Sundry Debtors">Sundry Debtors (Customers)</option>
               <option value="Sundry Creditors">Sundry Creditors (Suppliers)</option>
+              <option value="Both (Customer & Supplier)">Both (Customer & Supplier)</option>
               <option value="Bank Accounts">Bank Accounts</option>
               <option value="Cash-in-hand">Cash-in-hand</option>
               <option value="Sales Accounts">Sales Accounts</option>
@@ -1052,13 +1054,49 @@
                   <input type="text" id="item-name" class="input-highlight" placeholder="e.g. Milk Bikis 100g" required />
                 </div>
               </div>
-              <div class="field-row">
+              <div class="field-row with-btn barcode-field-row">
                 <label class="field-label" for="item-alias">Barcode / SKU Code</label>
-                <input type="text" id="item-alias" placeholder="e.g. 8901234567890" />
+                <div class="barcode-input-container" style="flex: 1; display: flex; gap: 4px; align-items: center;">
+                  <input type="text" id="item-alias" placeholder="e.g. 8901234567890 or click Generate" style="flex: 1;" />
+                  <button type="button" class="btn-sub-action btn-generate-barcode-action" id="btn-generate-barcode" title="Generate Unique Internal Barcode (Code 128)" style="font-weight: 700; background: #2563eb; color: #ffffff; border: 1px solid #1d4ed8; padding: 3px 8px; border-radius: 3px;">
+                    ⚡ Generate Barcode
+                  </button>
+                  <button type="button" class="btn-sub-action btn-print-label-action" id="btn-print-barcode-label" title="Print Barcode Label" style="font-weight: 700; background: #059669; color: #ffffff; border: 1px solid #047857; padding: 3px 8px; border-radius: 3px;">
+                    🖨️ Print Label
+                  </button>
+                </div>
+              </div>
+
+              <!-- Barcode Live Visual Preview & Validation Card -->
+              <div class="field-row barcode-preview-row" id="item-barcode-preview-container" style="display: none; margin-bottom: 6px;">
+                <label class="field-label" style="visibility: hidden;">Preview</label>
+                <div class="barcode-preview-card" style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                  <div class="barcode-graphic-wrapper" id="item-barcode-svg-wrapper" style="min-height: 40px; display: flex; align-items: center; justify-content: center; background: #ffffff; padding: 2px 6px; border: 1px solid #e2e8f0; border-radius: 3px;">
+                    <!-- Barcode SVG preview -->
+                  </div>
+                  <div class="barcode-info-wrapper" style="flex: 1; font-size: 11px;">
+                    <div style="font-weight: 700; color: #0f172a; font-family: monospace; font-size: 12.5px;" id="item-barcode-human-text">AB000000000001</div>
+                    <div style="color: #475569; font-size: 10px; margin-top: 1px;" id="item-barcode-standard-badge">Code 128 (Alpha Billing Internal)</div>
+                    <div id="item-barcode-status-text" style="font-size: 10.5px; margin-top: 2px; color: #166534; font-weight: 600;">Unique &amp; Available</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Alternate Barcodes Section for Multiple Barcodes Per Product -->
+              <div class="field-row alternate-barcodes-row" style="margin-bottom: 6px;">
+                <label class="field-label" for="item-alternate-barcodes-input">Alternate Barcodes</label>
+                <div style="flex: 1;">
+                  <div style="display: flex; gap: 4px;">
+                    <input type="text" id="item-alternate-barcodes-input" placeholder="Add manufacturer, packaging or secondary barcode..." style="flex: 1;" />
+                    <button type="button" class="btn-sub-action" id="btn-add-alternate-barcode" style="background: #e2e8f0; font-weight: 600; padding: 3px 8px;">+ Add</button>
+                  </div>
+                  <div id="item-alternate-barcodes-list" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                  </div>
+                </div>
               </div>
               <div class="field-row">
                 <label class="field-label" for="item-print-name">Receipt Print Name</label>
-                <input type="text" id="item-print-name" placeholder="Name printed on bill" />
+                <input type="text" id="item-print-name" class="input-readonly" readonly tabindex="-1" title="Automatically populated from Product Name (Read-only)" placeholder="Auto-populated from Product Name" />
               </div>
               <div class="field-row">
                 <label class="field-label" for="item-group">Product Category</label>
@@ -1276,12 +1314,10 @@
             <div class="vch-meta-row">
               <div class="meta-item flex-2">
                 <span class="meta-label">Party</span>
-                <div class="party-picker-box" style="display: flex; align-items: center; gap: 8px;">
-                  <input type="text" id="vch-party-input" placeholder="Select or type Customer / Party Name" list="party-datalist" autocomplete="off" />
+                <div class="party-picker-box" style="display: flex; align-items: center; gap: 8px; position: relative;">
+                  <input type="text" id="vch-party-input" placeholder="Search Customer from Masters (or Cash)..." autocomplete="off" />
                   <span id="vch-party-category-badge" class="vch-party-category-badge" style="display: none; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap;"></span>
-                  <datalist id="party-datalist">
-                    <!-- Populated from Account Masters -->
-                  </datalist>
+                  <div id="vch-party-autocomplete-popup" class="vch-autocomplete-popup" style="display: none;"></div>
                 </div>
               </div>
               <div class="meta-item">
@@ -1309,8 +1345,8 @@
                     <tr>
                       <th class="col-vch-sn">S.N.</th>
                       <th class="col-vch-item">Item</th>
-                      <th class="col-vch-qty">Qty.</th>
                       <th class="col-vch-unit">Unit</th>
+                      <th class="col-vch-qty">Qty.</th>
                       <th class="col-vch-price">Price (Rs.)</th>
                       <th class="col-vch-amount">Amount (Rs.)</th>
                     </tr>
@@ -2927,6 +2963,54 @@
           <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 14px;">
             <button type="button" class="btn-action" id="btn-download-pdf-invoice">Save PDF Invoice</button>
             <button type="button" class="btn-action primary-btn" id="btn-print-receipt-action">Print Receipt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: BARCODE LABEL PRINTING
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-barcode-label-print" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 520px; max-width: 95%;">
+        <div class="create-comp-header">
+          <h2>Barcode Label Printing</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-barcode-modal">&times;</button>
+        </div>
+        <div style="padding: 14px 18px;">
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-weight: 700; font-size: 11px; color: #1e293b; margin-bottom: 4px;">Label Dimensions / Printer Type:</label>
+            <select id="barcode-label-size-select" class="select-box" style="width: 100%;">
+              <option value="50x25">50mm x 25mm (Standard 2" x 1" Thermal)</option>
+              <option value="38x25">38mm x 25mm (Compact Retail Label)</option>
+              <option value="50x38">50mm x 38mm (Detailed with Price &amp; MRP)</option>
+              <option value="a4_24">A4 Sheet (3 Columns × 8 Rows = 24 Labels / Page)</option>
+            </select>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; font-size: 11.5px; background: #f8fafc; padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0;">
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="chk-label-include-name" checked> <span>Product Name</span></label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="chk-label-include-price" checked> <span>Selling Price (₹)</span></label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="chk-label-include-mrp" checked> <span>M.R.P. (₹)</span></label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="chk-label-include-sku" checked> <span>Item Code / SKU</span></label>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 11px; color: #1e293b;">Number of Label Copies:</label>
+            <input type="number" id="barcode-label-copies" min="1" max="500" value="1" style="width: 90px; text-align: center; font-weight: 700; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+          </div>
+
+          <!-- Live Physical Label Preview -->
+          <div style="border: 2px dashed #94a3b8; border-radius: 6px; padding: 12px; background: #f8fafc; text-align: center; margin-bottom: 14px;">
+            <div style="font-size: 10.5px; color: #64748b; font-weight: 600; margin-bottom: 8px;">Physical Label Preview (Exact Proportions):</div>
+            <div id="barcode-label-live-preview" style="display: inline-flex; justify-content: center; align-items: center; background: #fff; border: 1px solid #334155; border-radius: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); padding: 4px;">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn-action" id="btn-cancel-barcode-modal">Cancel</button>
+            <button type="button" class="btn-action primary-btn" id="btn-execute-print-barcode" style="background: #2563eb; color: #fff;">
+              🖨️ Print Barcode Labels
+            </button>
           </div>
         </div>
       </div>

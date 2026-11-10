@@ -10,4 +10,19 @@ backups/
 *.tar.gz
 _legacy_backup/
 scratch/
+.env
+.env.local
+.env.*.local
 
+# Environment secrets
+.env.*
+!.env.example
+
+# Python testing and tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/

@@ -1239,7 +1239,9 @@ html, body {
 
 .input-readonly,
 #acc-print-name,
-#acc-print-name[readonly] {
+#acc-print-name[readonly],
+#item-print-name,
+#item-print-name[readonly] {
   background-color: #f1f5f9 !important;
   color: #334155 !important;
   border: 1px dashed #94a3b8 !important;
@@ -4245,6 +4247,53 @@ html, body {
   color: #166534;
 }
 
+.vch-party-no-match {
+  padding: 10px 12px;
+  background-color: #fef2f2;
+  border-left: 4px solid #ef4444;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vch-party-sugg-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.vch-party-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.vch-party-badge.customer {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.vch-party-badge.both {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.vch-unit-input.input-readonly {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  cursor: default !important;
+  text-align: center;
+  font-weight: 600;
+}
+
 /* =============================================================
    PRODUCT SEARCH MODAL (F1) STYLES & DIALOG ALIGNMENT
    ============================================================= */
@@ -5381,6 +5430,126 @@ html, body {
     width: 80mm !important;
     max-height: none !important;
     overflow: visible !important;
+  }
+}
+
+/* =============================================================
+   AUTOMATIC UNIQUE BARCODE GENERATOR & LABEL PRINTING STYLES
+   ============================================================= */
+.barcode-input-container input {
+  font-family: 'SF Mono', Consolas, Monaco, monospace;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.btn-generate-barcode-action {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+  padding: 3px 8px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  border-radius: 3px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-generate-barcode-action:hover {
+  background: #1d4ed8 !important;
+}
+
+.btn-print-label-action {
+  background: #059669 !important;
+  color: #ffffff !important;
+  border-color: #047857 !important;
+  padding: 3px 8px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  border-radius: 3px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-print-label-action:hover {
+  background: #047857 !important;
+}
+
+.barcode-preview-card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  border: 1px solid #cbd5e1;
+}
+
+.barcode-graphic-wrapper svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.alternate-barcode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #e2e8f0;
+  color: #1e293b;
+  font-family: 'SF Mono', Consolas, Monaco, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #cbd5e1;
+}
+
+.alternate-barcode-badge .remove-barcode-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.alternate-barcode-badge .remove-barcode-btn:hover {
+  color: #ef4444;
+}
+
+/* Print Styles for Physical Barcode Labels - Strictly Decoupled from Zoom */
+@media print {
+  .modal-overlay#modal-barcode-label-print {
+    display: block !important;
+    position: static !important;
+    background: transparent !important;
+    width: 100% !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .modal-overlay#modal-barcode-label-print .create-comp-header,
+  .modal-overlay#modal-barcode-label-print .modal-footer,
+  .modal-overlay#modal-barcode-label-print select,
+  .modal-overlay#modal-barcode-label-print input,
+  .modal-overlay#modal-barcode-label-print .btn-action,
+  .modal-overlay#modal-barcode-label-print label {
+    display: none !important;
+  }
+
+  .modal-overlay#modal-barcode-label-print .create-comp-dialog-box {
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  .physical-barcode-label {
+    zoom: 1 !important;
+    transform: none !important;
+    border: none !important;
+    page-break-after: always;
   }
 }
 
