@@ -52,18 +52,24 @@ def _create_test_customer(
     company_id: str,
     customer_name: str,
     customer_category: str = "Direct Customer"
-) -> str:
-    """Create a customer master record in the accounts table for non-cash sales testing."""
+) -> tuple:
+    """Create a customer master record in the accounts table for non-cash sales testing.
+    Appends a unique suffix to the customer name to ensure test isolation.
+
+    Returns tuple of (account_id, unique_customer_name) for proper test isolation.
+    """
     account_id = str(uuid.uuid4())
+    unique_suffix = uuid.uuid4().hex[:6].upper()
+    unique_name = f"{customer_name}-{unique_suffix}"
     with db_manager.get_connection() as conn:
         conn.execute("""
             INSERT INTO accounts (
                 id, company_id, name, alias, print_name, account_group,
                 customer_category, is_active
             ) VALUES (?, ?, ?, ?, ?, 'Sundry Debtors', ?, 1);
-        """, (account_id, company_id, customer_name, '', customer_name, customer_category))
+        """, (account_id, company_id, unique_name, '', unique_name, customer_category))
         conn.commit()
-    return account_id
+    return account_id, unique_name
 
 
 def _create_configured_item(
@@ -132,14 +138,14 @@ def test_criterion_1_notification_triggers_when_reaching_reorder_level():
     assert not any(a["item_id"] == item["id"] for a in alerts)
 
     # Create customer master for non-cash sale
-    _create_test_customer(COMPANY_ID, "REACH THRESHOLD CUSTOMER")
+    _, customer_name = _create_test_customer(COMPANY_ID, "REACH THRESHOLD CUSTOMER")
 
     # Sale of exactly 5.0 -> stock becomes exactly 15.0 (Available Stock == Reorder Level)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 5.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="REACH THRESHOLD CUSTOMER",
+        party_name=customer_name,
         series="Main"
     )
 
@@ -169,14 +175,14 @@ def test_criterion_2_notification_triggers_when_falling_below_reorder_level():
     )
 
     # Create customer master for non-cash sale
-    _create_test_customer(COMPANY_ID, "FALL BELOW CUSTOMER")
+    _, customer_name = _create_test_customer(COMPANY_ID, "FALL BELOW CUSTOMER")
 
     # Sale of 12.0 -> stock becomes 8.0 (below reorder level 15.0 and below min stock 10.0)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 12.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="FALL BELOW CUSTOMER",
+        party_name=customer_name,
         series="Main"
     )
 
@@ -211,15 +217,15 @@ def test_criterion_3_notifications_not_duplicated_continuously():
     first_alert_id = matching1[0]["alert_id"]
 
     # Create customer masters for non-cash sales
-    _create_test_customer(COMPANY_ID, "SUBSEQUENT SALE 1")
-    _create_test_customer(COMPANY_ID, "SUBSEQUENT SALE 2")
+    _, customer_name1 = _create_test_customer(COMPANY_ID, "SUBSEQUENT SALE 1")
+    _, customer_name2 = _create_test_customer(COMPANY_ID, "SUBSEQUENT SALE 2")
 
     # Subsequent sale 1: sell 2 units (stock 12.0)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 2.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="SUBSEQUENT SALE 1",
+        party_name=customer_name1,
         series="Main"
     )
 
@@ -228,7 +234,7 @@ def test_criterion_3_notifications_not_duplicated_continuously():
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 3.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="SUBSEQUENT SALE 2",
+        party_name=customer_name2,
         series="Main"
     )
 
@@ -284,14 +290,14 @@ def test_criterion_4_resolved_alerts_handled_correctly():
     assert matching_resolved[0]["resolved_at"] != ""
 
     # Create customer master for non-cash sale
-    _create_test_customer(COMPANY_ID, "RE-BREACH CUSTOMER")
+    _, customer_name = _create_test_customer(COMPANY_ID, "RE-BREACH CUSTOMER")
 
     # Now drop stock below threshold again (sale of 20 units -> stock becomes 12.0 <= 15.0)
     billing_service.create_sale_invoice(
         company_id=COMPANY_ID,
         items=[{"id": item["id"], "name": item["name"], "qty": 20.0, "price": 100.0, "tax_rate": 18.0}],
         branch_id=branch_id,
-        party_name="RE-BREACH CUSTOMER",
+        party_name=customer_name,
         series="Main"
     )
 
