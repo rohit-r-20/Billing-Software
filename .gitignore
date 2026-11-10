@@ -5,6 +5,7 @@ __pycache__/
 *.log
 data/
 *.db
+billing.db
 db/*.db
 !db/migrations/
 backups/
