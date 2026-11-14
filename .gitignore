@@ -3,11 +3,31 @@ __pycache__/
 *.pyc
 .DS_Store
 *.log
-data/
+# Database files
 *.db
 billing.db
 db/*.db
 !db/migrations/
+data/
+data/*
+data/.*
+*.sqlite
+*.sqlite3
+*.db3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Security tokens & keys (token material files only)
+.*setup_token*
+*.token
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
 backups/
 *.tar.gz
 _legacy_backup/

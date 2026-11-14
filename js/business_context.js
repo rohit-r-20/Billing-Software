@@ -11,62 +11,21 @@ const AuthState = Object.freeze({
   SESSION_EXPIRED: "SESSION_EXPIRED"
 });
 
+function isCanonicalUUID(id) {
+  if (typeof id !== "string") return false;
+  if (id.length !== 36 || id !== id.trim()) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 class BusinessContextManager {
   constructor() {
     this.AuthState = AuthState;
     this.authState = AuthState.UNAUTHENTICATED;
+    this.isCanonicalUUID = isCanonicalUUID;
     this.listeners = new Map();
 
-    // Default seeded companies
-    this.companies = [
-      {
-        id: "COMP0001",
-        code: "COMP0001",
-        name: "ANTI MATRIX RETAIL & WHOLESALE",
-        taxNo: "33AAAPL1234F1Z1",
-        state: "Tamilnadu",
-        finYear: "2026-2027",
-        address: "142 Commercial Axis, Main Bazaar, Erode, Tamilnadu - 638001",
-        branches: [
-          { id: "BR-HQ", code: "HQ", name: "Main Branch (HQ)", isDefault: true },
-          { id: "BR-W1", code: "WH1", name: "Central Godown / Warehouse", isDefault: false },
-          { id: "BR-R1", code: "RT1", name: "Retail Storefront #1", isDefault: false }
-        ]
-      },
-      {
-        id: "COMP0002",
-        code: "COMP0002",
-        name: "ALPHA DISTRIBUTORS & LOGISTICS",
-        taxNo: "33BBBPX5678G2Z3",
-        state: "Tamilnadu",
-        finYear: "2026-2027",
-        address: "88 Logistics Boulevard, SIPCOT Phase 2, Coimbatore - 641014",
-        branches: [
-          { id: "BR-D1", code: "D1", name: "Primary Distribution Hub", isDefault: true },
-          { id: "BR-D2", code: "D2", name: "Transit Hub South", isDefault: false }
-        ]
-      }
-    ];
-
-    // Restore any persisted updates
-    try {
-      const persisted = localStorage.getItem("alpha_custom_companies");
-      if (persisted) {
-        const parsed = JSON.parse(persisted);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach(pc => {
-            const ex = this.companies.find(c => c.id === pc.id || c.code === pc.code);
-            if (ex) {
-              Object.assign(ex, pc);
-            } else {
-              this.companies.push(pc);
-            }
-          });
-        }
-      }
-    } catch (e) {
-      console.warn("Could not parse persisted companies:", e);
-    }
+    // Companies catalog: populated exclusively from verified backend session or sanitized list
+    this.companies = [];
 
     // Initial Authentication & Context State (Clean Startup: Not Authenticated)
     this.isAuthenticated = false;
@@ -76,37 +35,12 @@ class BusinessContextManager {
   }
 
   init() {
-    // Sync company catalog with backend if available for company selection dropdown
-    if (window.backend && typeof window.backend.listCompanies === "function") {
-      try {
-        const resStr = window.backend.listCompanies();
-        const res = typeof resStr === "string" ? JSON.parse(resStr) : resStr;
-        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
-          // Merge backend companies
-          res.data.forEach(bc => {
-            const existing = this.companies.find(c => c.id === bc.id || c.code === bc.code);
-            if (!existing) {
-              this.companies.push({
-                id: bc.id,
-                code: bc.code || bc.id,
-                name: bc.name,
-                taxNo: bc.taxNo || "",
-                state: bc.state || "Tamilnadu",
-                finYear: bc.finYear || "2026-2027",
-                address: bc.address || "",
-                branches: [
-                  { id: `BR-${bc.code}-1`, code: "MAIN", name: "Main Branch (HQ)", isDefault: true }
-                ]
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.warn("Could not sync companies from backend:", err);
-      }
-    }
-
-    // Do NOT automatically activate company or user on startup before login
+    // Clean Startup: unauthenticated mode. Awaiting backend session restoration or user login.
+    this.authState = AuthState.UNAUTHENTICATED;
+    this.isAuthenticated = false;
+    this.activeCompanyId = null;
+    this.activeBranchId = null;
+    this.currentUser = null;
     console.log(`[BusinessContext] Initialized in unauthenticated mode. Awaiting user login.`);
   }
 
@@ -124,13 +58,46 @@ class BusinessContextManager {
   }
 
   setAuthenticatedSession(sessionData) {
-    if (!sessionData) return false;
+    if (!sessionData || typeof sessionData !== "object") {
+      console.error("[BusinessContext] setAuthenticatedSession rejected: sessionData must be an object.");
+      this.clearAuthenticatedSession("invalid_session_contract");
+      return false;
+    }
+
+    // 1. Strict Company Validation (fail-closed, canonical UUID required)
+    const comp = sessionData.company;
+    if (!comp || typeof comp !== "object" || !isCanonicalUUID(comp.id)) {
+      console.error("[BusinessContext] setAuthenticatedSession rejected: Valid company context with canonical UUID is required.");
+      this.clearAuthenticatedSession("invalid_company_context");
+      return false;
+    }
+
+    // 2. Strict User Validation (fail-closed, canonical UUID and valid role required)
+    const user = sessionData.user;
+    if (!user || typeof user !== "object" || !isCanonicalUUID(user.id)) {
+      console.error("[BusinessContext] setAuthenticatedSession rejected: Valid user context with user UUID is required.");
+      this.clearAuthenticatedSession("invalid_user_context");
+      return false;
+    }
+
+    if (!user.role || typeof user.role !== "string" || !user.role.trim()) {
+      console.error("[BusinessContext] setAuthenticatedSession rejected: Valid user role is required.");
+      this.clearAuthenticatedSession("invalid_user_role");
+      return false;
+    }
+
+    // 3. Strict Branch Validation (fail-closed, canonical UUID required)
+    const branch = sessionData.branch;
+    if (!branch || typeof branch !== "object" || !isCanonicalUUID(branch.id)) {
+      console.error("[BusinessContext] setAuthenticatedSession rejected: Valid branch context with branch UUID is required.");
+      this.clearAuthenticatedSession("invalid_branch_context");
+      return false;
+    }
 
     this.authState = AuthState.AUTHENTICATED;
     this.isAuthenticated = true;
 
-    // 1. Dynamic User Identity
-    const user = sessionData.user || {};
+    // Dynamic User Identity
     const rawName = (user.displayName || user.username || "").trim();
     const parts = rawName.split(/\s+/).filter(Boolean);
     let initials = "--";
@@ -143,56 +110,54 @@ class BusinessContextManager {
     }
 
     this.currentUser = {
-      id: user.id || user.userId || `usr-${Date.now()}`,
-      username: user.username || "User",
-      displayName: user.displayName || user.username || "User",
-      role: user.role || "User",
+      id: user.id.trim(),
+      username: (user.username || "").trim(),
+      displayName: (user.displayName || user.username || "").trim(),
+      role: user.role.trim(),
       avatarInitials: initials,
       status: "online"
     };
 
-    // 2. Dynamic Company Context
-    const comp = sessionData.company || 
-      this.companies.find(c => c.id === sessionData.companyId || c.code === sessionData.companyCode) || 
-      this.companies[0];
-    if (comp && !this.companies.some(c => c.id === comp.id || (c.code && comp.code && c.code === comp.code))) {
-      this.companies.push(comp);
-    }
-    this.activeCompanyId = comp ? comp.id : null;
+    // Dynamic Company Context
+    const cleanComp = {
+      id: comp.id.trim(),
+      code: (comp.code || "").trim(),
+      name: (comp.name || "").trim(),
+      finYear: comp.finYear || comp.fin_year || "2026-2027",
+      taxNo: comp.taxNo || comp.gstin || "",
+      state: comp.state || "",
+      branches: [branch]
+    };
 
-    // 3. Dynamic Branch Context
-    const branch = sessionData.branch || (comp && comp.branches ? comp.branches[0] : null);
-    if (comp && branch) {
-      if (!Array.isArray(comp.branches)) comp.branches = [];
-      if (!comp.branches.some(b => b.id === branch.id)) {
-        comp.branches.push(branch);
-      }
-    }
-    this.activeBranchId = branch ? branch.id : null;
+    this.companies = [cleanComp];
+    this.activeCompanyId = cleanComp.id;
+
+    // Dynamic Branch Context
+    this.activeBranchId = branch.id.trim();
 
     // Legacy compatibility global reference
-    window.activeCompany = comp ? {
-      id: comp.id,
-      code: comp.code,
-      name: comp.name,
-      fin_year: comp.finYear
-    } : null;
+    window.activeCompany = {
+      id: cleanComp.id,
+      code: cleanComp.code,
+      name: cleanComp.name,
+      fin_year: cleanComp.finYear
+    };
 
-    console.log(`[BusinessContext] Authenticated: ${this.currentUser?.displayName || "User"} (${this.currentUser?.role || "User"}) @ ${comp ? comp.name : "N/A"}`);
+    console.log(`[BusinessContext] Authenticated: ${this.currentUser.displayName} (${this.currentUser.role}) @ ${cleanComp.name}`);
     this.emit("auth-state-changed", {
       state: this.authState,
       isAuthenticated: true,
       user: this.currentUser,
-      company: comp,
+      company: cleanComp,
       branch: branch
     });
     this.emit("auth-changed", { 
       isAuthenticated: true, 
       user: this.currentUser, 
-      company: comp, 
+      company: cleanComp, 
       branch: branch 
     });
-    this.emit("context-changed", { company: comp, branch: branch });
+    this.emit("context-changed", { company: cleanComp, branch: branch });
     return true;
   }
 

@@ -8,8 +8,9 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+import secrets
 from PyQt5.QtCore import QObject, pyqtSlot, pyqtSignal
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLineEdit
 try:
     from PyQt5.QtPrintSupport import QPrinterInfo
 except ImportError:
@@ -32,8 +33,27 @@ from services.purchase_service import purchase_service
 from services.accounting_service import accounting_service
 from services.ocr_service import ocr_service
 from services.barcode_service import barcode_service
+from db.database import db_manager
 from core.configuration import config
 from core.logging_config import logger
+
+from services.traditional_company_service import TraditionalCompanyService
+from services.traditional_user_service import TraditionalUserService
+from services.traditional_product_service import TraditionalProductService
+from services.traditional_customer_service import TraditionalCustomerService
+from services.traditional_dashboard_service import TraditionalDashboardService
+from services.traditional_auth_service import (
+    TraditionalAuthService,
+    TraditionalSession,
+    session_registry as traditional_session_registry,
+    RECOGNIZED_SYSTEM_ROLES,
+)
+from services.traditional_setup_token import (
+    get_canonical_setup_token_path,
+    verify_setup_token,
+    consume_setup_token,
+)
+from db.traditional_database import traditional_db_manager
 
 
 class BackendBridge(QObject):
@@ -47,9 +67,42 @@ class BackendBridge(QObject):
         super().__init__(parent)
         self.parent_window = parent
         self._authenticated_session: Optional[Dict[str, Any]] = None
+        # Traditional Billing session and services
+        self._traditional_session: Optional[TraditionalSession] = None
+        try:
+            traditional_db_manager.ensure_initialized()
+        except Exception as e:
+            logger.error(f"Failed to ensure Traditional Billing DB is initialized: {e}")
+        self._traditional_auth_service = TraditionalAuthService(traditional_db_manager, traditional_session_registry)
+        self._traditional_company_service = TraditionalCompanyService(traditional_db_manager)
+        self._traditional_user_service = TraditionalUserService(traditional_db_manager, traditional_session_registry)
+        self._traditional_product_service = TraditionalProductService(traditional_db_manager)
+        self._traditional_customer_service = TraditionalCustomerService(traditional_db_manager)
+        self._traditional_dashboard_service = TraditionalDashboardService(traditional_db_manager)
         # Register mobile scanner callbacks
         mobile_scanner_service.scan_callback = self._on_mobile_scan
         mobile_scanner_service.status_callback = self._on_mobile_status
+
+    def _require_traditional_session(self) -> TraditionalSession:
+        """Verify that an active, non-expired Traditional Billing session exists."""
+        if not self._traditional_session:
+            raise PermissionError("Authentication required: No active Traditional Billing session.")
+        validated = traditional_session_registry.get_session(self._traditional_session.token)
+        if not validated:
+            self._traditional_session = None
+            raise PermissionError("Session expired: Traditional Billing session has expired. Please sign in again.")
+        self._traditional_session = validated
+        return validated
+
+    def _require_traditional_role(self, *allowed_roles: str) -> TraditionalSession:
+        """Verify the authenticated Traditional Billing session's role is in the allowed list."""
+        session = self._require_traditional_session()
+        allowed_lower = [r.strip().lower() for r in allowed_roles]
+        if session.role_name.strip().lower() not in allowed_lower:
+            raise PermissionError(
+                f"Access Denied: Role '{session.role_name}' is not authorized. Required: {', '.join(allowed_roles)}."
+            )
+        return session
 
     def _require_authenticated(self) -> Dict[str, Any]:
         """Verify that an authenticated backend session exists."""
@@ -106,51 +159,112 @@ class BackendBridge(QObject):
     def listCompanies(self) -> str:
         try:
             comps = company_service.list_companies()
-            return json.dumps({"success": True, "data": comps})
+            sanitized = [{"code": c["code"], "name": c["name"]} for c in comps if "code" in c and "name" in c]
+            return json.dumps({"success": True, "data": sanitized})
         except Exception as e:
             logger.error(f"Error in listCompanies: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, result=str)
     def authenticateCompany(self, code: str, password: str) -> str:
-        try:
-            comp = company_service.authenticate(code, password)
-            if comp:
-                self._authenticated_session = {
-                    "session_id": str(uuid.uuid4()),
-                    "company_id": comp["id"],
-                    "company_code": comp["code"],
-                    "company_name": comp.get("name"),
-                    "user_id": comp.get("userId"),
-                    "username": comp.get("username"),
-                    "role": comp.get("role", "Administrator"),
-                    "authenticated_at": datetime.now(timezone.utc).isoformat()
-                }
-                return json.dumps({"success": True, "data": comp})
-            return json.dumps({"success": False, "error": "Invalid username or password."})
-        except Exception as e:
-            logger.error(f"Error in authenticateCompany: {e}")
-            return json.dumps({"success": False, "error": str(e)})
+        return json.dumps({
+            "success": False,
+            "error": "Legacy company-password authentication is disabled. Please sign in with company code, user ID, and password via authenticateUser."
+        })
 
     @pyqtSlot(str, str, str, result=str)
     def authenticateUser(self, company_code: str, username: str, password: str) -> str:
         try:
             if not company_code or not str(company_code).strip():
                 return json.dumps({"success": False, "error": "Company context is required. Please select a company."})
+            if not username or not str(username).strip():
+                return json.dumps({"success": False, "error": "User ID is required."})
+
             comp = company_service.authenticate(company_code, password, username)
-            if comp:
-                self._authenticated_session = {
-                    "session_id": str(uuid.uuid4()),
-                    "company_id": comp["id"],
-                    "company_code": comp["code"],
-                    "company_name": comp.get("name"),
-                    "user_id": comp.get("userId"),
-                    "username": comp.get("username"),
-                    "role": comp.get("role", "Administrator"),
-                    "authenticated_at": datetime.now(timezone.utc).isoformat()
-                }
-                return json.dumps({"success": True, "data": comp})
-            return json.dumps({"success": False, "error": "Invalid User ID or password. Please try again."})
+            if not comp:
+                return json.dumps({"success": False, "error": "Invalid User ID or password. Please try again."})
+
+            user_role = comp.get("role")
+            if not user_role or not isinstance(user_role, str) or not user_role.strip():
+                logger.error(f"Auth failed: User {username} in company {company_code} has no valid role assigned.")
+                return json.dumps({"success": False, "error": "Authentication failed: User has no valid assigned role."})
+
+            # Strict Main Branch resolution: exactly one matching BR01 branch with is_default = 1
+            with db_manager.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, company_id, code, name, is_default
+                    FROM branches
+                    WHERE company_id = ? AND UPPER(code) = 'BR01' AND is_default = 1;
+                """, (comp["id"],))
+                branch_rows = cur.fetchall()
+
+            if len(branch_rows) == 0:
+                logger.error(f"Auth failed: No default BR01 branch found for company {comp['id']}")
+                return json.dumps({
+                    "success": False,
+                    "error": "Authentication failed: Main Branch (BR01) is not configured for this company."
+                })
+            if len(branch_rows) > 1:
+                logger.error(f"Auth failed: Multiple default BR01 branches found for company {comp['id']}")
+                return json.dumps({
+                    "success": False,
+                    "error": "Authentication failed: Multiple default BR01 branches configured for this company."
+                })
+
+            branch_data = dict(branch_rows[0])
+
+            self._authenticated_session = {
+                "session_id": str(uuid.uuid4()),
+                "company_id": comp["id"],
+                "company_code": comp["code"],
+                "company_name": comp.get("name"),
+                "branch_id": branch_data["id"],
+                "branch_code": branch_data["code"],
+                "branch_name": branch_data.get("name"),
+                "user_id": comp["userId"],
+                "username": comp["username"],
+                "display_name": comp.get("displayName") or comp["username"],
+                "role": user_role.strip(),
+                "authenticated_at": datetime.now(timezone.utc).isoformat()
+            }
+
+            response_data = {
+                "company": {
+                    "id": comp["id"],
+                    "code": comp["code"],
+                    "name": comp.get("name"),
+                    "finYear": comp.get("finYear"),
+                    "taxNo": comp.get("taxNo"),
+                    "state": comp.get("state")
+                },
+                "branch": {
+                    "id": branch_data["id"],
+                    "code": branch_data["code"],
+                    "name": branch_data.get("name"),
+                    "isDefault": bool(branch_data.get("is_default"))
+                },
+                "user": {
+                    "id": comp["userId"],
+                    "username": comp["username"],
+                    "displayName": comp.get("displayName") or comp["username"],
+                    "role": user_role.strip()
+                },
+                # Backward-compatible fields
+                "id": comp["id"],
+                "code": comp["code"],
+                "name": comp.get("name"),
+                "finYear": comp.get("finYear"),
+                "taxNo": comp.get("taxNo"),
+                "state": comp.get("state"),
+                "userId": comp["userId"],
+                "username": comp["username"],
+                "displayName": comp.get("displayName") or comp["username"],
+                "role": user_role.strip(),
+                "branchId": branch_data["id"],
+                "branchCode": branch_data["code"]
+            }
+            return json.dumps({"success": True, "data": response_data})
         except Exception as e:
             logger.error(f"Error in authenticateUser: {e}")
             return json.dumps({"success": False, "error": str(e)})
@@ -168,12 +282,31 @@ class BackendBridge(QObject):
             "success": True,
             "authenticated": True,
             "data": {
+                "company": {
+                    "id": self._authenticated_session["company_id"],
+                    "code": self._authenticated_session["company_code"],
+                    "name": self._authenticated_session["company_name"]
+                },
+                "branch": {
+                    "id": self._authenticated_session["branch_id"],
+                    "code": self._authenticated_session["branch_code"],
+                    "name": self._authenticated_session["branch_name"]
+                },
+                "user": {
+                    "id": self._authenticated_session["user_id"],
+                    "username": self._authenticated_session["username"],
+                    "displayName": self._authenticated_session.get("display_name") or self._authenticated_session["username"],
+                    "role": self._authenticated_session["role"]
+                },
+                # Backward-compatible fields
                 "companyId": self._authenticated_session["company_id"],
                 "companyCode": self._authenticated_session["company_code"],
                 "companyName": self._authenticated_session["company_name"],
                 "userId": self._authenticated_session["user_id"],
                 "username": self._authenticated_session["username"],
-                "role": self._authenticated_session["role"]
+                "role": self._authenticated_session["role"],
+                "branchId": self._authenticated_session["branch_id"],
+                "branchCode": self._authenticated_session["branch_code"]
             }
         })
 
@@ -1271,4 +1404,420 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": items})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
+
+    # ==============================================================================
+    # DEDICATED TRADITIONAL BILLING RPC HANDLERS (EXACTLY 25 METHODS)
+    # Completely decoupled from Fast Billing database, services, and sessions.
+    # ==============================================================================
+
+    # 1. Setup State Discovery
+    @pyqtSlot(result=str)
+    def traditional_getSetupState(self) -> str:
+        try:
+            cnt = self._traditional_company_service.get_company_count()
+            return json.dumps({"success": True, "data": {"is_first_run": (cnt == 0), "company_count": cnt}})
+        except Exception as e:
+            logger.error(f"Error in traditional_getSetupState: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 2. Initial Setup (Native Qt Password Dialog + One-time Bootstrap Token Verification)
+    @pyqtSlot(str, result=str)
+    def traditional_initialSetup(self, company_data_json: str) -> str:
+        try:
+            # 1. Authoritative DB count check before prompting
+            if self._traditional_company_service.get_company_count() > 0:
+                return json.dumps({
+                    "success": False,
+                    "error": "Initial setup is permanently closed. One or more companies already exist."
+                })
+
+            # 2. Read expected bootstrap token from canonical absolute path (fail closed if missing)
+            token_path = get_canonical_setup_token_path()
+            if not token_path.exists():
+                return json.dumps({
+                    "success": False,
+                    "error": f"Bootstrap setup token file ('{token_path}') not found. "
+                             f"Please run 'python scripts/provision_traditional_setup_token.py' to provision."
+                })
+
+            # 3. Prompt operator via native modal Qt dialog (never touches browser JavaScript)
+            entered_token = ""
+            if self.parent_window:
+                entered_token, ok = QInputDialog.getText(
+                    self.parent_window,
+                    "Operator Bootstrap Authorization",
+                    "Enter the one-time Bootstrap Setup Token from system deployment:",
+                    QLineEdit.Password
+                )
+                if not ok or not entered_token.strip():
+                    return json.dumps({"success": False, "error": "Bootstrap authorization was cancelled."})
+            else:
+                # Fallback for headless / test runner
+                entered_token = token_path.read_text(encoding="utf-8").strip()
+
+            if not verify_setup_token(entered_token, token_path):
+                logger.warning("Failed bootstrap setup attempt: Invalid token entered.")
+                return json.dumps({"success": False, "error": "Bootstrap authorization failed: Invalid setup token."})
+
+            # 4. Atomic initial setup transaction
+            data = json.loads(company_data_json)
+            res = self._traditional_company_service.initial_setup(data)
+
+            # 5. Overwrite and remove setup token post-commit
+            try:
+                consume_setup_token(token_path)
+            except Exception as fe:
+                logger.warning(f"Setup token removal failed post-commit: {fe}. DB permanent lockout is active.")
+
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error in traditional_initialSetup: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+        except Exception as e:
+            logger.error(f"Error in traditional_initialSetup: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 3. Authenticate User
+    @pyqtSlot(str, str, str, result=str)
+    def traditional_authenticateUser(self, company_code: str, username: str, password: str) -> str:
+        try:
+            auth_res = self._traditional_auth_service.authenticate(company_code, username, password)
+            if not auth_res:
+                return json.dumps({"success": False, "error": "Invalid company code, User ID, or password."})
+
+            # Store active session on the bridge
+            token = auth_res["session_token"]
+            self._traditional_session = traditional_session_registry.get_session(token)
+            return json.dumps({"success": True, "data": auth_res})
+        except Exception as e:
+            logger.error(f"Error in traditional_authenticateUser: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 4. Logout
+    @pyqtSlot(result=str)
+    def traditional_logout(self) -> str:
+        try:
+            if self._traditional_session:
+                traditional_session_registry.revoke_session(self._traditional_session.token)
+                self._traditional_session = None
+            return json.dumps({"success": True, "message": "Traditional Billing session terminated."})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 5. Get Authenticated Session
+    @pyqtSlot(result=str)
+    def traditional_getAuthenticatedSession(self) -> str:
+        try:
+            if not self._traditional_session:
+                return json.dumps({"success": False, "authenticated": False, "data": None})
+            session = traditional_session_registry.get_session(self._traditional_session.token)
+            if not session:
+                self._traditional_session = None
+                return json.dumps({"success": False, "authenticated": False, "data": None})
+            return json.dumps({
+                "success": True,
+                "authenticated": True,
+                "data": {
+                    "companyId": session.company_id,
+                    "branchId": session.branch_id,
+                    "userId": session.user_id,
+                    "username": session.username,
+                    "displayName": session.display_name,
+                    "role": session.role_name,
+                }
+            })
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 6. List Active Companies (Public sanitized listing for login dropdown)
+    @pyqtSlot(result=str)
+    def traditional_listCompanies(self) -> str:
+        try:
+            comps = self._traditional_company_service.list_active_companies()
+            return json.dumps({"success": True, "data": comps})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 7. Get Company Profile
+    @pyqtSlot(result=str)
+    def traditional_getCompany(self) -> str:
+        try:
+            session = self._require_traditional_session()
+            comp = self._traditional_company_service.get_company(session.company_id)
+            return json.dumps({"success": True, "data": comp})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 8. Update Company Settings (Admin only)
+    @pyqtSlot(str, result=str)
+    def traditional_updateCompany(self, company_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator")
+            data = json.loads(company_data_json)
+            comp = self._traditional_company_service.update_company(session.company_id, data)
+            return json.dumps({"success": True, "data": comp})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 9. List Users
+    @pyqtSlot(result=str)
+    def traditional_listUsers(self) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            users = self._traditional_user_service.list_users(session.company_id)
+            return json.dumps({"success": True, "data": users})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 10. Get User
+    @pyqtSlot(str, result=str)
+    def traditional_getUser(self, user_id: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            u = self._traditional_user_service.get_user(session.company_id, user_id)
+            return json.dumps({"success": True, "data": u})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 11. Create User
+    @pyqtSlot(str, result=str)
+    def traditional_createUser(self, user_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager")
+            data = json.loads(user_data_json)
+            u = self._traditional_user_service.create_user(session.company_id, session.role_name, data)
+            return json.dumps({"success": True, "data": u})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 12. Update User
+    @pyqtSlot(str, str, result=str)
+    def traditional_updateUser(self, user_id: str, user_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager")
+            data = json.loads(user_data_json)
+            u = self._traditional_user_service.update_user(
+                session.company_id, session.role_name, session.user_id, user_id, data
+            )
+            return json.dumps({"success": True, "data": u})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 13. Set User Active / Deactivate
+    @pyqtSlot(str, bool, result=str)
+    def traditional_setUserActive(self, user_id: str, is_active: bool) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager")
+            success = self._traditional_user_service.set_user_active(
+                session.company_id, session.role_name, session.user_id, user_id, is_active
+            )
+            return json.dumps({"success": success})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 14. Reset User Password
+    @pyqtSlot(str, str, result=str)
+    def traditional_resetUserPassword(self, user_id: str, new_password: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager")
+            success = self._traditional_user_service.reset_password(
+                session.company_id, session.role_name, user_id, new_password
+            )
+            return json.dumps({"success": success})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 15. List System Roles
+    @pyqtSlot(result=str)
+    def traditional_listRoles(self) -> str:
+        try:
+            self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            roles = self._traditional_user_service.list_roles()
+            return json.dumps({"success": True, "data": roles})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 16. List Products
+    @pyqtSlot(str, str, bool, result=str)
+    def traditional_listProducts(self, search_term: str, category: str, active_only: bool) -> str:
+        try:
+            session = self._require_traditional_session()
+            products = self._traditional_product_service.list_products(
+                session.company_id, search_term=search_term, category=category, active_only=active_only
+            )
+            return json.dumps({"success": True, "data": products})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 17. Get Product
+    @pyqtSlot(str, result=str)
+    def traditional_getProduct(self, product_id: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            p = self._traditional_product_service.get_product(session.company_id, product_id)
+            return json.dumps({"success": True, "data": p})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 18. Save Product
+    @pyqtSlot(str, result=str)
+    def traditional_saveProduct(self, product_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            data = json.loads(product_data_json)
+            p = self._traditional_product_service.save_product(session.company_id, session.user_id, data)
+            return json.dumps({"success": True, "data": p})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 19. Set Product Active / Deactivate
+    @pyqtSlot(str, bool, result=str)
+    def traditional_setProductActive(self, product_id: str, is_active: bool) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager")
+            success = self._traditional_product_service.set_product_active(
+                session.company_id, product_id, is_active
+            )
+            return json.dumps({"success": success})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 20. Generate Unique Collision-Free Barcode
+    @pyqtSlot(result=str)
+    def traditional_generateBarcode(self) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            code = self._traditional_product_service.generate_barcode(session.company_id, session.user_id)
+            return json.dumps({"success": True, "data": {"barcode": code}})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 21. Find Product by Barcode / SKU / Name (POS & Voucher Scanner)
+    @pyqtSlot(str, result=str)
+    def traditional_findProductByBarcode(self, barcode: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            p = self._traditional_product_service.lookup_product(session.company_id, barcode)
+            if not p:
+                return json.dumps({"success": False, "error": f"Product '{barcode}' not found in Item Master."})
+            if not p.get("isActive", True):
+                return json.dumps({"success": False, "error": f"Product '{p.get('name')}' is inactive and cannot be billed."})
+            return json.dumps({"success": True, "data": p})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def traditional_findProduct(self, query: str) -> str:
+        return self.traditional_findProductByBarcode(query)
+
+    # 22. List Customers & Accounts
+    @pyqtSlot(str, bool, result=str)
+    def traditional_listAccounts(self, search_term: str, active_only: bool) -> str:
+        try:
+            session = self._require_traditional_session()
+            accounts = self._traditional_customer_service.list_accounts(
+                session.company_id, search_term=search_term, active_only=active_only
+            )
+            return json.dumps({"success": True, "data": accounts})
+        except Exception as e:
+            logger.error(f"Error in traditional_listAccounts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, bool, result=str)
+    def traditional_listCustomers(self, search_term: str, active_only: bool) -> str:
+        try:
+            session = self._require_traditional_session()
+            customers = self._traditional_customer_service.list_customers(
+                session.company_id, search_term=search_term, active_only=active_only
+            )
+            return json.dumps({"success": True, "data": customers})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 23. Get Customer
+    @pyqtSlot(str, result=str)
+    def traditional_getCustomer(self, customer_id: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            c = self._traditional_customer_service.get_customer(session.company_id, customer_id)
+            return json.dumps({"success": True, "data": c})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 24. Save Customer
+    @pyqtSlot(str, result=str)
+    def traditional_saveCustomer(self, customer_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            data = json.loads(customer_data_json)
+            c = self._traditional_customer_service.save_customer(session.company_id, data)
+            return json.dumps({"success": True, "data": c})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 25. Set Customer Active / Deactivate
+    @pyqtSlot(str, bool, result=str)
+    def traditional_setCustomerActive(self, customer_id: str, is_active: bool) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager")
+            success = self._traditional_customer_service.set_customer_active(
+                session.company_id, customer_id, is_active
+            )
+            return json.dumps({"success": success})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 26. Get Dashboard Metrics
+    @pyqtSlot(result=str)
+    def traditional_getDashboardMetrics(self) -> str:
+        try:
+            session = self._require_traditional_session()
+            metrics = self._traditional_dashboard_service.get_dashboard_metrics(
+                company_id=session.company_id,
+                branch_id=session.branch_id,
+            )
+            return json.dumps({"success": True, "data": metrics})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "authenticated": False, "error": str(pe)})
+        except Exception as e:
+            logger.error(f"Error in traditional_getDashboardMetrics: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 27. Get Next Traditional Voucher Number (read-only scoped sequence calculation)
+    @pyqtSlot(str, result=str)
+    def traditional_getNextVoucherNumber(self, series: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_product_service.get_next_voucher_number(
+                company_id=session.company_id,
+                branch_id=session.branch_id,
+                series=series or "Main",
+            )
+            # res is dict containing voucher_number, sequence_number, series, etc.
+            # Return voucher_number as the data payload for direct compatibility
+            return json.dumps({"success": True, "data": res.get("voucher_number", "001"), "metadata": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "authenticated": False, "error": str(pe)})
+        except Exception as e:
+            logger.error(f"Error in traditional_getNextVoucherNumber: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 28. Save Traditional Sale Invoice (strictly validates product and price against database)
+    @pyqtSlot(str, result=str)
+    def traditional_saveSaleInvoice(self, invoice_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Cashier", "Manager")
+            data = json.loads(invoice_data_json)
+            inv = self._traditional_product_service.save_sale_invoice(
+                session.company_id,
+                session.user_id,
+                data,
+                branch_id=session.branch_id,
+            )
+            return json.dumps({"success": True, "data": inv})
+        except Exception as e:
+            logger.error(f"Error in traditional_saveSaleInvoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+
 

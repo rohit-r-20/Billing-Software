@@ -196,14 +196,37 @@
                 <span class="alert-text" id="login-alert-text">Invalid User ID or Password.</span>
               </div>
 
+              <!-- Billing Workspace Mode Selector -->
+              <div class="login-mode-select-wrap" style="margin-bottom: 14px;">
+                <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Billing Workspace</label>
+                <div class="login-mode-segmented-control" id="login-mode-toggle" style="display: flex; gap: 6px;">
+                  <button type="button" class="btn-mode-toggle active" id="btn-login-mode-trad" data-mode="traditional" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; border: 1px solid #2563eb; background: #2563eb; color: #ffffff;">Traditional Billing</button>
+                  <button type="button" class="btn-mode-toggle" id="btn-login-mode-fast" data-mode="fast_billing" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;">Fast Billing (POS)</button>
+                </div>
+              </div>
+
+              <!-- First-Time Traditional Billing Setup Banner/Card -->
+              <div class="traditional-setup-container" id="traditional-setup-container" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px;">
+                  <span style="font-size: 18px; line-height: 1;">🏢</span>
+                  <div>
+                    <h3 style="font-size: 13px; font-weight: 700; color: #1e40af; margin: 0 0 2px 0;">Traditional Billing Setup Required</h3>
+                    <p style="font-size: 11px; color: #3b82f6; margin: 0; line-height: 1.4;">No company exists in Traditional Billing. Initialize your master company and Administrator account to begin.</p>
+                  </div>
+                </div>
+                <button type="button" class="btn-primary" id="btn-show-traditional-setup" style="width: 100%; padding: 8px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; background: #2563eb; color: #ffffff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <span>⚙️ Launch Initial Company Setup</span>
+                </button>
+              </div>
+
               <form class="login-form-body" id="login-main-form" onsubmit="return false;" autocomplete="off">
                 <!-- Company Selector Row -->
                 <div class="login-input-group">
                   <label for="login-company-select">Company / Business Store</label>
                   <div class="input-with-icon-wrap">
                     <span class="field-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">CO</span>
-                    <select id="login-company-select" class="login-select-field">
-                      <option value="COMP0001">ANTI MATRIX (COMP0001)</option>
+                    <select id="login-company-select" class="login-select-field" disabled>
+                      <option value="" disabled selected>Connecting to backend...</option>
                     </select>
                   </div>
                 </div>
@@ -350,10 +373,10 @@
           </div>
 
           <div class="mode-session-info">
-            <span class="mode-session-item">Company: <strong id="mode-company-name">ANTI MATRIX</strong></span>
-            <span class="mode-session-item">Branch: <strong id="mode-branch-name">Main Branch</strong></span>
-            <span class="mode-session-item">User: <strong id="mode-user-name">A (Administrator)</strong></span>
-            <span class="mode-session-item">FY: <strong id="mode-fy-name">2026-27</strong></span>
+            <span class="mode-session-item">Company: <strong id="mode-company-name">--</strong></span>
+            <span class="mode-session-item">Branch: <strong id="mode-branch-name">--</strong></span>
+            <span class="mode-session-item">User: <strong id="mode-user-name">--</strong></span>
+            <span class="mode-session-item">FY: <strong id="mode-fy-name">--</strong></span>
             <span class="db-status-pill" id="mode-db-status">● SQLite Active</span>
           </div>
 
@@ -460,8 +483,8 @@
           </div>
           <div class="welcome-right-col">
             <div class="current-datetime-box">
-              <span class="current-date-text" id="welcome-current-date">Thursday, 5 November 2026</span>
-              <span class="current-time-text" id="welcome-current-time">11:45:00 AM</span>
+              <span class="current-date-text" id="welcome-current-date">--</span>
+              <span class="current-time-text" id="welcome-current-time">--</span>
             </div>
             <div class="welcome-actions-row">
               <button type="button" class="btn-alpha btn-alpha-primary" id="btn-quick-new-sale" onclick="if(window.showScreen) window.showScreen('view-sales-voucher');">
@@ -470,7 +493,7 @@
               <button type="button" class="btn-alpha btn-alpha-secondary" id="btn-quick-new-purc" onclick="if(window.showScreen) window.showScreen('view-purchase-entry');">
                 + Inward Purchase
               </button>
-              <button type="button" class="btn-alpha btn-alpha-secondary" id="btn-quick-add-item" onclick="if(window.showScreen) window.showScreen('view-add-item-master');">
+              <button type="button" class="btn-alpha btn-alpha-secondary" id="btn-quick-add-item" onclick="if(window.openAddProductMaster){ window.openAddProductMaster(); } else if(window.showScreen) { window.showScreen('view-add-item-master'); }">
                 + Add Product
               </button>
               <button type="button" class="btn-alpha btn-alpha-subtle" id="btn-quick-daybook" onclick="if(window.showScreen) window.showScreen('view-day-book');">
@@ -489,11 +512,11 @@
               <div class="kpi-icon-wrap sales" id="kpi-icon-sales"></div>
             </div>
             <div class="kpi-value-row">
-              <span class="kpi-value" id="dash-today-sales">₹ 48,250.00</span>
+              <span class="kpi-value" id="dash-today-sales">₹ 0.00</span>
             </div>
             <div class="kpi-footer">
-              <span class="kpi-delta positive" id="dash-sales-delta">&uarr; +14.8%</span>
-              <span class="kpi-subtext" id="dash-sales-count">34 Invoices</span>
+              <span class="kpi-delta positive" id="dash-sales-delta" style="display:none;"></span>
+              <span class="kpi-subtext" id="dash-sales-count">0 Invoices</span>
             </div>
           </div>
 
@@ -504,11 +527,11 @@
               <div class="kpi-icon-wrap purchases" id="kpi-icon-purchases"></div>
             </div>
             <div class="kpi-value-row">
-              <span class="kpi-value" id="dash-today-purchases">₹ 24,180.00</span>
+              <span class="kpi-value" id="dash-today-purchases">₹ 0.00</span>
             </div>
             <div class="kpi-footer">
-              <span class="kpi-delta negative" id="dash-purchases-delta">&darr; -4.2%</span>
-              <span class="kpi-subtext" id="dash-purchases-count">5 Bills</span>
+              <span class="kpi-delta negative" id="dash-purchases-delta" style="display:none;"></span>
+              <span class="kpi-subtext" id="dash-purchases-count">0 Bills</span>
             </div>
           </div>
 
@@ -519,11 +542,11 @@
               <div class="kpi-icon-wrap stock" id="kpi-icon-stock"></div>
             </div>
             <div class="kpi-value-row">
-              <span class="kpi-value" id="dash-total-stock-value">₹ 4,82,600.00</span>
+              <span class="kpi-value" id="dash-total-stock-value">₹ 0.00</span>
             </div>
             <div class="kpi-footer">
-              <span class="status-pill status-pill-warning" style="font-size:10px;" id="dash-low-stock">3 items low</span>
-              <span class="kpi-subtext" id="dash-stock-count">142 Active SKUs</span>
+              <span class="status-pill status-pill-neutral" style="font-size:10px;" id="dash-low-stock">0 items low</span>
+              <span class="kpi-subtext" id="dash-stock-count">0 Active SKUs</span>
             </div>
           </div>
 
@@ -534,11 +557,11 @@
               <div class="kpi-icon-wrap receivables" id="kpi-icon-receivables"></div>
             </div>
             <div class="kpi-value-row">
-              <span class="kpi-value" id="dash-receivables">₹ 62,400.00</span>
+              <span class="kpi-value" id="dash-receivables">Not available</span>
             </div>
             <div class="kpi-footer">
-              <span class="kpi-delta positive">92% Collected</span>
-              <span class="kpi-subtext" id="dash-receivables-count">8 Overdue</span>
+              <span class="kpi-delta" id="dash-receivables-badge">N/A</span>
+              <span class="kpi-subtext" id="dash-receivables-count">N/A</span>
             </div>
           </div>
 
@@ -549,11 +572,11 @@
               <div class="kpi-icon-wrap payables" id="kpi-icon-payables"></div>
             </div>
             <div class="kpi-value-row">
-              <span class="kpi-value" id="dash-payables">₹ 38,900.00</span>
+              <span class="kpi-value" id="dash-payables">Not available</span>
             </div>
             <div class="kpi-footer">
-              <span class="status-pill status-pill-neutral" style="font-size:10px;">Scheduled</span>
-              <span class="kpi-subtext" id="dash-payables-count">4 Suppliers Due</span>
+              <span class="status-pill status-pill-neutral" style="font-size:10px;" id="dash-payables-badge">N/A</span>
+              <span class="kpi-subtext" id="dash-payables-count">N/A</span>
             </div>
           </div>
 
@@ -564,11 +587,11 @@
               <div class="kpi-icon-wrap expenses" id="kpi-icon-expenses"></div>
             </div>
             <div class="kpi-value-row">
-              <span class="kpi-value" id="dash-today-expenses">₹ 3,450.00</span>
+              <span class="kpi-value" id="dash-today-expenses">₹ 0.00</span>
             </div>
             <div class="kpi-footer">
               <span class="kpi-subtext" id="dash-held-bills">0 held bills</span>
-              <span class="kpi-subtext">Operating & Sundry</span>
+              <span class="kpi-subtext">Operating &amp; Sundry</span>
             </div>
           </div>
         </div>
@@ -627,7 +650,7 @@
               <h3 class="card-title">Revenue vs. Cost of Goods & Operating Expenses</h3>
               <p class="card-subtitle">Monthly financial comparison demonstrating operational gross margins</p>
             </div>
-            <span class="status-pill status-pill-success">Gross Margin: 32.4%</span>
+            <span class="status-pill status-pill-neutral" id="dash-gross-margin">Gross Margin: Not available</span>
           </div>
           <div class="card-body-clean">
             <div class="chart-canvas-wrapper" id="chart-revenue-expense-container">
@@ -792,7 +815,7 @@
                     <div class="tile-desc">Record vendor supplier bill</div>
                   </div>
                 </button>
-                <button type="button" class="quick-action-tile" id="dash-btn-product-add" onclick="if(window.showScreen) window.showScreen('view-add-item-master');">
+                <button type="button" class="quick-action-tile" id="dash-btn-product-add" onclick="if(window.openAddProductMaster){ window.openAddProductMaster(); } else if(window.showScreen) { window.showScreen('view-add-item-master'); }">
                   <div class="tile-icon-box">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
                   </div>
@@ -848,6 +871,7 @@
 
         <form class="master-form-body" id="form-account-master" autocomplete="off" onsubmit="return false;">
           <input type="hidden" id="acc-id" value="" />
+          <input type="hidden" id="acc-code" value="" />
           <div class="master-layout-row">
             <div class="master-panel left-panel">
               <fieldset class="group-box">
@@ -2865,6 +2889,91 @@
           <div class="comp-btn-row">
             <button type="submit" class="btn-action primary-btn" id="btn-save-edit-company">Update Company</button>
             <button type="button" class="btn-action" id="btn-cancel-edit-company">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: TRADITIONAL BILLING INITIAL SETUP
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-traditional-setup" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="max-width: 520px;">
+        <div class="create-comp-header">
+          <h2>Initialize Traditional Billing System</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-traditional-setup-modal">&times;</button>
+        </div>
+        <form class="create-comp-form" id="form-traditional-setup" onsubmit="return false;" autocomplete="off">
+          <!-- Setup Notice Banner -->
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: 11px; color: #1e40af; line-height: 1.4;">
+            <strong>Master Company &amp; Administrator Bootstrap:</strong> This one-time setup creates your primary company, single BR01 branch, System Administrator, and default ledger accounts.
+            <br/><span style="color: #64748b; font-size: 10px; margin-top: 4px; display: inline-block;">* Operator verification via native security token prompt will be required upon submission.</span>
+          </div>
+
+          <!-- Alert banner inside modal -->
+          <div class="login-alert-banner" id="trad-setup-alert" style="display: none; margin-bottom: 12px;" role="alert">
+            <span class="alert-icon" style="font-weight: 800; color: #dc2626;">!</span>
+            <span class="alert-text" id="trad-setup-alert-text">Error message</span>
+          </div>
+
+          <!-- Company Name -->
+          <div class="comp-field-row">
+            <label for="trad-setup-name">Company / Business Name *</label>
+            <input type="text" id="trad-setup-name" required placeholder="e.g. Alpha Retail Enterprise" />
+          </div>
+
+          <!-- Company Code & FinYear -->
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="trad-setup-code">Company Code *</label>
+              <input type="text" id="trad-setup-code" required placeholder="e.g. CORP01" value="CORP01" class="input-uppercase" style="text-transform: uppercase;" />
+            </div>
+            <div class="split-item">
+              <label for="trad-setup-finyear">Financial Year</label>
+              <input type="text" id="trad-setup-finyear" placeholder="e.g. 2026-2027" value="2026-2027" />
+            </div>
+          </div>
+
+          <!-- GSTIN & State -->
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="trad-setup-taxno">GSTIN / Tax ID (Optional)</label>
+              <input type="text" id="trad-setup-taxno" placeholder="33AAAAA0000A1Z5" class="input-uppercase" style="text-transform: uppercase;" />
+            </div>
+            <div class="split-item">
+              <label for="trad-setup-state">State / Province</label>
+              <input type="text" id="trad-setup-state" placeholder="Tamilnadu" value="Tamilnadu" />
+            </div>
+          </div>
+
+          <!-- Admin Credentials Section -->
+          <div style="border-top: 1px solid #e2e8f0; margin: 14px 0 10px 0; padding-top: 10px;">
+            <span style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Initial System Administrator</span>
+          </div>
+
+          <div class="comp-field-row">
+            <label for="trad-setup-admin-user">Administrator Username *</label>
+            <input type="text" id="trad-setup-admin-user" required placeholder="e.g. ADMIN" value="ADMIN" class="input-uppercase" style="text-transform: uppercase;" />
+          </div>
+
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="trad-setup-admin-pwd">Administrator Password *</label>
+              <input type="password" id="trad-setup-admin-pwd" required placeholder="Enter strong password" autocomplete="new-password" />
+            </div>
+            <div class="split-item">
+              <label for="trad-setup-confirm-pwd">Confirm Password *</label>
+              <input type="password" id="trad-setup-confirm-pwd" required placeholder="Re-enter password" autocomplete="new-password" />
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="comp-btn-row" style="padding: 16px 24px; background: var(--alpha-bg-surface-subtle, #f8fafc); border-top: 1px solid var(--alpha-border-default, #e2e8f0); display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn-action" id="btn-cancel-traditional-setup">Cancel</button>
+            <button type="submit" class="btn-action" id="btn-submit-traditional-setup" style="background: #2563eb; color: #fff; border-color: #2563eb; display: inline-flex; align-items: center; justify-content: center;">
+              <span id="trad-setup-spinner" style="display: none; width: 12px; height: 12px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px;"></span>
+              <span id="trad-setup-submit-text">Authorize &amp; Complete Setup &rarr;</span>
+            </button>
           </div>
         </form>
       </div>

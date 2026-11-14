@@ -8,6 +8,8 @@ from db.database import db_manager, DatabaseManager
 from core.security import hash_password, verify_password
 from core.logging_config import logger
 
+RECOGNIZED_SYSTEM_ROLES = frozenset({"Administrator", "Store Manager", "Manager", "Cashier"})
+
 
 class CompanyService:
     def __init__(self, db: Optional[DatabaseManager] = None):
@@ -25,10 +27,14 @@ class CompanyService:
             return [dict(r) for r in cursor.fetchall()]
 
     def authenticate(self, code_or_user: str, password: str, username: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Verify password for the selected company code or username across users and company records."""
+        """
+        Verify credentials for the selected company code and username.
+        Strict fail-closed individual-user authentication against the users table.
+        Does not allow legacy company-password fallback or synthetic administrator fallback.
+        """
         ident = (code_or_user or "").strip().upper()
         uname = (username or "").strip().upper()
-        if not ident:
+        if not ident or not uname:
             return None
 
         with self.db.get_connection() as conn:
@@ -36,65 +42,54 @@ class CompanyService:
             # 1. Match company code
             cursor.execute("SELECT * FROM companies WHERE UPPER(code) = ?;", (ident,))
             row = cursor.fetchone()
-            # 2. If not found by code, try matching company username
-            if not row:
-                cursor.execute("SELECT * FROM companies WHERE UPPER(username) = ?;", (ident,))
-                row = cursor.fetchone()
-
             if not row:
                 return None
 
             comp = dict(row)
 
-            # Step A: Check users table if a specific username is provided
-            if uname:
-                try:
-                    cursor.execute("""
-                        SELECT u.id, u.company_id, u.username, u.password_hash, u.full_name, u.role_name, u.is_active
-                        FROM users u
-                        WHERE u.company_id = ? AND UPPER(u.username) = ? AND (u.is_active = 1 OR u.is_active IS NULL);
-                    """, (comp["id"], uname))
-                    u_row = cursor.fetchone()
-                    if u_row:
-                        user_data = dict(u_row)
-                        stored_pwd = user_data.get("password_hash") or ""
-                        if verify_password(stored_pwd, password):
-                            return {
-                                "id": comp["id"],
-                                "code": comp["code"],
-                                "name": comp["name"],
-                                "finYear": comp["fin_year"],
-                                "taxNo": comp["gstin"],
-                                "state": comp["state"],
-                                "userId": user_data["id"],
-                                "username": user_data["username"],
-                                "displayName": user_data.get("full_name") or user_data["username"],
-                                "role": user_data.get("role_name") or "Administrator"
-                            }
-                        return None
-                except Exception as e:
-                    logger.debug(f"Users table lookup note: {e}")
+            # Query users table for specific user in this company
+            try:
+                cursor.execute("""
+                    SELECT u.id, u.company_id, u.username, u.password_hash, u.full_name, u.role_name, u.is_active
+                    FROM users u
+                    WHERE u.company_id = ? AND UPPER(u.username) = ? AND (u.is_active = 1 OR u.is_active IS NULL);
+                """, (comp["id"], uname))
+                u_row = cursor.fetchone()
+                if not u_row:
+                    return None
 
-            # Step B: Fallback to company admin credentials
-            # If a username was specified, verify it matches the company admin username
-            if uname and comp.get("username") and comp["username"].strip().upper() != uname:
-                return None
+                user_data = dict(u_row)
+                stored_pwd = user_data.get("password_hash") or ""
+                if not verify_password(stored_pwd, password):
+                    return None
 
-            stored_hash = comp.get("password_hash") or ""
-            if verify_password(stored_hash, password):
+                # Strict role validation: must be non-empty and recognized
+                raw_role = user_data.get("role_name")
+                if not raw_role or not isinstance(raw_role, str) or not raw_role.strip():
+                    logger.warning(f"Auth failed: User '{uname}' in company '{ident}' has missing or empty role_name.")
+                    return None
+
+                cleaned_role = raw_role.strip()
+                matched_role = next((r for r in RECOGNIZED_SYSTEM_ROLES if r.lower() == cleaned_role.lower()), None)
+                if not matched_role:
+                    logger.warning(f"Auth failed: User '{uname}' in company '{ident}' has unrecognized role '{cleaned_role}'.")
+                    return None
+
                 return {
                     "id": comp["id"],
                     "code": comp["code"],
                     "name": comp["name"],
-                    "finYear": comp["fin_year"],
-                    "taxNo": comp["gstin"],
-                    "state": comp["state"],
-                    "userId": f"usr-{comp['code']}",
-                    "username": comp.get("username") or "A",
-                    "displayName": comp.get("username") or "Administrator",
-                    "role": "Administrator"
+                    "finYear": comp.get("fin_year"),
+                    "taxNo": comp.get("gstin"),
+                    "state": comp.get("state"),
+                    "userId": user_data["id"],
+                    "username": user_data["username"],
+                    "displayName": user_data.get("full_name") or user_data["username"],
+                    "role": matched_role
                 }
-            return None
+            except Exception as e:
+                logger.error(f"Error during user authentication: {e}")
+                return None
 
     def _ensure_sqlite_user_tables(self):
         """On SQLite test environments, ensure roles and users tables exist."""
@@ -163,8 +158,15 @@ class CompanyService:
             if cursor.fetchone():
                 raise ValueError(f"User '{uname}' already exists for company '{company_id}'.")
 
-            # Ensure role exists
-            r_name = (role_name or "Administrator").strip()
+            # Ensure role exists and is recognized
+            if not role_name or not isinstance(role_name, str) or not role_name.strip():
+                raise ValueError("Role name is required and cannot be empty.")
+            r_clean = role_name.strip()
+            matched_role = next((r for r in RECOGNIZED_SYSTEM_ROLES if r.lower() == r_clean.lower()), None)
+            if not matched_role:
+                raise ValueError(f"Unrecognized role '{r_clean}'. Recognized roles: {', '.join(sorted(RECOGNIZED_SYSTEM_ROLES))}.")
+            r_name = matched_role
+
             cursor.execute("SELECT id FROM roles WHERE UPPER(name) = ? LIMIT 1;", (r_name.upper(),))
             r_row = cursor.fetchone()
             if r_row:
@@ -251,7 +253,7 @@ class CompanyService:
                     "company_id": u_dict["company_id"],
                     "username": u_dict["username"],
                     "full_name": u_dict.get("full_name") or u_dict["username"],
-                    "role_name": u_dict.get("role_name") or "Administrator",
+                    "role_name": u_dict.get("role_name"),
                     "is_active": u_dict.get("is_active", 1),
                     "created": False
                 }

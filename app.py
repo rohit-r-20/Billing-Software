@@ -60,7 +60,19 @@ def main():
         logger.error(f"Database connection error: {health.get('error')}")
         # Note: Do not abort ungracefully; allow UI to present diagnostic connection screen if offline
 
-    # 2. Launch Main Desktop Window in Maximized State
+    # 2. Traditional Billing Database Initialization (Local SQLite only)
+    try:
+        from db.traditional_database import traditional_db_manager
+        if traditional_db_manager.is_sqlite:
+            logger.info("Initializing Traditional Billing SQLite database schema via Alembic...")
+            traditional_db_manager.run_traditional_migrations()
+            logger.info("Traditional Billing SQLite schema up to date.")
+        else:
+            logger.info("Traditional Billing target is PostgreSQL; automatic migrations deferred.")
+    except Exception as e:
+        logger.error(f"Traditional Billing initialization error: {e}")
+
+    # 3. Launch Main Desktop Window in Maximized State
     try:
         window = MainWindow()
         window.showMaximized()

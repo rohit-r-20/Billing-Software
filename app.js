@@ -2,23 +2,12 @@
 // ALPHA BILLING SOFTWARE - COMPLETE APPLICATION ENGINE
 // =============================================================
 
-// Default seed company: ANTI MATRIX as the first company
-const DEFAULT_COMPANIES = [
-  {
-    id: "COMP0001",
-    name: "ANTI MATRIX",
-    code: "COMP0001",
-    finYear: "2026-2027 (1 Yr)",
-    taxNo: "33AAAPL1234F1Z1",
-    state: "Tamilnadu",
-    username: "A",
-    password: "a"
-  }
-];
+// Default seed company: none in V2. Companies are loaded exclusively from backend.
+const DEFAULT_COMPANIES = [];
 
 // App State
-let companies = loadCompanies();
-let filteredCompanies = [...companies];
+let companies = [];
+let filteredCompanies = [];
 let selectedIndex = 0;
 let activeCompany = null;
 let currentPendingCompany = null;
@@ -410,32 +399,12 @@ let sessionLowStockDismissed = false;
 // STORAGE & MIGRATION UTILITIES
 // =============================================================
 function loadCompanies() {
-  try {
-    const saved = localStorage.getItem("alpha_companies");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Ensure old companies (BHAVANI TRADERS) are deleted and ANTI MATRIX is primary
-      const hasAntiMatrix = parsed.some((c) => c.name.toUpperCase().includes("ANTI MATRIX"));
-      const hasOldBhavani = parsed.some((c) => c.name.toUpperCase().includes("BHAVANI"));
-      if (hasOldBhavani && !hasAntiMatrix) {
-        localStorage.setItem("alpha_companies", JSON.stringify(DEFAULT_COMPANIES));
-        return [...DEFAULT_COMPANIES];
-      }
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    console.error("Error reading companies:", e);
-  }
-  localStorage.setItem("alpha_companies", JSON.stringify(DEFAULT_COMPANIES));
-  return [...DEFAULT_COMPANIES];
+  // Backend-only company catalog in V2. No hardcoded or localStorage demo companies.
+  return [];
 }
 
 function saveCompanies() {
-  try {
-    localStorage.setItem("alpha_companies", JSON.stringify(companies));
-  } catch (e) {
-    console.error("Error saving companies:", e);
-  }
+  // No-op in V2: company catalog is mastered in backend database.
 }
 
 function generateNextCompanyCode() {
@@ -916,10 +885,164 @@ function filterCompanies() {
 // =============================================================
 // SCREEN 1: STANDALONE LOGIN ENGINE
 // =============================================================
-function populateLoginCompanies() {
+let activeLoginMode = "traditional";
+let companyFetchSeq = 0;
+
+function fetchAndPopulateCompanies() {
+  const currentSeq = ++companyFetchSeq;
+  const currentMode = activeLoginMode;
+
+  // Immediately clear companies so previous mode's data never lingers
+  companies = [];
+  filteredCompanies = [];
+
+  if (!window.backend) {
+    populateLoginCompanies();
+    return;
+  }
+
+  // Show loading state while fetching from backend
+  populateLoginCompanies(true);
+
+  if (currentMode === "traditional") {
+    if (typeof window.backend.traditional_listCompanies === "function") {
+      window.backend.traditional_listCompanies((resp) => {
+        // Discard stale responses from previous requests or mode switches
+        if (currentSeq !== companyFetchSeq || activeLoginMode !== "traditional") {
+          return;
+        }
+        try {
+          const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+          if (r && r.success && Array.isArray(r.data)) {
+            companies = r.data;
+            filteredCompanies = [...companies];
+          } else {
+            companies = [];
+            filteredCompanies = [];
+          }
+        } catch (e) {
+          console.error("Error loading traditional companies:", e);
+          companies = [];
+          filteredCompanies = [];
+        }
+        populateLoginCompanies();
+      });
+    } else {
+      populateLoginCompanies();
+    }
+  } else if (currentMode === "fast_billing") {
+    if (typeof window.backend.listCompanies === "function") {
+      window.backend.listCompanies((resp) => {
+        // Discard stale responses from previous requests or mode switches
+        if (currentSeq !== companyFetchSeq || activeLoginMode !== "fast_billing") {
+          return;
+        }
+        try {
+          const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+          if (r && r.success && Array.isArray(r.data)) {
+            companies = r.data;
+            filteredCompanies = [...companies];
+          } else {
+            companies = [];
+            filteredCompanies = [];
+          }
+        } catch (e) {
+          console.error("Error loading fast billing companies:", e);
+          companies = [];
+          filteredCompanies = [];
+        }
+        populateLoginCompanies();
+      });
+    } else {
+      populateLoginCompanies();
+    }
+  }
+}
+
+function initLoginModeToggle() {
+  const btnTrad = document.getElementById("btn-login-mode-trad");
+  const btnFast = document.getElementById("btn-login-mode-fast");
+  if (!btnTrad || !btnFast) return;
+
+  btnTrad.onclick = () => {
+    if (activeLoginMode === "traditional") return;
+    activeLoginMode = "traditional";
+    btnTrad.style.background = "#2563eb";
+    btnTrad.style.color = "#ffffff";
+    btnTrad.style.borderColor = "#2563eb";
+    btnFast.style.background = "#f8fafc";
+    btnFast.style.color = "#475569";
+    btnFast.style.borderColor = "#cbd5e1";
+    fetchAndPopulateCompanies();
+  };
+
+  btnFast.onclick = () => {
+    if (activeLoginMode === "fast_billing") return;
+    activeLoginMode = "fast_billing";
+    btnFast.style.background = "#059669";
+    btnFast.style.color = "#ffffff";
+    btnFast.style.borderColor = "#059669";
+    btnTrad.style.background = "#f8fafc";
+    btnTrad.style.color = "#475569";
+    btnTrad.style.borderColor = "#cbd5e1";
+    // Never show Traditional setup in Fast Billing mode
+    const tradSetupContainer = document.getElementById("traditional-setup-container");
+    if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    closeTraditionalSetupModal();
+    fetchAndPopulateCompanies();
+  };
+}
+
+function populateLoginCompanies(isLoading = false) {
   if (!loginCompanySelect) return;
   const currentVal = loginCompanySelect.value;
   loginCompanySelect.innerHTML = "";
+  const tradSetupContainer = document.getElementById("traditional-setup-container");
+
+  if (isLoading) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Loading companies...";
+    opt.disabled = true;
+    opt.selected = true;
+    loginCompanySelect.appendChild(opt);
+    loginCompanySelect.disabled = true;
+    if (btnLoginSubmit) btnLoginSubmit.disabled = true;
+    if (loginUserInput) loginUserInput.disabled = true;
+    if (loginPwdInput) loginPwdInput.disabled = true;
+    if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    return;
+  }
+
+  if (!companies || companies.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    if (!window.backend) {
+      opt.textContent = "Connecting to backend...";
+      if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    } else if (activeLoginMode === "traditional") {
+      opt.textContent = "-- No Traditional Companies (Setup Required) --";
+      if (tradSetupContainer) tradSetupContainer.style.display = "block";
+    } else {
+      opt.textContent = "-- No Fast Billing Companies Found --";
+      if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    }
+    opt.disabled = true;
+    opt.selected = true;
+    loginCompanySelect.appendChild(opt);
+    loginCompanySelect.disabled = true;
+    if (btnLoginSubmit) btnLoginSubmit.disabled = true;
+    if (loginUserInput) loginUserInput.disabled = true;
+    if (loginPwdInput) loginPwdInput.disabled = true;
+    return;
+  }
+
+  // Companies loaded from backend - enable controls
+  if (tradSetupContainer) tradSetupContainer.style.display = "none";
+  loginCompanySelect.disabled = false;
+  if (btnLoginSubmit) btnLoginSubmit.disabled = false;
+  if (loginUserInput) loginUserInput.disabled = false;
+  if (loginPwdInput) loginPwdInput.disabled = false;
 
   companies.forEach((comp) => {
     const opt = document.createElement("option");
@@ -932,6 +1055,187 @@ function populateLoginCompanies() {
     loginCompanySelect.value = currentVal;
   } else if (loginCompanySelect.options.length > 0) {
     loginCompanySelect.selectedIndex = 0;
+  }
+}
+
+// =============================================================
+// TRADITIONAL BILLING FIRST-TIME SETUP MODAL ENGINE
+// =============================================================
+let isSubmittingTraditionalSetup = false;
+
+function openTraditionalSetupModal() {
+  const modal = document.getElementById("modal-traditional-setup");
+  if (!modal) return;
+  hideTraditionalSetupAlert();
+  setTraditionalSetupLoading(false);
+
+  // Set default values if empty
+  const nameInput = document.getElementById("trad-setup-name");
+  const codeInput = document.getElementById("trad-setup-code");
+  const finyearInput = document.getElementById("trad-setup-finyear");
+  const stateInput = document.getElementById("trad-setup-state");
+  const userInput = document.getElementById("trad-setup-admin-user");
+  const pwdInput = document.getElementById("trad-setup-admin-pwd");
+  const confirmPwdInput = document.getElementById("trad-setup-confirm-pwd");
+
+  if (nameInput) nameInput.value = "";
+  if (codeInput && !codeInput.value) codeInput.value = "CORP01";
+  if (finyearInput && !finyearInput.value) finyearInput.value = "2026-2027";
+  if (stateInput && !stateInput.value) stateInput.value = "Tamilnadu";
+  if (userInput && !userInput.value) userInput.value = "ADMIN";
+  if (pwdInput) pwdInput.value = "";
+  if (confirmPwdInput) confirmPwdInput.value = "";
+
+  modal.style.display = "flex";
+  if (nameInput) nameInput.focus();
+}
+
+function closeTraditionalSetupModal() {
+  const modal = document.getElementById("modal-traditional-setup");
+  if (modal) modal.style.display = "none";
+  hideTraditionalSetupAlert();
+  setTraditionalSetupLoading(false);
+}
+
+function showTraditionalSetupAlert(msg) {
+  const alertBox = document.getElementById("trad-setup-alert");
+  const alertText = document.getElementById("trad-setup-alert-text");
+  if (alertBox && alertText) {
+    alertText.textContent = msg;
+    alertBox.style.display = "flex";
+  }
+}
+
+function hideTraditionalSetupAlert() {
+  const alertBox = document.getElementById("trad-setup-alert");
+  if (alertBox) alertBox.style.display = "none";
+}
+
+function setTraditionalSetupLoading(isLoading) {
+  isSubmittingTraditionalSetup = isLoading;
+  const btnSubmit = document.getElementById("btn-submit-traditional-setup");
+  const btnCancel = document.getElementById("btn-cancel-traditional-setup");
+  const spinner = document.getElementById("trad-setup-spinner");
+  const submitText = document.getElementById("trad-setup-submit-text");
+
+  if (btnSubmit) btnSubmit.disabled = isLoading;
+  if (btnCancel) btnCancel.disabled = isLoading;
+  if (spinner) spinner.style.display = isLoading ? "inline-block" : "none";
+  if (submitText) {
+    submitText.textContent = isLoading ? "Authorizing with backend..." : "Authorize & Complete Setup \u2192";
+  }
+}
+
+function handleTraditionalSetupSubmit() {
+  if (isSubmittingTraditionalSetup) return; // Prevent duplicate submission
+
+  const nameInput = document.getElementById("trad-setup-name");
+  const codeInput = document.getElementById("trad-setup-code");
+  const finyearInput = document.getElementById("trad-setup-finyear");
+  const taxnoInput = document.getElementById("trad-setup-taxno");
+  const stateInput = document.getElementById("trad-setup-state");
+  const userInput = document.getElementById("trad-setup-admin-user");
+  const pwdInput = document.getElementById("trad-setup-admin-pwd");
+  const confirmPwdInput = document.getElementById("trad-setup-confirm-pwd");
+
+  const name = (nameInput ? nameInput.value : "").trim();
+  const code = (codeInput ? codeInput.value : "").trim().toUpperCase() || "CORP01";
+  const finYear = (finyearInput ? finyearInput.value : "").trim() || "2026-2027";
+  const taxNo = (taxnoInput ? taxnoInput.value : "").trim().toUpperCase() || null;
+  const state = (stateInput ? stateInput.value : "").trim() || "Tamilnadu";
+  const adminUsername = (userInput ? userInput.value : "").trim().toUpperCase() || "ADMIN";
+  const adminPassword = pwdInput ? pwdInput.value : "";
+  const confirmPassword = confirmPwdInput ? confirmPwdInput.value : "";
+
+  // Validation
+  if (!name) {
+    showTraditionalSetupAlert("Company / Business Name is required.");
+    if (nameInput) nameInput.focus();
+    return;
+  }
+  if (!code) {
+    showTraditionalSetupAlert("Company Code is required.");
+    if (codeInput) codeInput.focus();
+    return;
+  }
+  if (!adminUsername) {
+    showTraditionalSetupAlert("Administrator Username is required.");
+    if (userInput) userInput.focus();
+    return;
+  }
+  if (!adminPassword) {
+    showTraditionalSetupAlert("Administrator Password is required.");
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+  if (adminPassword.length < 4) {
+    showTraditionalSetupAlert("Administrator Password must be at least 4 characters.");
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+  if (adminPassword !== confirmPassword) {
+    showTraditionalSetupAlert("Passwords do not match. Please re-enter.");
+    if (confirmPwdInput) confirmPwdInput.focus();
+    return;
+  }
+
+  if (!window.backend || typeof window.backend.traditional_initialSetup !== "function") {
+    showTraditionalSetupAlert("Backend service connection is unavailable. Cannot perform initial setup.");
+    return;
+  }
+
+  setTraditionalSetupLoading(true);
+  hideTraditionalSetupAlert();
+
+  const payload = {
+    name,
+    code,
+    finYear,
+    taxNo,
+    state,
+    adminUsername,
+    adminPassword,
+  };
+
+  window.backend.traditional_initialSetup(JSON.stringify(payload), (resp) => {
+    setTraditionalSetupLoading(false);
+    try {
+      const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+      if (res && res.success) {
+        showNotification("Traditional Billing company initialized successfully!");
+        closeTraditionalSetupModal();
+        // Refresh companies immediately
+        fetchAndPopulateCompanies();
+        // Pre-fill login user input with the newly created admin username
+        if (loginUserInput) loginUserInput.value = adminUsername;
+        if (loginPwdInput) {
+          loginPwdInput.value = "";
+          loginPwdInput.focus();
+        }
+      } else {
+        const errMsg = (res && res.error) ? res.error : "Setup authorization failed. Please check setup token.";
+        showTraditionalSetupAlert(errMsg);
+      }
+    } catch (e) {
+      showTraditionalSetupAlert("Unexpected response from backend: " + e.message);
+    }
+  });
+}
+
+function initTraditionalSetupListeners() {
+  const btnShowSetup = document.getElementById("btn-show-traditional-setup");
+  const btnCloseModal = document.getElementById("btn-close-traditional-setup-modal");
+  const btnCancel = document.getElementById("btn-cancel-traditional-setup");
+  const formSetup = document.getElementById("form-traditional-setup");
+
+  if (btnShowSetup) btnShowSetup.onclick = openTraditionalSetupModal;
+  if (btnCloseModal) btnCloseModal.onclick = closeTraditionalSetupModal;
+  if (btnCancel) btnCancel.onclick = closeTraditionalSetupModal;
+  if (formSetup) {
+    formSetup.onsubmit = (e) => {
+      e.preventDefault();
+      handleTraditionalSetupSubmit();
+    };
   }
 }
 
@@ -970,10 +1274,15 @@ function togglePasswordVisibility() {
 }
 
 function handleMainLoginSubmit() {
-  const companyCode = loginCompanySelect ? loginCompanySelect.value : (companies[0] ? companies[0].code : "COMP0001");
+  const companyCode = loginCompanySelect ? loginCompanySelect.value : "";
   const username = (loginUserInput ? loginUserInput.value : "").trim();
   const password = loginPwdInput ? loginPwdInput.value : "";
 
+  if (!companyCode) {
+    showLoginAlert("Please select a company.");
+    if (loginCompanySelect) loginCompanySelect.focus();
+    return;
+  }
   if (!username) {
     showLoginAlert("Please enter your User ID / Username.");
     if (loginUserInput) loginUserInput.focus();
@@ -992,33 +1301,45 @@ function handleMainLoginSubmit() {
   }
 
   const applyAuthSuccess = (authData) => {
-    const sessionData = {
-      user: {
-        id: authData.userId || authData.id,
-        username: authData.username || username,
-        displayName: authData.displayName || authData.username || username,
-        role: authData.role || "Administrator",
-        email: authData.email
-      },
-      company: {
-        id: authData.id || authData.companyId,
-        code: authData.code || companyCode,
-        name: authData.name,
-        finYear: authData.finYear || "2026-2027",
-        taxNo: authData.taxNo || authData.gstin,
-        state: authData.state
-      }
-    };
+    const sessionData = (authData && authData.company && authData.user && authData.branch)
+      ? authData
+      : {
+          user: {
+            id: authData.userId || authData.id,
+            username: authData.username || username,
+            displayName: authData.displayName || authData.username || username,
+            role: authData.role
+          },
+          company: {
+            id: authData.id || authData.companyId,
+            code: authData.code || companyCode,
+            name: authData.name,
+            finYear: authData.finYear || "2026-2027",
+            taxNo: authData.taxNo || authData.gstin,
+            state: authData.state
+          },
+          branch: authData.branch || null
+        };
 
+    let sessionOk = false;
     if (window.BusinessContext) {
-      window.BusinessContext.setAuthenticatedSession(sessionData);
+      sessionOk = window.BusinessContext.setAuthenticatedSession(sessionData);
     }
+    if (!sessionOk) {
+      applyAuthFailure("Authentication session initialization failed: Invalid session context.");
+      return;
+    }
+
     if (window.DashboardManager) {
       window.DashboardManager.initForSession();
     }
-    activeCompany = window.BusinessContext ? window.BusinessContext.getActiveCompany() : authData;
+    activeCompany = window.BusinessContext ? window.BusinessContext.getActiveCompany() : null;
     if (loginPwdInput) loginPwdInput.value = "";
-    openBillingModeSelection(activeCompany);
+    if (activeLoginMode === "traditional") {
+      enterCompanyDashboard(activeCompany);
+    } else {
+      openBillingModeSelection(activeCompany);
+    }
   };
 
   const applyAuthFailure = (errMsg) => {
@@ -1032,7 +1353,21 @@ function handleMainLoginSubmit() {
     }
   };
 
-  if (window.backend && window.backend.authenticateUser) {
+  if (activeLoginMode === "traditional" && window.backend && window.backend.traditional_authenticateUser) {
+    window.backend.traditional_authenticateUser(companyCode, username, password, (resp) => {
+      setLoginLoading(false);
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res.success && res.data) {
+          applyAuthSuccess(res.data);
+        } else {
+          applyAuthFailure(res.error);
+        }
+      } catch (e) {
+        applyAuthFailure("Authentication error: " + e.message);
+      }
+    });
+  } else if (window.backend && window.backend.authenticateUser) {
     window.backend.authenticateUser(companyCode, username, password, (resp) => {
       setLoginLoading(false);
       try {
@@ -1046,45 +1381,9 @@ function handleMainLoginSubmit() {
         applyAuthFailure("Authentication error: " + e.message);
       }
     });
-  } else if (window.backend && window.backend.authenticateCompany) {
-    window.backend.authenticateCompany(companyCode, password, (resp) => {
-      setLoginLoading(false);
-      try {
-        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
-        if (res.success && res.data) {
-          applyAuthSuccess(res.data);
-        } else {
-          applyAuthFailure(res.error);
-        }
-      } catch (e) {
-        applyAuthFailure("Authentication error: " + e.message);
-      }
-    });
   } else {
-    // Browser local fallback
-    setTimeout(() => {
-      setLoginLoading(false);
-      const comp = companies.find((c) => c.code === companyCode) || companies[0];
-      if (comp) {
-        const expectedUser = comp.username || "A";
-        const expectedPass = comp.password || "a";
-        const matchUser = username.toUpperCase() === expectedUser.toUpperCase();
-        const matchPass = password === expectedPass || (expectedPass === "a" && password === "a");
-        if (matchUser && matchPass) {
-          applyAuthSuccess({
-            ...comp,
-            userId: `usr-${comp.code}`,
-            username: username,
-            displayName: comp.name ? `${comp.name} Admin` : username,
-            role: "Administrator"
-          });
-        } else {
-          applyAuthFailure("Invalid User ID or Password. Please try again.");
-        }
-      } else {
-        applyAuthFailure("Selected company not found. Please select a valid company.");
-      }
-    }, 150);
+    setLoginLoading(false);
+    applyAuthFailure("Backend bridge connection is unavailable. Cannot authenticate without backend.");
   }
 }
 
@@ -1098,7 +1397,7 @@ function selectCompanyFromList() {
     loginCompanySelect.value = comp.code;
   }
   if (loginUserInput) {
-    loginUserInput.value = comp.username || "A";
+    loginUserInput.value = comp.username || "";
   }
   showScreen("view-login");
   if (loginPwdInput) {
@@ -1178,10 +1477,12 @@ function openBillingModeSelection(comp) {
 
 function renderModeSelection() {
   if (!activeCompany) return;
+  const curUser = window.BusinessContext ? window.BusinessContext.getCurrentUser() : null;
+  const curBranch = window.BusinessContext ? window.BusinessContext.getActiveBranch() : null;
   if (modeCompanyName) modeCompanyName.textContent = activeCompany.name;
-  if (modeBranchName) modeBranchName.textContent = activeCompany.branch || "Main Branch";
-  if (modeUserName) modeUserName.textContent = `${activeCompany.username || "A"} (Administrator)`;
-  if (modeFyName) modeFyName.textContent = (activeCompany.finYear || "2026-27").split(" ")[0];
+  if (modeBranchName) modeBranchName.textContent = curBranch ? `${curBranch.name} (${curBranch.code || 'BR01'})` : (activeCompany.branch || "BR01");
+  if (modeUserName) modeUserName.textContent = curUser ? `${curUser.displayName || curUser.username} (${curUser.role || 'User'})` : (activeCompany.username || "--");
+  if (modeFyName) modeFyName.textContent = (activeCompany.finYear || activeCompany.fin_year || "2026-27").split(" ")[0];
   showNotification(`Logged in to ${activeCompany.name}`);
 }
 
@@ -1241,9 +1542,11 @@ function enterCompanyDashboard(comp) {
   openTabs.add("traditional");
   lastTraditionalScreen = "view-dashboard";
   activateBillingTab("traditional");
-  fetchCustomerCategoryDiscounts();
-  checkLowStockAlerts(true);
-  showNotification(`Traditional Billing: ${activeCompany.name}`);
+  if (activeLoginMode !== "traditional") {
+    fetchCustomerCategoryDiscounts();
+    checkLowStockAlerts(true);
+  }
+  showNotification(`Traditional Billing: ${activeCompany ? activeCompany.name : ''}`);
 }
 
 function openFastBillingPos() {
@@ -1908,6 +2211,8 @@ function resetAccountMasterAddForm() {
   if (formAccountMaster) formAccountMaster.reset();
   const idEl = document.getElementById("acc-id");
   if (idEl) idEl.value = "";
+  const codeEl = document.getElementById("acc-code");
+  if (codeEl) codeEl.value = "";
   if (accName) accName.value = "";
   if (accAlias) accAlias.value = "";
   if (accPrintName) accPrintName.value = "";
@@ -1980,6 +2285,8 @@ function openModifyAccountMaster(accId) {
     }
     const idEl = document.getElementById("acc-id");
     if (idEl) idEl.value = acc.id || "";
+    const codeEl = document.getElementById("acc-code");
+    if (codeEl) codeEl.value = acc.code || acc.customer_code || acc.customerCode || "";
     if (accName) accName.value = acc.name || "";
     const aliasEl = document.getElementById("acc-alias");
     if (aliasEl) aliasEl.value = acc.alias || "";
@@ -2020,6 +2327,29 @@ function openModifyAccountMaster(accId) {
     if (titleEl) titleEl.textContent = `Modify Account Master: ${acc.name}`;
     showScreen("view-add-account-master");
   };
+
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional"));
+  if (isTrad && window.backend && typeof window.backend.traditional_getCustomer === "function") {
+    window.backend.traditional_getCustomer(accId, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.data) {
+          loadIntoForm(r.data);
+          return;
+        }
+      } catch (e) {}
+      if (window.backend.traditional_listAccounts) {
+        window.backend.traditional_listAccounts("", false, (lResp) => {
+          try {
+            const lr = typeof lResp === "string" ? JSON.parse(lResp) : lResp;
+            const found = (lr.data || []).find(a => a.id === accId || a.name === accId);
+            if (found) loadIntoForm(found);
+          } catch(e) {}
+        });
+      }
+    });
+    return;
+  }
 
   if (window.backend && window.backend.getAccountById) {
     window.backend.getAccountById(activeCompany.id, accId, (resp) => {
@@ -2130,6 +2460,39 @@ function renderAccountMasterList(searchQuery, groupFilter) {
     });
   };
 
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional"));
+  if (isTrad && window.backend && typeof window.backend.traditional_listAccounts === "function") {
+    window.backend.traditional_listAccounts(q || "", false, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && Array.isArray(r.data)) {
+          handleAccountsData(r.data);
+          return;
+        }
+      } catch (e) {}
+      const key = `alpha_accounts_${activeCompany.code}`;
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e){}
+      handleAccountsData(list);
+    });
+    return;
+  } else if (isTrad && window.backend && typeof window.backend.traditional_listCustomers === "function") {
+    window.backend.traditional_listCustomers(q || "", false, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && Array.isArray(r.data)) {
+          handleAccountsData(r.data);
+          return;
+        }
+      } catch (e) {}
+      const key = `alpha_accounts_${activeCompany.code}`;
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e){}
+      handleAccountsData(list);
+    });
+    return;
+  }
+
   if (window.backend && window.backend.listAccounts) {
     window.backend.listAccounts(activeCompany.id, (resp) => {
       try {
@@ -2180,6 +2543,7 @@ function handleSaveAccountMaster() {
 
   const alias = accAlias ? accAlias.value.trim() : (document.getElementById("acc-alias") ? document.getElementById("acc-alias").value.trim() : "");
   const existingAccId = document.getElementById("acc-id") ? document.getElementById("acc-id").value : "";
+  const existingAccCode = document.getElementById("acc-code") ? document.getElementById("acc-code").value.trim() : "";
   const custCategory = document.getElementById("acc-customer-category") ? document.getElementById("acc-customer-category").value : "Direct Customer";
   const opBal = document.getElementById("acc-op-bal") ? parseFloat(document.getElementById("acc-op-bal").value) || 0.0 : 0.0;
   const opType = document.getElementById("acc-op-type") ? document.getElementById("acc-op-type").value : "D";
@@ -2216,6 +2580,10 @@ function handleSaveAccountMaster() {
   };
   if (existingAccId) {
     accountData.id = existingAccId;
+  }
+  if (existingAccCode) {
+    accountData.code = existingAccCode;
+    accountData.customer_code = existingAccCode;
   }
 
   const completeSave = (savedData) => {
@@ -2273,7 +2641,21 @@ function handleSaveAccountMaster() {
     if (accName) accName.focus();
   };
 
-  if (activeCompany && window.backend && typeof window.backend.saveAccount === "function") {
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional"));
+  if (isTrad && window.backend && typeof window.backend.traditional_saveCustomer === "function") {
+    window.backend.traditional_saveCustomer(JSON.stringify(accountData), (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success) {
+          completeSave(r.data);
+        } else {
+          failSave(r ? r.error : "Failed to save Customer Account.");
+        }
+      } catch (e) {
+        failSave(e.message);
+      }
+    });
+  } else if (activeCompany && window.backend && typeof window.backend.saveAccount === "function") {
     window.backend.saveAccount(activeCompany.id, JSON.stringify(accountData), (resp) => {
       try {
         const r = typeof resp === "string" ? JSON.parse(resp) : resp;
@@ -2386,6 +2768,25 @@ function handleGenerateBarcodeClick() {
   }
 
   const compId = activeCompany ? activeCompany.id : "COMP0001";
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional"));
+  if (isTrad && window.backend && typeof window.backend.traditional_generateBarcode === "function") {
+    window.backend.traditional_generateBarcode((resp) => {
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res.success && res.data) {
+          const genCode = res.data.barcode;
+          if (aliasInput) aliasInput.value = genCode;
+          showNotification(`Allocated unique barcode: ${genCode}`);
+          updateBarcodePreview(genCode, "", "Code 128");
+        } else {
+          alert(`Error generating barcode: ${res.error || "Unknown error"}`);
+        }
+      } catch (e) {
+        console.error("Barcode generator response parse error:", e);
+      }
+    });
+    return;
+  }
   if (window.backend && window.backend.generateUniqueBarcode) {
     window.backend.generateUniqueBarcode(compId, (resp) => {
       try {
@@ -2702,6 +3103,7 @@ function executeBarcodeLabelPrint() {
 // =============================================================
 // ITEM MASTER & PRODUCTS CATALOGUE MANAGEMENT
 // =============================================================
+let isSavingItem = false;
 
 function syncItemPrintName() {
   const nameEl = document.getElementById("item-name");
@@ -2712,12 +3114,28 @@ function syncItemPrintName() {
 }
 
 function resetProductMasterForm() {
-  if (formItemMaster) formItemMaster.reset();
+  if (formItemMaster && typeof formItemMaster.reset === "function") {
+    formItemMaster.reset();
+  }
   const idEl = document.getElementById("item-id");
   if (idEl) idEl.value = "";
   if (itemName) itemName.value = "";
+  const aliasEl = document.getElementById("item-alias");
+  if (aliasEl) aliasEl.value = "";
   if (itemPrintName) itemPrintName.value = "";
   syncItemPrintName();
+
+  // Reset category and unit defaults
+  const groupEl = document.getElementById("item-group");
+  if (groupEl) groupEl.value = "General";
+  const unitEl = document.getElementById("item-unit");
+  if (unitEl) unitEl.value = "Pcs.";
+
+  // Reset stock quantities and levels
+  const opQtyEl = document.getElementById("item-op-qty");
+  if (opQtyEl) opQtyEl.value = "0.00";
+  const opValEl = document.getElementById("item-op-val");
+  if (opValEl) opValEl.value = "0.00";
   const minStockEl = document.getElementById("item-min-stock-level");
   if (minStockEl) minStockEl.value = "";
   const reorderLvlEl = document.getElementById("item-reorder-level");
@@ -2728,14 +3146,57 @@ function resetProductMasterForm() {
   if (maxStockEl) maxStockEl.value = "";
   const alertEnabledEl = document.getElementById("item-alert-enabled");
   if (alertEnabledEl) alertEnabledEl.checked = true;
-  const titleEl = document.getElementById("item-master-screen-title");
-  if (titleEl) titleEl.textContent = "Add Product";
+
+  // Reset tax and HSN
+  const taxCatEl = document.getElementById("item-tax-cat");
+  if (taxCatEl) taxCatEl.value = "GST 18%";
+  const hsnEl = document.getElementById("item-hsn");
+  if (hsnEl) hsnEl.value = "";
+
+  // Reset pricing
+  const salesPriceEl = document.getElementById("item-sales-price");
+  if (salesPriceEl) salesPriceEl.value = "0.00";
+  const purcPriceEl = document.getElementById("item-purc-price");
+  if (purcPriceEl) purcPriceEl.value = "0.00";
+  const mrpEl = document.getElementById("item-mrp");
+  if (mrpEl) mrpEl.value = "0.00";
+  const minPriceEl = document.getElementById("item-min-sales-price");
+  if (minPriceEl) minPriceEl.value = "0.00";
+
+  // Reset discounts
+  const saleDiscEl = document.getElementById("item-sale-disc");
+  if (saleDiscEl) saleDiscEl.value = "0.00";
+  const purcDiscEl = document.getElementById("item-purc-disc");
+  if (purcDiscEl) purcDiscEl.value = "0.00";
+
+  // Reset descriptions
+  const descEl = document.getElementById("item-desc");
+  if (descEl) descEl.value = "";
+  const extraInfoEl = document.getElementById("item-extra-info");
+  if (extraInfoEl) extraInfoEl.value = "";
 
   // Reset Barcode Preview & Alternates
+  const altInput = document.getElementById("item-alternate-barcodes-input");
+  if (altInput) altInput.value = "";
   const prev = document.getElementById("item-barcode-preview-container");
   if (prev) prev.style.display = "none";
+  const svgWrap = document.getElementById("item-barcode-svg-wrapper");
+  if (svgWrap) svgWrap.innerHTML = "";
   currentAlternateBarcodes = [];
-  renderAlternateBarcodesList();
+  if (typeof renderAlternateBarcodesList === "function") {
+    renderAlternateBarcodesList();
+  }
+
+  const titleEl = document.getElementById("item-master-screen-title");
+  if (titleEl) titleEl.textContent = "Add Product";
+}
+
+function openAddProductMaster() {
+  resetProductMasterForm();
+  showScreen("view-add-item-master");
+  setTimeout(() => {
+    if (itemName) itemName.focus();
+  }, 50);
 }
 
 function loadProductForEditing(itemOrId) {
@@ -2749,13 +3210,17 @@ function loadProductForEditing(itemOrId) {
     
     if (itemName) itemName.value = item.name || "";
     const aliasEl = document.getElementById("item-alias");
-    const primaryBar = item.primary_barcode || item.alias || (item.barcodes ? item.barcodes.split(",")[0].trim() : "");
+    const primaryBar = (Array.isArray(item.barcodes) && item.barcodes.length > 0)
+      ? item.barcodes[0]
+      : (item.sku || item.primary_barcode || item.alias || (typeof item.barcodes === "string" ? item.barcodes.split(",")[0].trim() : ""));
     if (aliasEl) aliasEl.value = primaryBar;
 
     currentAlternateBarcodes = [];
-    if (item.alternate_barcodes && Array.isArray(item.alternate_barcodes)) {
+    if (Array.isArray(item.barcodes)) {
+      currentAlternateBarcodes = item.barcodes.filter(b => b && b !== primaryBar);
+    } else if (item.alternate_barcodes && Array.isArray(item.alternate_barcodes)) {
       currentAlternateBarcodes = item.alternate_barcodes.filter(b => b && b !== primaryBar);
-    } else if (item.barcodes && typeof item.barcodes === "string") {
+    } else if (typeof item.barcodes === "string" && item.barcodes.trim()) {
       const parts = item.barcodes.split(",").map(s => s.trim()).filter(Boolean);
       currentAlternateBarcodes = parts.filter(b => b !== primaryBar);
     }
@@ -2783,9 +3248,9 @@ function loadProductForEditing(itemOrId) {
     const hsnEl = document.getElementById("item-hsn");
     if (hsnEl) hsnEl.value = item.hsn || "";
     const salesPriceEl = document.getElementById("item-sales-price");
-    if (salesPriceEl) salesPriceEl.value = item.sales_price ?? item.salesPrice ?? 0;
+    if (salesPriceEl) salesPriceEl.value = item.selling_price ?? item.sellingPrice ?? item.sales_price ?? item.salesPrice ?? 0;
     const purcPriceEl = document.getElementById("item-purc-price");
-    if (purcPriceEl) purcPriceEl.value = item.purc_price ?? item.purcPrice ?? 0;
+    if (purcPriceEl) purcPriceEl.value = item.cogs_amount ?? item.cogsAmount ?? item.purc_price ?? item.purcPrice ?? 0;
     const mrpEl = document.getElementById("item-mrp");
     if (mrpEl) mrpEl.value = item.mrp ?? 0;
     const minPriceEl = document.getElementById("item-min-sales-price");
@@ -2830,15 +3295,33 @@ function loadProductForEditing(itemOrId) {
 }
 
 function handleSaveItemMaster() {
-  const name = itemName.value.trim();
+  if (isSavingItem) return;
+
+  const name = itemName ? itemName.value.trim() : "";
   if (!name) {
     alert("Please enter Product Name.");
-    itemName.focus();
+    if (itemName) itemName.focus();
     return;
   }
 
   // Ensure Receipt Print Name is synchronized and matches Product Name
   syncItemPrintName();
+
+  // Prevent duplicate saves caused by repeated button clicks or F2 presses
+  isSavingItem = true;
+  const btnSave = document.getElementById("btn-item-save");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.style.opacity = "0.6";
+  }
+
+  const unlockSave = () => {
+    isSavingItem = false;
+    if (btnSave) {
+      btnSave.disabled = false;
+      btnSave.style.opacity = "";
+    }
+  };
 
   const existingId = document.getElementById("item-id")?.value.trim() || undefined;
 
@@ -2871,29 +3354,39 @@ function handleSaveItemMaster() {
   const itemData = {
     id: existingId,
     name: name,
+    sku: primaryBarcode,
+    barcode: primaryBarcode,
     alias: primaryBarcode,
     barcodes: allBarcodes,
     alternate_barcodes: currentAlternateBarcodes,
     printName: name,
     print_name: name,
-    group: document.getElementById("item-group").value,
-    item_group: document.getElementById("item-group").value,
-    unit: document.getElementById("item-unit").value,
-    opStockQty: document.getElementById("item-op-qty").value,
-    op_stock_qty: document.getElementById("item-op-qty").value,
-    opStockVal: document.getElementById("item-op-val").value,
-    op_stock_val: document.getElementById("item-op-val").value,
-    taxCategory: document.getElementById("item-tax-cat").value,
-    tax_category: document.getElementById("item-tax-cat").value,
-    hsn: document.getElementById("item-hsn").value.trim(),
-    salesPrice: document.getElementById("item-sales-price").value,
-    sales_price: document.getElementById("item-sales-price").value,
-    purcPrice: document.getElementById("item-purc-price").value,
-    purc_price: document.getElementById("item-purc-price").value,
-    mrp: document.getElementById("item-mrp").value,
-    minSalesPrice: document.getElementById("item-min-sales-price").value,
-    min_sales_price: document.getElementById("item-min-sales-price").value,
-    description: document.getElementById("item-desc").value.trim(),
+    group: document.getElementById("item-group") ? document.getElementById("item-group").value : "General",
+    item_group: document.getElementById("item-group") ? document.getElementById("item-group").value : "General",
+    category: document.getElementById("item-group") ? document.getElementById("item-group").value : "General",
+    unit: document.getElementById("item-unit") ? document.getElementById("item-unit").value : "Pcs.",
+    opStockQty: document.getElementById("item-op-qty") ? document.getElementById("item-op-qty").value : "0.00",
+    op_stock_qty: document.getElementById("item-op-qty") ? document.getElementById("item-op-qty").value : "0.00",
+    opStockVal: document.getElementById("item-op-val") ? document.getElementById("item-op-val").value : "0.00",
+    op_stock_val: document.getElementById("item-op-val") ? document.getElementById("item-op-val").value : "0.00",
+    taxCategory: document.getElementById("item-tax-cat") ? document.getElementById("item-tax-cat").value : "GST 18%",
+    tax_category: document.getElementById("item-tax-cat") ? document.getElementById("item-tax-cat").value : "GST 18%",
+    hsn: document.getElementById("item-hsn") ? document.getElementById("item-hsn").value.trim() : "",
+    salesPrice: document.getElementById("item-sales-price") ? document.getElementById("item-sales-price").value : "0.00",
+    sales_price: document.getElementById("item-sales-price") ? document.getElementById("item-sales-price").value : "0.00",
+    sellingPrice: document.getElementById("item-sales-price") ? document.getElementById("item-sales-price").value : "0.00",
+    selling_price: document.getElementById("item-sales-price") ? document.getElementById("item-sales-price").value : "0.00",
+    purcPrice: document.getElementById("item-purc-price") ? document.getElementById("item-purc-price").value : "0.00",
+    purc_price: document.getElementById("item-purc-price") ? document.getElementById("item-purc-price").value : "0.00",
+    cogsAmount: document.getElementById("item-purc-price") ? document.getElementById("item-purc-price").value : "0.00",
+    cogs_amount: document.getElementById("item-purc-price") ? document.getElementById("item-purc-price").value : "0.00",
+    mrp: document.getElementById("item-mrp") ? document.getElementById("item-mrp").value : "0.00",
+    minSalesPrice: document.getElementById("item-min-sales-price") ? document.getElementById("item-min-sales-price").value : "0.00",
+    min_sales_price: document.getElementById("item-min-sales-price") ? document.getElementById("item-min-sales-price").value : "0.00",
+    sale_disc: document.getElementById("item-sale-disc") ? document.getElementById("item-sale-disc").value : "0.00",
+    purc_disc: document.getElementById("item-purc-disc") ? document.getElementById("item-purc-disc").value : "0.00",
+    description: document.getElementById("item-desc") ? document.getElementById("item-desc").value.trim() : "",
+    extra_info: document.getElementById("item-extra-info") ? document.getElementById("item-extra-info").value.trim() : "",
     min_stock_alert_level: parsedMinStock,
     min_stock_level: parsedMinStock,
     reorder_level: parsedReorder,
@@ -2903,12 +3396,85 @@ function handleSaveItemMaster() {
     updatedAt: new Date().toISOString()
   };
 
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional")) || (typeof activeLoginMode !== "undefined" && activeLoginMode === "traditional");
+  if (isTrad && window.backend && typeof window.backend.traditional_saveProduct === "function") {
+    window.backend.traditional_saveProduct(JSON.stringify(itemData), (resp) => {
+      unlockSave();
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success) {
+          if (activeCompany) {
+            const key = `alpha_items_${activeCompany.code}`;
+            let list = [];
+            try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) {}
+            const targetId = (r.data && r.data.id) || existingId;
+            const existingIdx = list.findIndex(x => (targetId && x.id === targetId) || (x.name && x.name.toUpperCase() === name.toUpperCase()));
+            const recordToCache = { ...itemData, id: targetId || itemData.id };
+            if (existingIdx !== -1) {
+              list[existingIdx] = recordToCache;
+            } else {
+              list.push(recordToCache);
+            }
+            localStorage.setItem(key, JSON.stringify(list));
+          }
+
+          if (existingId) {
+            // Modify Mode: updating existing product
+            // 1. Success notification toast with updated product name
+            showNotification(`Product "${name}" updated successfully!`);
+            // 2. Clear previous product form state
+            resetProductMasterForm();
+            // 3. Automatically navigate back to Product List
+            showScreen("view-items-list");
+            // 4. Refresh Product List from database
+            renderProductsList();
+          } else {
+            // Continuous Add Mode for new product:
+            // 1. Success notification toast with saved product name
+            showNotification(`Product "${name}" saved to database!`);
+            // 2. Refresh background product catalogue
+            renderProductsList();
+            // 3. Reset form to fresh Add Product state
+            resetProductMasterForm();
+            // 4. Ensure view remains on view-add-item-master
+            showScreen("view-add-item-master");
+            // 5. Automatically focus cursor on Product Name
+            setTimeout(() => {
+              if (itemName) itemName.focus();
+            }, 50);
+          }
+        } else {
+          // Failed save: do NOT reset form; retain all entered values
+          const errMsg = (r && r.error) ? r.error : "Unknown database error";
+          alert(`Failed to save Product: ${errMsg}`);
+          if (errMsg && (errMsg.toLowerCase().includes("sku") || errMsg.toLowerCase().includes("barcode"))) {
+            const aliasEl = document.getElementById("item-alias");
+            if (aliasEl) aliasEl.focus();
+          } else if (errMsg && errMsg.toLowerCase().includes("name")) {
+            if (itemName) itemName.focus();
+          } else if (errMsg && errMsg.toLowerCase().includes("price")) {
+            const priceEl = document.getElementById("item-sales-price");
+            if (priceEl) priceEl.focus();
+          } else {
+            if (itemName) itemName.focus();
+          }
+        }
+      } catch (e) {
+        console.error("Error saving traditional product:", e);
+        alert(`Failed to save Product: ${e.message || "Unknown error"}`);
+        if (itemName) itemName.focus();
+      }
+    });
+    return;
+  }
+
   if (activeCompany) {
-    if (window.backend) {
+    if (window.backend && typeof window.backend.saveItem === "function") {
       window.backend.saveItem(activeCompany.id, JSON.stringify(itemData), (resp) => {
+        unlockSave();
         try {
-          const r = JSON.parse(resp);
-          if (r.success) {
+          const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+          if (r && r.success) {
             const actionText = existingId ? "updated" : "saved to database";
             showNotification(`Product "${name}" ${actionText}!`);
             checkLowStockAlerts(false);
@@ -2939,12 +3505,30 @@ function handleSaveItemMaster() {
     localStorage.setItem(key, JSON.stringify(list));
   }
 
+  unlockSave();
   showNotification(`Product "${name}" ${existingId ? 'updated' : 'saved'}!`);
   resetProductMasterForm();
   showScreen("view-items-list");
 }
 
 function fetchAllItems(query, callback) {
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional")) || (typeof activeLoginMode !== "undefined" && activeLoginMode === "traditional");
+  if (isTrad && window.backend && typeof window.backend.traditional_listProducts === "function") {
+    window.backend.traditional_listProducts(query || "", "", true, (resp) => {
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res && res.success && Array.isArray(res.data)) {
+          callback(res.data);
+          return;
+        }
+      } catch (e) {
+        console.error("Backend traditional_listProducts error:", e);
+      }
+      fallbackLocalItems(query, callback);
+    });
+    return;
+  }
+
   if (window.backend && activeCompany) {
     window.backend.searchItems(activeCompany.id, query || "", (resp) => {
       try {
@@ -2977,8 +3561,10 @@ function fallbackLocalItems(query, callback) {
   const q = query.toUpperCase();
   const filtered = list.filter((it) =>
     (it.name && it.name.toUpperCase().includes(q)) ||
+    (it.sku && it.sku.toUpperCase().includes(q)) ||
     (it.alias && it.alias.toUpperCase().includes(q)) ||
-    (it.group && it.group.toUpperCase().includes(q))
+    (it.group && it.group.toUpperCase().includes(q)) ||
+    (it.category && it.category.toUpperCase().includes(q))
   );
   callback(filtered);
 }
@@ -2986,6 +3572,23 @@ function fallbackLocalItems(query, callback) {
 function fetchItemById(itemId, callback) {
   const comp = activeCompany || window.activeCompany;
   if (!activeCompany && comp) activeCompany = comp;
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional")) || (typeof activeLoginMode !== "undefined" && activeLoginMode === "traditional");
+  if (isTrad && window.backend && typeof window.backend.traditional_getProduct === "function") {
+    window.backend.traditional_getProduct(itemId, (resp) => {
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res && res.success && res.data) {
+          callback(res.data);
+          return;
+        }
+      } catch (e) {
+        console.error("Backend traditional_getProduct error:", e);
+      }
+      fallbackLocalItemById(itemId, callback);
+    });
+    return;
+  }
+
   if (window.backend && comp) {
     window.backend.getItemById(comp.id, itemId, (resp) => {
       try {
@@ -3066,10 +3669,12 @@ function renderProductsList(query = "", groupFilter = "") {
       tr.dataset.id = it.id || "";
       tr.dataset.name = it.name || "";
 
-      const price = parseFloat(it.sales_price ?? it.salesPrice ?? 0).toFixed(2);
+      const price = parseFloat(it.selling_price ?? it.sellingPrice ?? it.sales_price ?? it.salesPrice ?? 0).toFixed(2);
       const stock = parseFloat(it.current_stock ?? it.op_stock_qty ?? it.opStockQty ?? 0);
-      const barcode = it.barcodes || it.alias || "-";
-      const group = it.item_group || it.group || "General";
+      const barcode = (Array.isArray(it.barcodes) && it.barcodes.length > 0)
+        ? it.barcodes.join(", ")
+        : (it.sku || it.barcodes || it.alias || "-");
+      const group = it.category || it.item_group || it.group || "General";
       const unit = it.unit || "Pcs.";
       const tax = it.tax_category || it.taxCategory || "GST 18%";
 
@@ -3185,39 +3790,82 @@ function setupPartyAutocomplete() {
   const popup = document.getElementById("vch-party-autocomplete-popup");
   if (!popup) return;
 
+  function positionPartyPopup() {
+    if (!vchPartyInput || !popup) return;
+    const inputRect = vchPartyInput.getBoundingClientRect();
+    const formEl = document.querySelector(".sales-voucher-body") || document.getElementById("view-sales-voucher") || document.body;
+    const formRect = formEl.getBoundingClientRect();
+
+    const left = Math.max(10, inputRect.left);
+    const rightBoundary = formRect.right - 12;
+    let calculatedWidth = rightBoundary - left;
+    const maxAvailable = window.innerWidth - left - 16;
+    calculatedWidth = Math.min(Math.max(calculatedWidth, 650), maxAvailable);
+    if (calculatedWidth < 450) calculatedWidth = maxAvailable;
+
+    const top = inputRect.bottom + 2;
+    const spaceBelow = window.innerHeight - top;
+    if (spaceBelow < 220 && inputRect.top > 250) {
+      popup.style.top = "auto";
+      popup.style.bottom = `${window.innerHeight - inputRect.top + 2}px`;
+    } else {
+      popup.style.top = `${top}px`;
+      popup.style.bottom = "auto";
+    }
+
+    popup.style.left = `${left}px`;
+    popup.style.width = `${calculatedWidth}px`;
+  }
+
   function renderSuggestions(list, query) {
     popup.innerHTML = "";
     currentPartySuggestions = list;
     activePartySuggestionIndex = -1;
+
+    positionPartyPopup();
 
     if (!list || list.length === 0) {
       const noMatch = document.createElement("div");
       noMatch.className = "vch-party-no-match";
       noMatch.textContent = "No customer master found. Please create this customer in Administration → Masters → Add.";
       popup.appendChild(noMatch);
-      popup.style.display = "block";
+      popup.style.display = "flex";
       return;
     }
 
+    // Wide horizontal table header for party suggestions
+    const header = document.createElement("div");
+    header.className = "vch-autocomplete-header";
+    header.innerHTML = `
+      <div class="vch-party-col-name">Party Name</div>
+      <div class="vch-party-col-alias">Alias</div>
+      <div class="vch-party-col-type">Type</div>
+      <div class="vch-party-col-code">Customer Code</div>
+      <div class="vch-party-col-gstin">GSTIN / Status</div>
+    `;
+    popup.appendChild(header);
+
+    const listContainer = document.createElement("div");
+    listContainer.className = "vch-autocomplete-list";
+
     list.forEach((acc, idx) => {
       const itemEl = document.createElement("div");
-      itemEl.className = "vch-party-sugg-item";
+      itemEl.className = "vch-party-sugg-item vch-suggestion-row";
       itemEl.dataset.index = idx;
 
       const isCash = (acc.id === "CASH" || (acc.name && acc.name.toUpperCase() === "CASH"));
       const name = isCash ? "CASH" : (acc.name || "");
-      const alias = acc.alias ? ` (${acc.alias})` : "";
-      const gstin = acc.gstin ? `GST: ${acc.gstin}` : "";
-      const mobile = (acc.mobile || acc.mobile_no) ? `Mob: ${acc.mobile || acc.mobile_no}` : "";
-      const cat = acc.customer_category || acc.customerCategory || (isCash ? "Direct Customer" : "Customer");
-      const subParts = [alias ? alias.trim() : "", gstin, mobile].filter(Boolean).join(" | ");
+      const alias = acc.alias || (isCash ? "Cash Sale" : "-");
+      const code = isCash ? "CASH" : (acc.code || acc.customer_code || acc.account_code || "-");
+      const type = isCash ? "Direct Customer" : (acc.customer_category || acc.classification || acc.account_group || "Customer");
+      const gstin = acc.gstin ? acc.gstin : (isCash ? "Unregistered" : "Unregistered");
 
       itemEl.innerHTML = `
-        <div class="vch-party-sugg-primary">
-          <div class="vch-party-sugg-name">${escapeHtml(name)}${escapeHtml(alias)}</div>
-          <div class="vch-party-sugg-meta">${escapeHtml(subParts || (isCash ? "Direct Walk-in Retail Customer" : cat))}</div>
-        </div>
-        <div class="vch-party-badge ${isCash ? 'cash' : 'customer'}">${isCash ? 'Walk-in' : escapeHtml(cat)}</div>
+        <div class="vch-party-col-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+        <div class="vch-party-col-alias" title="${escapeHtml(alias)}">${escapeHtml(alias)}</div>
+        <div class="vch-party-col-type" title="${escapeHtml(type)}"><span class="vch-party-badge ${isCash ? 'cash' : 'customer'}">${escapeHtml(type)}</span></div>
+        <div class="vch-party-col-code" title="${escapeHtml(code)}">${escapeHtml(code)}</div>
+        <div class="vch-party-col-gstin" title="${escapeHtml(gstin)}">${escapeHtml(gstin)}</div>
       `;
 
       itemEl.addEventListener("mousedown", (e) => {
@@ -3225,10 +3873,11 @@ function setupPartyAutocomplete() {
         selectPartyItem(acc);
       });
 
-      popup.appendChild(itemEl);
+      listContainer.appendChild(itemEl);
     });
 
-    popup.style.display = "block";
+    popup.appendChild(listContainer);
+    popup.style.display = "flex";
   }
 
   function selectPartyItem(acc) {
@@ -3407,18 +4056,25 @@ function setupPartyAutocomplete() {
   });
 }
 
-// Initialize Sales Billing Screen
-function initSalesVoucherScreen() {
-  isSalesModifyMode = false;
-  currentModifySaleVchId = null;
-  const modIn = document.getElementById("sales-modify-vch-id");
-  if (modIn) modIn.value = "";
-  const titleEl = document.getElementById("sales-voucher-screen-title");
-  if (titleEl) titleEl.textContent = "Add Sales Voucher";
+function refreshSalesVoucherNumber() {
+  const isTrad = (typeof activeBillingMode !== "undefined" && activeBillingMode === "traditional") || (typeof openTabs !== "undefined" && openTabs.has("traditional")) || (typeof activeLoginMode !== "undefined" && activeLoginMode === "traditional");
+  const series = vchSeries ? (vchSeries.value || "Main") : "Main";
 
-  // Request next available sequential voucher number from database atomically
-  if (window.backend && window.backend.getNextVoucherNumber && activeCompany) {
-    const series = vchSeries ? (vchSeries.value || "Main") : "Main";
+  if (isTrad && window.backend && typeof window.backend.traditional_getNextVoucherNumber === "function") {
+    window.backend.traditional_getNextVoucherNumber(series, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.data) {
+          const vchNumStr = typeof r.data === "object" ? (r.data.voucher_number || r.data.vch_no || r.data) : r.data;
+          if (vchNumber) vchNumber.value = vchNumStr;
+          if (infoVchNo) infoVchNo.textContent = vchNumStr;
+          return;
+        }
+      } catch (e) {
+        console.error("traditional_getNextVoucherNumber error:", e);
+      }
+    });
+  } else if (window.backend && window.backend.getNextVoucherNumber && activeCompany) {
     window.backend.getNextVoucherNumber(activeCompany.id, series, (resp) => {
       try {
         const r = JSON.parse(resp);
@@ -3437,6 +4093,26 @@ function initSalesVoucherScreen() {
     if (vchNumber) vchNumber.value = nextNo;
     if (infoVchNo) infoVchNo.textContent = nextNo;
   }
+}
+
+if (typeof vchSeries !== "undefined" && vchSeries) {
+  vchSeries.addEventListener("change", () => {
+    if (typeof isSalesModifyMode !== "undefined" && isSalesModifyMode) return;
+    refreshSalesVoucherNumber();
+  });
+}
+
+// Initialize Sales Billing Screen
+function initSalesVoucherScreen() {
+  isSalesModifyMode = false;
+  currentModifySaleVchId = null;
+  const modIn = document.getElementById("sales-modify-vch-id");
+  if (modIn) modIn.value = "";
+  const titleEl = document.getElementById("sales-voucher-screen-title");
+  if (titleEl) titleEl.textContent = "Add Sales Voucher";
+
+  // Request next available sequential voucher number from database atomically
+  refreshSalesVoucherNumber();
 
   // Preserve header defaults: Series, Date, Mat Centre, Sale Type
   const now = new Date();
@@ -3503,7 +4179,28 @@ function resolveItemByBarcodeOrName(val, callback) {
   const clean = val.trim();
   const upper = clean.toUpperCase();
 
-  // 1. Try barcode bridge first if available
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional")) || (typeof activeLoginMode !== "undefined" && activeLoginMode === "traditional");
+  if (isTrad && window.backend && typeof window.backend.traditional_findProductByBarcode === "function") {
+    window.backend.traditional_findProductByBarcode(clean, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.data) {
+          callback(r.data);
+          return;
+        } else if (r && !r.success && r.error && r.error.includes("inactive")) {
+          alert(r.error);
+          callback(null);
+          return;
+        }
+      } catch (e) {
+        console.error("traditional_findProductByBarcode error:", e);
+      }
+      searchCatalogFallback();
+    });
+    return;
+  }
+
+  // 1. Try barcode bridge first if available (Fast Billing / Legacy)
   if (window.backend && window.backend.findByBarcode && activeCompany) {
     window.backend.findByBarcode(activeCompany.id, clean, (resp) => {
       try {
@@ -3525,14 +4222,22 @@ function resolveItemByBarcodeOrName(val, callback) {
         callback(null);
         return;
       }
-      // Exact barcode match
-      let found = items.find(it => 
-        (it.barcodes && it.barcodes.toUpperCase() === upper) || 
-        (it.barcode && it.barcode.toUpperCase() === upper)
-      );
+      // Exact barcode match (supports arrays and strings)
+      let found = items.find(it => {
+        if (Array.isArray(it.barcodes)) {
+          return it.barcodes.some(b => b && b.toUpperCase() === upper);
+        }
+        if (typeof it.barcodes === "string") {
+          return it.barcodes.toUpperCase() === upper;
+        }
+        if (it.barcode && typeof it.barcode === "string") {
+          return it.barcode.toUpperCase() === upper;
+        }
+        return false;
+      });
       // Exact SKU / alias match
       if (!found) {
-        found = items.find(it => it.alias && it.alias.toUpperCase() === upper);
+        found = items.find(it => (it.sku && it.sku.toUpperCase() === upper) || (it.alias && it.alias.toUpperCase() === upper));
       }
       // Exact name match
       if (!found) {
@@ -3553,23 +4258,45 @@ function resolveItemByBarcodeOrName(val, callback) {
 
 // Populate line item row with product data from Item Master
 function populateVoucherRowWithItem(rowNum, item) {
+  if (!item) return;
+
+  // Inactive product rejection
+  if (item.isActive === false || item.is_active === false) {
+    alert(`Product "${item.name}" is inactive and cannot be billed.`);
+    return;
+  }
+
   const rowInput = vchItemsTbody.querySelector(`.vch-item-input[data-row="${rowNum}"]`);
   const unitEl = vchItemsTbody.querySelector(`.vch-unit-input[data-row="${rowNum}"]`);
   const priceEl = vchItemsTbody.querySelector(`.vch-price-input[data-row="${rowNum}"]`);
   const qtyEl = vchItemsTbody.querySelector(`.vch-qty-input[data-row="${rowNum}"]`);
 
+  // Extract actual saved selling price (never fallback to COGS or purchase cost)
+  const rawPrice = item.selling_price ?? item.sellingPrice ?? item.sales_price ?? item.salesPrice ?? 0;
+  const price = parseFloat(rawPrice) || 0;
+
   if (rowInput) {
     rowInput.value = item.name || "";
     rowInput.dataset.itemId = item.id || "";
-    rowInput.dataset.productBarcode = item.barcodes || item.barcode || item.alias || "";
+    rowInput.dataset.productBarcode = Array.isArray(item.barcodes) ? (item.barcodes[0] || "") : (item.barcodes || item.barcode || item.alias || "");
+    rowInput.dataset.sku = item.sku || item.alias || "";
+    rowInput.dataset.unit = item.unit || "Pcs.";
+    rowInput.dataset.sellingPrice = price.toFixed(2);
+    rowInput.dataset.taxCategory = item.tax_category || item.taxCategory || "GST 18%";
+    rowInput.dataset.taxRate = item.tax_rate_percent || item.taxRatePercent || item.tax_rate || "18";
+    rowInput.dataset.hsn = item.hsn || "";
   }
   // Standard Unit loaded automatically from Item Master (read-only)
   if (unitEl) {
     unitEl.value = item.unit || "Pcs.";
   }
-  const price = parseFloat(item.sales_price ?? item.salesPrice ?? 0);
-  if (priceEl && price > 0) priceEl.value = price.toFixed(2);
 
+  // Populate selling price from Item Master's saved selling_price
+  if (priceEl) {
+    priceEl.value = price.toFixed(2);
+  }
+
+  // Default quantity to 1 if empty or <= 0
   if (qtyEl && (!qtyEl.value || parseFloat(qtyEl.value) <= 0)) {
     qtyEl.value = "1";
   }
@@ -3578,19 +4305,56 @@ function populateVoucherRowWithItem(rowNum, item) {
   recalculateVoucherTotals();
 
   if (vchItemInfo) {
+    const skuText = item.sku ? ` | SKU: ${escapeHtml(item.sku)}` : "";
+    const hsnText = item.hsn ? ` | HSN: ${escapeHtml(item.hsn)}` : "";
+    const taxCat = item.tax_category || item.taxCategory || "GST 18%";
+    const taxRate = item.tax_rate_percent || item.taxRatePercent || item.tax_rate || "18";
     vchItemInfo.innerHTML = `
-      Product: <strong>${escapeHtml(item.name)}</strong><br/>
-      Category: ${escapeHtml(item.item_group || item.group || "General")} | Unit: ${escapeHtml(item.unit || "Pcs.")}<br/>
-      Price: ₹${price.toFixed(2)} | Tax Cat: ${escapeHtml(item.tax_category || item.taxCategory || "GST 18%")}
+      Product: <strong>${escapeHtml(item.name)}</strong>${skuText}<br/>
+      Category: ${escapeHtml(item.item_group || item.category || item.group || "General")} | Unit: ${escapeHtml(item.unit || "Pcs.")}${hsnText}<br/>
+      Selling Price: ₹${price.toFixed(2)} | Tax Cat: ${escapeHtml(taxCat)} (${taxRate}%)
     `;
   }
 
-  showNotification(`Selected ${item.name}`);
+  showNotification(`Selected ${item.name} (₹${price.toFixed(2)})`);
   // Enter key from Item moves focus directly to Quantity field, skipping read-only Unit field!
   if (qtyEl) {
     qtyEl.focus();
     qtyEl.select();
   }
+}
+
+// Reset an invoice row to clean state and recalculate totals
+function clearVoucherRow(rowNum) {
+  const rowInput = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-item-input[data-row="${rowNum}"]`) : null;
+  const unitEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-unit-input[data-row="${rowNum}"]`) : null;
+  const priceEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-price-input[data-row="${rowNum}"]`) : null;
+  const qtyEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-qty-input[data-row="${rowNum}"]`) : null;
+  const amtEl = vchItemsTbody ? vchItemsTbody.querySelector(`.vch-amount-input[data-row="${rowNum}"]`) : null;
+
+  if (rowInput) {
+    delete rowInput.dataset.itemId;
+    delete rowInput.dataset.productBarcode;
+    delete rowInput.dataset.sku;
+    delete rowInput.dataset.unit;
+    delete rowInput.dataset.sellingPrice;
+    delete rowInput.dataset.taxCategory;
+    delete rowInput.dataset.taxRate;
+    delete rowInput.dataset.hsn;
+  }
+  if (unitEl) unitEl.value = "Pcs.";
+  if (priceEl) priceEl.value = "0.00";
+  if (qtyEl) qtyEl.value = "1";
+  if (amtEl) {
+    amtEl.value = "0.00";
+    amtEl.dataset.gross = "0.00";
+    amtEl.dataset.discountPercent = "0.00";
+    amtEl.dataset.discountAmount = "0.00";
+  }
+  if (vchItemInfo && rowInput && (!rowInput.value || rowInput.value.trim() === "")) {
+    vchItemInfo.innerHTML = "No item selected";
+  }
+  recalculateVoucherTotals();
 }
 
 let activeVchRowForPopup = null;
@@ -3606,6 +4370,7 @@ function setupVoucherAutocomplete(input, row) {
 
     if (!q) {
       hideVchAutocompletePopup();
+      clearVoucherRow(row);
       return;
     }
 
@@ -3692,28 +4457,72 @@ function renderVchAutocompletePopup(input, items, row) {
   if (!vchItemAutocompletePopup) return;
   vchItemAutocompletePopup.innerHTML = "";
 
-  const rect = input.getBoundingClientRect();
-  const parentEl = input.closest(".vch-table-wrapper") || document.body;
-  const parentRect = parentEl.getBoundingClientRect();
+  if (!items || items.length === 0) {
+    hideVchAutocompletePopup();
+    return;
+  }
 
-  vchItemAutocompletePopup.style.top = `${rect.bottom - parentRect.top + 2}px`;
-  vchItemAutocompletePopup.style.left = `${rect.left - parentRect.left}px`;
-  vchItemAutocompletePopup.style.width = "420px";
+  const inputRect = input.getBoundingClientRect();
+  const formEl = document.querySelector(".sales-voucher-body") || document.getElementById("view-sales-voucher") || document.body;
+  const formRect = formEl.getBoundingClientRect();
+
+  const left = Math.max(10, inputRect.left);
+  const rightBoundary = formRect.right - 12;
+  let calculatedWidth = rightBoundary - left;
+  const maxAvailable = window.innerWidth - left - 16;
+  calculatedWidth = Math.min(Math.max(calculatedWidth, 650), maxAvailable);
+  if (calculatedWidth < 450) calculatedWidth = maxAvailable;
+
+  const top = inputRect.bottom + 2;
+  const spaceBelow = window.innerHeight - top;
+  if (spaceBelow < 220 && inputRect.top > 250) {
+    vchItemAutocompletePopup.style.top = "auto";
+    vchItemAutocompletePopup.style.bottom = `${window.innerHeight - inputRect.top + 2}px`;
+  } else {
+    vchItemAutocompletePopup.style.top = `${top}px`;
+    vchItemAutocompletePopup.style.bottom = "auto";
+  }
+
+  vchItemAutocompletePopup.style.left = `${left}px`;
+  vchItemAutocompletePopup.style.width = `${calculatedWidth}px`;
+
+  // Wide horizontal table header for product suggestions
+  const header = document.createElement("div");
+  header.className = "vch-autocomplete-header";
+  header.innerHTML = `
+    <div class="vch-item-col-name">Product Name</div>
+    <div class="vch-item-col-sku">SKU</div>
+    <div class="vch-item-col-barcode">Barcode</div>
+    <div class="vch-item-col-unit">Unit</div>
+    <div class="vch-item-col-price">Price (₹)</div>
+    <div class="vch-item-col-tax">GST Rate</div>
+  `;
+  vchItemAutocompletePopup.appendChild(header);
+
+  const listContainer = document.createElement("div");
+  listContainer.className = "vch-autocomplete-list";
 
   items.forEach((item, index) => {
     const div = document.createElement("div");
-    div.className = "vch-suggestion-item";
+    div.className = "vch-suggestion-item vch-suggestion-row";
     div.dataset.index = index;
 
-    const price = parseFloat(item.sales_price ?? item.salesPrice ?? 0).toFixed(2);
-    const barcode = item.barcodes || item.alias || "";
+    const rawPrice = item.selling_price ?? item.sellingPrice ?? item.sales_price ?? item.salesPrice ?? 0;
+    const price = (parseFloat(rawPrice) || 0).toFixed(2);
+    const sku = item.sku || item.alias || "-";
+    const barcode = Array.isArray(item.barcodes) ? (item.barcodes[0] || "-") : (item.barcodes || item.barcode || "-");
+    const unit = item.unit || "Pcs.";
+    const taxCat = item.tax_category || item.taxCategory || "GST 18%";
+    const taxRate = item.tax_rate_percent || item.taxRatePercent || "18";
+    const taxDisplay = `${taxRate}%`;
 
     div.innerHTML = `
-      <div>
-        <div class="vch-sugg-name">${escapeHtml(item.name)}</div>
-        <div class="vch-sugg-code">${barcode ? `Barcode: ${escapeHtml(barcode)} | ` : ""}${escapeHtml(item.unit || "Pcs.")}</div>
-      </div>
-      <div class="vch-sugg-price">₹ ${price}</div>
+      <div class="vch-item-col-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+      <div class="vch-item-col-sku" title="${escapeHtml(sku)}">${escapeHtml(sku)}</div>
+      <div class="vch-item-col-barcode" title="${escapeHtml(barcode)}">${escapeHtml(barcode)}</div>
+      <div class="vch-item-col-unit" title="${escapeHtml(unit)}">${escapeHtml(unit)}</div>
+      <div class="vch-item-col-price" title="₹ ${price}">₹ ${price}</div>
+      <div class="vch-item-col-tax" title="${escapeHtml(taxCat)} (${taxDisplay})">${escapeHtml(taxDisplay)}</div>
     `;
 
     div.addEventListener("mousedown", (e) => {
@@ -3722,10 +4531,11 @@ function renderVchAutocompletePopup(input, items, row) {
       hideVchAutocompletePopup();
     });
 
-    vchItemAutocompletePopup.appendChild(div);
+    listContainer.appendChild(div);
   });
 
-  vchItemAutocompletePopup.style.display = "block";
+  vchItemAutocompletePopup.appendChild(listContainer);
+  vchItemAutocompletePopup.style.display = "flex";
 }
 
 function hideVchAutocompletePopup() {
@@ -3751,6 +4561,20 @@ document.addEventListener("click", (e) => {
   if (vchItemAutocompletePopup && !vchItemAutocompletePopup.contains(e.target) && !e.target.classList.contains("vch-item-input")) {
     hideVchAutocompletePopup();
   }
+});
+
+// Dismiss autocomplete popups on table scroll or window resize
+const vchTableWrapperEl = document.querySelector(".vch-table-wrapper");
+if (vchTableWrapperEl) {
+  vchTableWrapperEl.addEventListener("scroll", () => {
+    hideVchAutocompletePopup();
+  });
+}
+
+window.addEventListener("resize", () => {
+  hideVchAutocompletePopup();
+  const partyPopup = document.getElementById("vch-party-autocomplete-popup");
+  if (partyPopup) partyPopup.style.display = "none";
 });
 
 // Render 11 item rows into billing table
@@ -3882,11 +4706,11 @@ function calcRowAmount(row) {
 
   const qty = parseFloat(qtyEl.value) || 0;
   const price = parseFloat(priceEl.value) || 0;
-  const gross = qty * price;
+  const gross = Math.round(qty * price * 100) / 100;
 
   const catRate = cachedCategoryDiscounts[activeVoucherCustomerCategory] || 0.0;
   const discAmt = Math.round(gross * (catRate / 100) * 100) / 100;
-  const netAmt = Math.max(0, gross - discAmt);
+  const netAmt = Math.max(0, Math.round((gross - discAmt) * 100) / 100);
 
   amtEl.value = netAmt.toFixed(2);
   amtEl.dataset.gross = gross.toFixed(2);
@@ -3942,7 +4766,7 @@ function recalculateVoucherTotals() {
 
   if (taxRate > 0) {
     if (isInterState) {
-      igst = (subtotal * taxRate) / 100;
+      igst = Math.round(((subtotal * taxRate) / 100) * 100) / 100;
       sundry1Name.textContent = `IGST ${taxRate}%`;
       sundry1Rate.textContent = `${taxRate}.00`;
       sundry1Amt.textContent = igst.toFixed(2);
@@ -3955,8 +4779,8 @@ function recalculateVoucherTotals() {
       sgstDisplay.textContent = igst.toFixed(2);
     } else {
       const halfRate = taxRate / 2;
-      cgst = (subtotal * halfRate) / 100;
-      sgst = (subtotal * halfRate) / 100;
+      cgst = Math.round(((subtotal * halfRate) / 100) * 100) / 100;
+      sgst = Math.round(((subtotal * halfRate) / 100) * 100) / 100;
 
       sundry1Name.textContent = `CGST ${halfRate}%`;
       sundry1Rate.textContent = `${halfRate}.00`;
@@ -3980,9 +4804,9 @@ function recalculateVoucherTotals() {
     sgstDisplay.textContent = "0.00";
   }
 
-  const rawTotal = subtotal + cgst + sgst + igst;
+  const rawTotal = Math.round((subtotal + cgst + sgst + igst) * 100) / 100;
   const roundedTotal = Math.round(rawTotal);
-  const roundDiff = (roundedTotal - rawTotal);
+  const roundDiff = Math.round((roundedTotal - rawTotal) * 100) / 100;
   sundryRoundAmt.textContent = (roundDiff >= 0 ? "+" : "") + roundDiff.toFixed(2);
 
   vchGrandTotal.textContent = `₹ ${roundedTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
@@ -4183,6 +5007,24 @@ function handleSaveSalesVoucher() {
     openFastBillingPrint(savedData.voucher_id || savedData.id, savedData, "view-sales-voucher");
   };
 
+  const isTrad = (typeof activeBillingMode !== "undefined" && activeBillingMode === "traditional") || (typeof openTabs !== "undefined" && openTabs.has("traditional")) || (typeof activeLoginMode !== "undefined" && activeLoginMode === "traditional");
+
+  if (window.backend && isTrad && typeof window.backend.traditional_saveSaleInvoice === "function") {
+    window.backend.traditional_saveSaleInvoice(JSON.stringify(payload), (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r.success) {
+          onCommitSuccess(r.data);
+        } else {
+          alert(`Failed to save sales invoice: ${r.error}`);
+        }
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      }
+    });
+    return;
+  }
+
   if (window.backend && activeCompany) {
     window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
       try {
@@ -4380,6 +5222,7 @@ if (btnSalesListClose) btnSalesListClose.addEventListener("click", () => showScr
 // CONTROLLED ENHANCEMENT: LOW-STOCK ALERTS & CUSTOMER CATEGORIES
 // =============================================================
 function fetchCustomerCategoryDiscounts() {
+  if (activeLoginMode === "traditional" || activeBillingMode === "traditional") return;
   if (!activeCompany || !window.backend || !window.backend.getCustomerCategoryDiscounts) return;
   window.backend.getCustomerCategoryDiscounts(activeCompany.id, (resp) => {
     try {
@@ -4427,6 +5270,10 @@ function updateHeaderNotificationsBadge(count) {
 
 function checkLowStockAlerts(allowAutoPopup = true) {
   if (!activeCompany || !window.backend) return;
+  if (activeLoginMode === "traditional" || activeBillingMode === "traditional") {
+    updateHeaderNotificationsBadge(0);
+    return;
+  }
   if (activeBillingMode === "FAST" && window.currentUserRole === "cashier") {
     updateHeaderNotificationsBadge(0);
     return;
@@ -4632,6 +5479,21 @@ function initPosCustomerSelector() {
     try {
       localAccounts = JSON.parse(localStorage.getItem(key) || "[]");
     } catch (e) {}
+
+    const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional"));
+    if (isTrad && window.backend && typeof window.backend.traditional_listCustomers === "function") {
+      window.backend.traditional_listCustomers("", true, (resp) => {
+        try {
+          const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+          if (r && r.success && Array.isArray(r.data)) {
+            populateOptions(r.data);
+            return;
+          }
+        } catch (e) {}
+        populateOptions(localAccounts);
+      });
+      return;
+    }
 
     if (window.backend && window.backend.listAccounts) {
       window.backend.listAccounts(activeCompany.id, (resp) => {
@@ -5796,22 +6658,53 @@ function renderReportContent(tabType, data) {
   }
 }
 
-// Synchronize companies and accounts from Python SQLite backend
+// Synchronize companies and session from Python backend
 function syncFromBackend() {
   if (!window.backend) return;
-  window.backend.listCompanies((resp) => {
-    try {
-      const r = JSON.parse(resp);
-      if (r.success && Array.isArray(r.data) && r.data.length > 0) {
-        companies = r.data;
-        filteredCompanies = [...companies];
-        renderCompanyTable();
-        showNotification("Connected to persistent SQLite database.");
+
+  // Mode-aware company fetch based on currently selected billing mode
+  fetchAndPopulateCompanies();
+
+  // Mode-aware session restoration check
+  if (activeLoginMode === "traditional" && typeof window.backend.traditional_getAuthenticatedSession === "function") {
+    window.backend.traditional_getAuthenticatedSession((resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.authenticated && r.data) {
+          console.log("[BackendBridge] Active Traditional Billing session restored from backend memory.");
+          if (window.BusinessContext) {
+            const ok = window.BusinessContext.setAuthenticatedSession(r.data);
+            if (ok) {
+              if (window.DashboardManager) window.DashboardManager.initForSession();
+              activeCompany = window.BusinessContext.getActiveCompany();
+              openBillingModeSelection(activeCompany);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Traditional session restoration error:", err);
       }
-    } catch (e) {
-      console.error("Backend sync error:", e);
-    }
-  });
+    });
+  } else if (activeLoginMode === "fast_billing" && typeof window.backend.getAuthenticatedSession === "function") {
+    window.backend.getAuthenticatedSession((resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.authenticated && r.data) {
+          console.log("[BackendBridge] Active Fast Billing session restored from backend memory.");
+          if (window.BusinessContext) {
+            const ok = window.BusinessContext.setAuthenticatedSession(r.data);
+            if (ok) {
+              if (window.DashboardManager) window.DashboardManager.initForSession();
+              activeCompany = window.BusinessContext.getActiveCompany();
+              openBillingModeSelection(activeCompany);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Fast Billing session restoration error:", err);
+      }
+    });
+  }
 }
 
 // Initialize QWebChannel if running inside PyQt5 WebEngine
@@ -5974,10 +6867,7 @@ if (menuEditCompany) menuEditCompany.addEventListener("click", () => {
 });
 if (menuNewCompany) menuNewCompany.addEventListener("click", openCreateCompanyModal);
 if (menuAddAccountMaster) menuAddAccountMaster.addEventListener("click", () => showScreen("view-add-account-master"));
-if (menuAddItemMaster) menuAddItemMaster.addEventListener("click", () => {
-  resetProductMasterForm();
-  showScreen("view-add-item-master");
-});
+if (menuAddItemMaster) menuAddItemMaster.addEventListener("click", () => openAddProductMaster());
 if (menuListItemMaster) menuListItemMaster.addEventListener("click", openProductsListView);
 if (menuModifyItemMaster) menuModifyItemMaster.addEventListener("click", openProductsListView);
 if (menuConfigFeatures) menuConfigFeatures.addEventListener("click", openConfigurationModal);
@@ -6046,20 +6936,14 @@ if (itemPrintName) {
 btnItemSave.addEventListener("click", handleSaveItemMaster);
 btnItemQuit.addEventListener("click", () => showScreen("view-items-list"));
 btnItemCloseTop.addEventListener("click", () => showScreen("view-dashboard"));
-if (btnItemNewClear) btnItemNewClear.addEventListener("click", resetProductMasterForm);
+if (btnItemNewClear) btnItemNewClear.addEventListener("click", () => openAddProductMaster());
 if (btnItemOpenList) btnItemOpenList.addEventListener("click", openProductsListView);
 if (btnItemViewListBottom) btnItemViewListBottom.addEventListener("click", openProductsListView);
 if (btnItemBackList) btnItemBackList.addEventListener("click", openProductsListView);
 
 // Products List (Catalogue View)
-if (btnItemsListAdd) btnItemsListAdd.addEventListener("click", () => {
-  resetProductMasterForm();
-  showScreen("view-add-item-master");
-});
-if (btnItemsListAddBottom) btnItemsListAddBottom.addEventListener("click", () => {
-  resetProductMasterForm();
-  showScreen("view-add-item-master");
-});
+if (btnItemsListAdd) btnItemsListAdd.addEventListener("click", () => openAddProductMaster());
+if (btnItemsListAddBottom) btnItemsListAddBottom.addEventListener("click", () => openAddProductMaster());
 if (btnItemsListEditSelected) btnItemsListEditSelected.addEventListener("click", () => {
   if (selectedProductRowId) {
     loadProductForEditing(selectedProductRowId);
@@ -6501,7 +7385,7 @@ function renderModalProductSearch(query = "") {
       const tr = document.createElement("tr");
       tr.dataset.index = idx;
 
-      const price = parseFloat(it.sales_price ?? it.salesPrice ?? 0).toFixed(2);
+      const price = parseFloat(it.selling_price ?? it.sellingPrice ?? it.sales_price ?? it.salesPrice ?? 0).toFixed(2);
       const barcode = it.barcodes || it.alias || it.matched_barcode || it.barcode || "-";
       const group = it.item_group || it.group || "General";
 
@@ -6698,7 +7582,7 @@ function renderPosBarcodeSuggestions(items) {
     div.className = "pos-suggestion-item";
     div.dataset.index = index;
 
-    const price = parseFloat(item.sales_price ?? item.salesPrice ?? 0).toFixed(2);
+    const price = parseFloat(item.selling_price ?? item.sellingPrice ?? item.sales_price ?? item.salesPrice ?? 0).toFixed(2);
     const barcode = item.barcodes || item.alias || item.matched_barcode || item.barcode || "";
     const group = item.item_group || item.group || "General";
 
@@ -9873,7 +10757,7 @@ function setupSidebarAndDashboardNav() {
         if (m) m.classList.add("active");
       }
     },
-    { id: "btn-nav-add-product", action: () => showScreen("view-add-item-master") },
+    { id: "btn-nav-add-product", action: () => openAddProductMaster() },
     { id: "btn-nav-products", action: () => showScreen("view-items-list") },
     { id: "btn-nav-daybook", action: () => showScreen("view-day-book") },
     { id: "btn-nav-trial-balance", action: () => {
@@ -9913,7 +10797,7 @@ function setupSidebarAndDashboardNav() {
     { id: "dash-btn-pos", action: () => openFastBillingPos() },
     { id: "dash-btn-sales-add", action: () => showScreen("view-sales-voucher") },
     { id: "dash-btn-purchase-add", action: () => showScreen("view-purchase-entry") },
-    { id: "dash-btn-product-add", action: () => showScreen("view-add-item-master") },
+    { id: "dash-btn-product-add", action: () => openAddProductMaster() },
     { id: "dash-btn-stock-view", action: () => showScreen("view-stock-summary") },
     { id: "dash-btn-daybook", action: () => showScreen("view-day-book") },
     { id: "dash-btn-view-all-sales", action: () => showScreen("view-sales-list") },
@@ -9940,7 +10824,9 @@ window.activeCompany = null;
 activeCompany = null;
 
 renderCompanyTable();
-populateLoginCompanies();
+initLoginModeToggle();
+initTraditionalSetupListeners();
+fetchAndPopulateCompanies();
 updateSystemClock();
 setInterval(updateSystemClock, 10000);
 setupPosBarcodeAutocomplete();
@@ -10117,6 +11003,39 @@ function renderSelectAccountModifyModal() {
       tbody.appendChild(tr);
     });
   };
+
+  const isTrad = (typeof openTabs !== "undefined" && openTabs.has("traditional"));
+  if (isTrad && window.backend && typeof window.backend.traditional_listAccounts === "function") {
+    window.backend.traditional_listAccounts(q || "", false, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && Array.isArray(r.data)) {
+          populate(r.data);
+          return;
+        }
+      } catch (e) {}
+      const key = `alpha_accounts_${activeCompany.code}`;
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e){}
+      populate(list);
+    });
+    return;
+  } else if (isTrad && window.backend && typeof window.backend.traditional_listCustomers === "function") {
+    window.backend.traditional_listCustomers(q || "", false, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && Array.isArray(r.data)) {
+          populate(r.data);
+          return;
+        }
+      } catch (e) {}
+      const key = `alpha_accounts_${activeCompany.code}`;
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e){}
+      populate(list);
+    });
+    return;
+  }
 
   if (window.backend && window.backend.listAccounts) {
     window.backend.listAccounts(activeCompany.id, (resp) => {
@@ -10339,6 +11258,9 @@ function setupThreeOptionWorkflowListeners() {
 
 // Global Exports
 window.syncItemPrintName = syncItemPrintName;
+window.resetProductMasterForm = resetProductMasterForm;
+window.handleSaveItemMaster = handleSaveItemMaster;
+window.openAddProductMaster = openAddProductMaster;
 window.loadProductForEditing = loadProductForEditing;
 window.renderSelectAccountModifyModal = renderSelectAccountModifyModal;
 window.renderSelectItemModifyModal = renderSelectItemModifyModal;
@@ -10352,6 +11274,12 @@ window.renderAccountMasterList = renderAccountMasterList;
 window.removeAlternateBarcode = removeAlternateBarcode;
 window.openBarcodeLabelModal = openBarcodeLabelModal;
 window.initBarcodeModule = initBarcodeModule;
+window.populateVoucherRowWithItem = populateVoucherRowWithItem;
+window.clearVoucherRow = clearVoucherRow;
+window.calcRowAmount = calcRowAmount;
+window.recalculateVoucherTotals = recalculateVoucherTotals;
+window.setupPartyAutocomplete = setupPartyAutocomplete;
+window.renderVchAutocompletePopup = renderVchAutocompletePopup;
 
 setupEnterpriseErpEventListeners();
 setupCompanyAndPlaceholderModalListeners();

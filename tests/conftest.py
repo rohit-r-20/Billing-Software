@@ -1,30 +1,68 @@
-import sys
+"""
+Pytest configuration for Alpha Billing V2.
+Enforces strict test database isolation:
+- Tests default to isolated SQLite (in-memory or tmp file).
+- Neutralizes remote database URLs from .env to prevent accidental hits to production.
+- Allows local PostgreSQL only when TEST_DATABASE_URL is explicitly set to localhost/127.0.0.1.
+"""
 import os
+import sys
 from pathlib import Path
+from urllib.parse import urlparse
 import pytest
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import QUrl, QEventLoop, QTimer
+
+# 1. Environment configuration established at the very top of conftest.py BEFORE any application imports
+_test_db_url = os.environ.get("TEST_DATABASE_URL", "").strip()
+if not _test_db_url:
+    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+    os.environ["TESTING"] = "1"
+    # Neutralize secondary database URLs that core.configuration checks if DATABASE_URL was absent
+    os.environ.pop("SUPABASE_DATABASE_URL", None)
+    os.environ.pop("ANTI_MATRIX_DATABASE_URL", None)
+else:
+    _parsed = urlparse(_test_db_url)
+    _scheme = _parsed.scheme.lower()
+    _hostname = (_parsed.hostname or "").lower()
+    _is_sqlite = _scheme.startswith("sqlite")
+    _is_localhost = _hostname in ("localhost", "127.0.0.1", "::1")
+    if not (_is_sqlite or _is_localhost):
+        raise RuntimeError(
+            f"SAFETY VIOLATION: TEST_DATABASE_URL ({_test_db_url}) points to unauthorized host '{_hostname}'. "
+            f"Automated tests are prohibited from targeting remote databases!"
+        )
+    os.environ["DATABASE_URL"] = _test_db_url
+    os.environ["TESTING"] = "1"
+    os.environ.pop("SUPABASE_DATABASE_URL", None)
+    os.environ.pop("ANTI_MATRIX_DATABASE_URL", None)
 
 INDEX_HTML_PATH = Path(__file__).resolve().parent.parent / "index.html"
 
-# Default PostgreSQL test URL (can be overridden via env var)
-DEFAULT_PG_URL = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+
+@pytest.fixture(scope="session", autouse=True)
+def assert_safe_test_environment():
+    """Verify that tests are executing strictly against local/sqlite databases."""
+    active_url = os.environ.get("DATABASE_URL", "")
+    assert not any(remote in active_url.lower() for remote in ["supabase.co", "pooler.supabase.com", "aws", "azure"]), \
+        f"SAFETY VIOLATION: Test running against remote database URL: {active_url}"
+    yield
 
 
 @pytest.fixture(scope="session")
 def qt_app():
+    from PyQt5.QtWidgets import QApplication
     return QApplication.instance() or QApplication(sys.argv)
 
 
 @pytest.fixture(scope="session")
 def session_web_view(qt_app):
     from PyQt5.QtWebChannel import QWebChannel
+    from PyQt5.QtWebEngineWidgets import QWebEngineView
+    from PyQt5.QtCore import QUrl, QEventLoop, QTimer
     from desktop.web_bridge import BackendBridge
 
     view = QWebEngineView()
     channel = QWebChannel(view)
-    bridge = BackendBridge(view)
+    bridge = BackendBridge(parent=view)
     channel.registerObject("backend", bridge)
     view.page().setWebChannel(channel)
 
@@ -42,44 +80,3 @@ def session_web_view(qt_app):
 
     yield view
     view.close()
-
-
-@pytest.fixture(autouse=True)
-def ensure_postgresql_used():
-    """
-    Ensures all tests use PostgreSQL when DATABASE_URL is configured.
-    This prevents tests from accidentally writing to SQLite and corrupting the guardian database.
-    """
-    # Ensure DATABASE_URL is set to PostgreSQL
-    if "DATABASE_URL" in os.environ:
-        original_url = os.environ["DATABASE_URL"]
-    else:
-        original_url = None
-
-    # Force PostgreSQL URL for tests when it's configured
-    if original_url and original_url.startswith("sqlite"):
-        # Test explicitly needs SQLite - allow it but with isolation
-        yield
-        return
-
-    # Ensure we're using PostgreSQL (not SQLite)
-    os.environ["DATABASE_URL"] = DEFAULT_PG_URL
-
-    # Force reinitialization of db_manager singleton for PostgreSQL
-    try:
-        import db.database as db_module
-        # Create new DatabaseManager with PostgreSQL URL
-        new_manager = db_module.DatabaseManager(DEFAULT_PG_URL)
-        # Replace the singleton instance
-        db_module.db_manager = new_manager
-    except ImportError:
-        pass
-
-    yield
-
-    # Restore original environment
-    if original_url is not None:
-        os.environ["DATABASE_URL"] = original_url
-    else:
-        os.environ.pop("DATABASE_URL", None)
-
