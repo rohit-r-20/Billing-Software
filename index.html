@@ -201,7 +201,7 @@
                 <label style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Billing Workspace</label>
                 <div class="login-mode-segmented-control" id="login-mode-toggle" style="display: flex; gap: 6px;">
                   <button type="button" class="btn-mode-toggle active" id="btn-login-mode-trad" data-mode="traditional" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; border: 1px solid #2563eb; background: #2563eb; color: #ffffff;">Traditional Billing</button>
-                  <button type="button" class="btn-mode-toggle" id="btn-login-mode-fast" data-mode="fast_billing" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;">Fast Billing (POS)</button>
+                  <button type="button" class="btn-mode-toggle" id="btn-login-mode-fast" data-mode="fast_billing" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;">POS (Fast Billing)</button>
                 </div>
               </div>
 
@@ -274,9 +274,13 @@
                 </button>
 
                 <!-- Company Management Link -->
-                <div class="login-card-links">
+                <div class="login-card-links" style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
                   <button type="button" class="btn-link-action" id="btn-goto-companies">
                     <span>Switch / Manage Companies</span>
+                  </button>
+                  <button type="button" class="btn-link-action" id="btn-open-traditional-recovery" style="color: #475569; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
+                    <span style="font-size: 13px;">🛡️</span>
+                    <span>Company &amp; Account Recovery</span>
                   </button>
                 </div>
               </form>
@@ -2973,6 +2977,93 @@
             <button type="submit" class="btn-action" id="btn-submit-traditional-setup" style="background: #2563eb; color: #fff; border-color: #2563eb; display: inline-flex; align-items: center; justify-content: center;">
               <span id="trad-setup-spinner" style="display: none; width: 12px; height: 12px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px;"></span>
               <span id="trad-setup-submit-text">Authorize &amp; Complete Setup &rarr;</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         POPUP MODAL: TRADITIONAL BILLING COMPANY & ACCOUNT RECOVERY
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-traditional-recovery" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="max-width: 540px;">
+        <div class="create-comp-header">
+          <h2>🛡️ Company &amp; Account Recovery</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-traditional-recovery-modal">&times;</button>
+        </div>
+        <form class="create-comp-form" id="form-traditional-recovery" onsubmit="return false;" autocomplete="off">
+          <!-- Hidden IDs -->
+          <input type="hidden" id="trad-recovery-company-id" />
+          <input type="hidden" id="trad-recovery-admin-id" />
+
+          <!-- Recovery Notice Banner -->
+          <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: 11px; color: #92400e; line-height: 1.4;">
+            <strong>Local Administrator Recovery:</strong> Update master company details or reset Administrator credentials. All invoices, items, customers, and stock records remain completely safe and untouched.
+            <br/><span style="color: #78350f; font-size: 10px; margin-top: 4px; display: inline-block;">* A dedicated recovery authorization token (provisioned via terminal) will be verified via a native system prompt upon submission.</span>
+          </div>
+
+          <!-- Alert banner inside recovery modal -->
+          <div class="login-alert-banner" id="trad-recovery-alert" style="display: none; margin-bottom: 12px;" role="alert">
+            <span class="alert-icon" style="font-weight: 800; color: #dc2626;">!</span>
+            <span class="alert-text" id="trad-recovery-alert-text">Error message</span>
+          </div>
+
+          <!-- Company Selection & Identification -->
+          <div class="comp-field-row">
+            <label for="trad-recovery-company-name">Company / Business Name *</label>
+            <input type="text" id="trad-recovery-company-name" required placeholder="e.g. Alpha Retail Enterprise" />
+          </div>
+
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="trad-recovery-company-code">Company Code *</label>
+              <input type="text" id="trad-recovery-company-code" required placeholder="e.g. CORP01" class="input-uppercase" style="text-transform: uppercase;" />
+            </div>
+            <div class="split-item">
+              <label for="trad-recovery-finyear">Financial Year</label>
+              <input type="text" id="trad-recovery-finyear" readonly style="background: #f1f5f9; color: #64748b;" />
+            </div>
+          </div>
+
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="trad-recovery-gstin">GSTIN / Tax ID</label>
+              <input type="text" id="trad-recovery-gstin" readonly style="background: #f1f5f9; color: #64748b;" />
+            </div>
+            <div class="split-item">
+              <label for="trad-recovery-state">State / Province</label>
+              <input type="text" id="trad-recovery-state" readonly style="background: #f1f5f9; color: #64748b;" />
+            </div>
+          </div>
+
+          <!-- Administrator Account Recovery Section -->
+          <div style="border-top: 1px solid #e2e8f0; margin: 14px 0 10px 0; padding-top: 10px;">
+            <span style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Administrator Credentials</span>
+          </div>
+
+          <div class="comp-field-row">
+            <label for="trad-recovery-admin-username">Administrator Username *</label>
+            <input type="text" id="trad-recovery-admin-username" required placeholder="e.g. ADMIN" class="input-uppercase" style="text-transform: uppercase;" />
+          </div>
+
+          <div class="comp-field-row-split">
+            <div class="split-item">
+              <label for="trad-recovery-new-pwd">Reset Password (Optional)</label>
+              <input type="password" id="trad-recovery-new-pwd" placeholder="Leave blank to keep current" autocomplete="new-password" />
+            </div>
+            <div class="split-item">
+              <label for="trad-recovery-confirm-pwd">Confirm New Password</label>
+              <input type="password" id="trad-recovery-confirm-pwd" placeholder="Confirm new password" autocomplete="new-password" />
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="comp-btn-row" style="padding: 16px 24px; background: var(--alpha-bg-surface-subtle, #f8fafc); border-top: 1px solid var(--alpha-border-default, #e2e8f0); display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn-action" id="btn-cancel-traditional-recovery">Cancel</button>
+            <button type="submit" class="btn-action" id="btn-submit-traditional-recovery" style="background: #d97706; color: #fff; border-color: #d97706; display: inline-flex; align-items: center; justify-content: center;">
+              <span id="trad-recovery-spinner" style="display: none; width: 12px; height: 12px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px;"></span>
+              <span id="trad-recovery-submit-text">Authorize &amp; Apply Recovery &rarr;</span>
             </button>
           </div>
         </form>

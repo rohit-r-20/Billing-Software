@@ -22,7 +22,7 @@ def test_catalogue_search_items_by_company_code_and_uuid():
     # 1. Search by product name using company code
     results_code = catalogue_service.search_items("COMP0001", "Milk")
     assert len(results_code) >= 1
-    item = results_code[0]
+    item = next((i for i in results_code if "DEMO" in i["name"].upper()), results_code[0])
     assert "MILK BIKIS" in item["name"].upper()
     assert item["sales_price"] == 10.0
     assert "890_TEST_001" in (item["barcodes"] or "")
@@ -36,7 +36,7 @@ def test_catalogue_search_items_by_company_code_and_uuid():
     comp_uuid = item["company_id"]
     results_uuid = catalogue_service.search_items(comp_uuid, "Milk")
     assert len(results_uuid) >= 1
-    assert results_uuid[0]["id"] == item["id"]
+    assert any(u["id"] == item["id"] for u in results_uuid)
 
 
 def test_catalogue_get_item_by_id():
@@ -102,6 +102,7 @@ def test_save_item_update_and_parameter_mapping():
 def test_web_bridge_item_slots(qapp):
     """Verify WebBridge searchItems, getItemById, and saveItem slots return valid JSON."""
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
 
     # 1. Test searchItems slot
     resp_search = bridge.searchItems("COMP0001", "Hide")

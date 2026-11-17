@@ -53,6 +53,12 @@ from services.traditional_setup_token import (
     verify_setup_token,
     consume_setup_token,
 )
+from services.traditional_recovery_service import TraditionalRecoveryService
+from services.traditional_recovery_token import (
+    get_canonical_recovery_token_path,
+    verify_recovery_token,
+    consume_recovery_token,
+)
 from db.traditional_database import traditional_db_manager
 
 
@@ -79,6 +85,7 @@ class BackendBridge(QObject):
         self._traditional_product_service = TraditionalProductService(traditional_db_manager)
         self._traditional_customer_service = TraditionalCustomerService(traditional_db_manager)
         self._traditional_dashboard_service = TraditionalDashboardService(traditional_db_manager)
+        self._traditional_recovery_service = TraditionalRecoveryService(traditional_db_manager)
         # Register mobile scanner callbacks
         mobile_scanner_service.scan_callback = self._on_mobile_scan
         mobile_scanner_service.status_callback = self._on_mobile_status
@@ -1817,6 +1824,78 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": inv})
         except Exception as e:
             logger.error(f"Error in traditional_saveSaleInvoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 29. Get Company Profile for Recovery (Public sanitized inspection)
+    @pyqtSlot(str, result=str)
+    def traditional_getCompanyRecoveryProfile(self, company_id: str) -> str:
+        try:
+            cid = company_id.strip() if company_id else None
+            profile = self._traditional_recovery_service.get_recovery_profile(cid)
+            return json.dumps({"success": True, "data": profile})
+        except Exception as e:
+            logger.error(f"Error in traditional_getCompanyRecoveryProfile: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 30. Recover Company Details & Administrator Account (Protected by Native Qt Dialog Token Authorization)
+    @pyqtSlot(str, result=str)
+    def traditional_recoverCompanyAndAdmin(self, recovery_data_json: str) -> str:
+        try:
+            # 1. Recovery token file existence check
+            token_path = get_canonical_recovery_token_path()
+            if not token_path.exists():
+                return json.dumps({
+                    "success": False,
+                    "error": f"Recovery authorization token file ('{token_path.name}') not found. "
+                             f"Please run 'python scripts/provision_traditional_recovery_token.py' in the terminal to provision an authorization token."
+                })
+
+            # 2. Prompt operator via mandatory native modal Qt dialog (never touches browser JavaScript)
+            entered_token = ""
+            if self.parent_window:
+                entered_token, ok = QInputDialog.getText(
+                    self.parent_window,
+                    "Company & Account Recovery Authorization",
+                    "Enter the one-time Recovery Authorization Token provisioned from local terminal:",
+                    QLineEdit.Password
+                )
+                if not ok or not entered_token.strip():
+                    return json.dumps({"success": False, "error": "Recovery authorization was cancelled."})
+            elif hasattr(self, "_override_recovery_token"):
+                if self._override_recovery_token is None:
+                    return json.dumps({"success": False, "error": "Recovery authorization was cancelled."})
+                entered_token = self._override_recovery_token
+            else:
+                logger.warning("Recovery rejected: No authorization UI dialog or test override available.")
+                return json.dumps({"success": False, "error": "Recovery authorization UI unavailable."})
+
+            if not verify_recovery_token(entered_token, token_path):
+                logger.warning("Failed company/admin recovery attempt: Invalid token entered.")
+                return json.dumps({"success": False, "error": "Recovery authorization failed: Invalid recovery token."})
+
+            # 3. Atomic recovery transaction
+            data = json.loads(recovery_data_json)
+            res = self._traditional_recovery_service.recover_company_and_admin(data)
+
+            # 4. Overwrite and consume recovery token post-commit
+            token_consumed = False
+            try:
+                token_consumed = consume_recovery_token(token_path)
+            except Exception as fe:
+                logger.error(f"Recovery token removal failed post-commit: {fe}")
+                token_consumed = False
+
+            if not token_consumed and token_path.exists():
+                logger.warning(f"Recovery token file '{token_path}' remains after commit. Remediation required.")
+                res["warning"] = (
+                    f"SECURITY ALERT: Company & Administrator recovery was successfully applied and committed to the database, "
+                    f"but the local authorization token file ('{token_path.name}') could not be automatically deleted. "
+                    f"Remediation: To ensure this authorization token cannot be reused, please manually delete the file at '{token_path}'."
+                )
+
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error in traditional_recoverCompanyAndAdmin: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
 

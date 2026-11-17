@@ -273,6 +273,13 @@ def test_pos_cart_columns_accessibility_and_wrapping_with_long_names(session_web
 
     # Populate cart with short and long product names
     eval_js(view, """
+        window.BusinessContext.setAuthenticatedSession({
+            user: { id: '9c68ab90-2abd-41cd-a413-dedc77db23a4', username: 'A', role: 'cashier', displayName: 'Cashier A' },
+            company: { id: '3a743bcd-8f9a-4154-a316-509cba3de99a', code: 'COMP0001', name: 'ANTI MATRIX', fin_year: '2026-27' },
+            branch: { id: '11111111-1111-1111-1111-111111111111', code: 'BR01', name: 'Main' }
+        });
+        activeCompany = { id: '3a743bcd-8f9a-4154-a316-509cba3de99a', code: 'COMP0001', name: 'ANTI MATRIX', fin_year: '2026-27' };
+        openFastBillingPos();
         posCart = [
             {
                 id: 'P1',

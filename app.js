@@ -973,6 +973,8 @@ function initLoginModeToggle() {
     btnFast.style.background = "#f8fafc";
     btnFast.style.color = "#475569";
     btnFast.style.borderColor = "#cbd5e1";
+    const btnOpenRecovery = document.getElementById("btn-open-traditional-recovery");
+    if (btnOpenRecovery) btnOpenRecovery.style.display = (companies && companies.length > 0) ? "inline-flex" : "none";
     fetchAndPopulateCompanies();
   };
 
@@ -985,10 +987,15 @@ function initLoginModeToggle() {
     btnTrad.style.background = "#f8fafc";
     btnTrad.style.color = "#475569";
     btnTrad.style.borderColor = "#cbd5e1";
-    // Never show Traditional setup in Fast Billing mode
+    // Never show Traditional setup or recovery in Fast Billing mode
     const tradSetupContainer = document.getElementById("traditional-setup-container");
     if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    const btnOpenRecovery = document.getElementById("btn-open-traditional-recovery");
+    if (btnOpenRecovery) btnOpenRecovery.style.display = "none";
     closeTraditionalSetupModal();
+    if (typeof closeTraditionalRecoveryModal === "function") {
+      closeTraditionalRecoveryModal();
+    }
     fetchAndPopulateCompanies();
   };
 }
@@ -998,6 +1005,7 @@ function populateLoginCompanies(isLoading = false) {
   const currentVal = loginCompanySelect.value;
   loginCompanySelect.innerHTML = "";
   const tradSetupContainer = document.getElementById("traditional-setup-container");
+  const btnOpenRecovery = document.getElementById("btn-open-traditional-recovery");
 
   if (isLoading) {
     const opt = document.createElement("option");
@@ -1011,6 +1019,7 @@ function populateLoginCompanies(isLoading = false) {
     if (loginUserInput) loginUserInput.disabled = true;
     if (loginPwdInput) loginPwdInput.disabled = true;
     if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    if (btnOpenRecovery) btnOpenRecovery.style.display = "none";
     return;
   }
 
@@ -1034,11 +1043,15 @@ function populateLoginCompanies(isLoading = false) {
     if (btnLoginSubmit) btnLoginSubmit.disabled = true;
     if (loginUserInput) loginUserInput.disabled = true;
     if (loginPwdInput) loginPwdInput.disabled = true;
+    if (btnOpenRecovery) btnOpenRecovery.style.display = "none";
     return;
   }
 
   // Companies loaded from backend - enable controls
   if (tradSetupContainer) tradSetupContainer.style.display = "none";
+  if (btnOpenRecovery) {
+    btnOpenRecovery.style.display = activeLoginMode === "traditional" ? "inline-flex" : "none";
+  }
   loginCompanySelect.disabled = false;
   if (btnLoginSubmit) btnLoginSubmit.disabled = false;
   if (loginUserInput) loginUserInput.disabled = false;
@@ -1239,6 +1252,231 @@ function initTraditionalSetupListeners() {
   }
 }
 
+// =============================================================
+// TRADITIONAL BILLING COMPANY & ADMINISTRATOR RECOVERY ENGINE
+// =============================================================
+let isSubmittingTraditionalRecovery = false;
+
+function openTraditionalRecoveryModal() {
+  const modal = document.getElementById("modal-traditional-recovery");
+  if (!modal) return;
+  hideTraditionalRecoveryAlert();
+  setTraditionalRecoveryLoading(false);
+
+  const compIdInput = document.getElementById("trad-recovery-company-id");
+  const compNameInput = document.getElementById("trad-recovery-company-name");
+  const compCodeInput = document.getElementById("trad-recovery-company-code");
+  const finYearInput = document.getElementById("trad-recovery-finyear");
+  const gstinInput = document.getElementById("trad-recovery-gstin");
+  const stateInput = document.getElementById("trad-recovery-state");
+  const adminIdInput = document.getElementById("trad-recovery-admin-id");
+  const adminUserInput = document.getElementById("trad-recovery-admin-username");
+  const newPwdInput = document.getElementById("trad-recovery-new-pwd");
+  const confirmPwdInput = document.getElementById("trad-recovery-confirm-pwd");
+
+  if (compIdInput) compIdInput.value = "";
+  if (compNameInput) compNameInput.value = "Loading...";
+  if (compCodeInput) compCodeInput.value = "Loading...";
+  if (finYearInput) finYearInput.value = "";
+  if (gstinInput) gstinInput.value = "";
+  if (stateInput) stateInput.value = "";
+  if (adminIdInput) adminIdInput.value = "";
+  if (adminUserInput) adminUserInput.value = "";
+  if (newPwdInput) newPwdInput.value = "";
+  if (confirmPwdInput) confirmPwdInput.value = "";
+
+  modal.style.display = "flex";
+
+  let selectedCompId = "";
+  if (loginCompanySelect && loginCompanySelect.value && Array.isArray(companies)) {
+    const matched = companies.find((c) => c.code === loginCompanySelect.value);
+    if (matched && matched.id) selectedCompId = matched.id;
+  }
+
+  if (window.backend && typeof window.backend.traditional_getCompanyRecoveryProfile === "function") {
+    window.backend.traditional_getCompanyRecoveryProfile(selectedCompId, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.data) {
+          const d = r.data;
+          if (compIdInput) compIdInput.value = d.company_id || "";
+          if (compNameInput) compNameInput.value = d.company_name || "";
+          if (compCodeInput) compCodeInput.value = d.company_code || "";
+          if (finYearInput) finYearInput.value = d.fin_year || "";
+          if (gstinInput) gstinInput.value = d.gstin || "N/A";
+          if (stateInput) stateInput.value = d.state || "N/A";
+          if (adminIdInput) adminIdInput.value = d.admin_user_id || "";
+          if (adminUserInput) adminUserInput.value = d.admin_username || "";
+          if (compNameInput) compNameInput.focus();
+        } else {
+          showTraditionalRecoveryAlert(r && r.error ? r.error : "Failed to load recovery information.");
+        }
+      } catch (e) {
+        showTraditionalRecoveryAlert("Error loading recovery profile: " + e.message);
+      }
+    });
+  } else {
+    // Fallback if backend not ready
+    if (compNameInput) compNameInput.value = "";
+    if (compCodeInput) compCodeInput.value = "";
+  }
+}
+
+function closeTraditionalRecoveryModal() {
+  const modal = document.getElementById("modal-traditional-recovery");
+  if (modal) modal.style.display = "none";
+  hideTraditionalRecoveryAlert();
+  setTraditionalRecoveryLoading(false);
+}
+
+function showTraditionalRecoveryAlert(msg) {
+  const alertBox = document.getElementById("trad-recovery-alert");
+  const alertText = document.getElementById("trad-recovery-alert-text");
+  if (alertBox && alertText) {
+    alertText.textContent = msg;
+    alertBox.style.display = "flex";
+  }
+}
+
+function hideTraditionalRecoveryAlert() {
+  const alertBox = document.getElementById("trad-recovery-alert");
+  if (alertBox) alertBox.style.display = "none";
+}
+
+function setTraditionalRecoveryLoading(isLoading) {
+  isSubmittingTraditionalRecovery = isLoading;
+  const btnSubmit = document.getElementById("btn-submit-traditional-recovery");
+  const btnCancel = document.getElementById("btn-cancel-traditional-recovery");
+  const spinner = document.getElementById("trad-recovery-spinner");
+  const submitText = document.getElementById("trad-recovery-submit-text");
+
+  if (btnSubmit) btnSubmit.disabled = isLoading;
+  if (btnCancel) btnCancel.disabled = isLoading;
+  if (spinner) spinner.style.display = isLoading ? "inline-block" : "none";
+  if (submitText) {
+    submitText.textContent = isLoading ? "Authorizing Recovery..." : "Authorize & Apply Recovery →";
+  }
+}
+
+function handleTraditionalRecoverySubmit() {
+  if (isSubmittingTraditionalRecovery) return;
+
+  const compIdInput = document.getElementById("trad-recovery-company-id");
+  const compNameInput = document.getElementById("trad-recovery-company-name");
+  const compCodeInput = document.getElementById("trad-recovery-company-code");
+  const adminIdInput = document.getElementById("trad-recovery-admin-id");
+  const adminUserInput = document.getElementById("trad-recovery-admin-username");
+  const newPwdInput = document.getElementById("trad-recovery-new-pwd");
+  const confirmPwdInput = document.getElementById("trad-recovery-confirm-pwd");
+
+  const companyId = compIdInput ? compIdInput.value.trim() : "";
+  const companyName = compNameInput ? compNameInput.value.trim() : "";
+  const companyCode = compCodeInput ? compCodeInput.value.trim().toUpperCase() : "";
+  const adminUserId = adminIdInput ? adminIdInput.value.trim() : "";
+  const adminUsername = adminUserInput ? adminUserInput.value.trim().toUpperCase() : "";
+  const newPwd = newPwdInput ? newPwdInput.value : "";
+  const confirmPwd = confirmPwdInput ? confirmPwdInput.value : "";
+
+  hideTraditionalRecoveryAlert();
+
+  if (!companyId) {
+    showTraditionalRecoveryAlert("Target company ID is missing.");
+    return;
+  }
+  if (!companyName) {
+    showTraditionalRecoveryAlert("Please enter a valid company name.");
+    if (compNameInput) compNameInput.focus();
+    return;
+  }
+  if (!companyCode) {
+    showTraditionalRecoveryAlert("Please enter a valid company code.");
+    if (compCodeInput) compCodeInput.focus();
+    return;
+  }
+  if (!adminUsername) {
+    showTraditionalRecoveryAlert("Please enter an Administrator username.");
+    if (adminUserInput) adminUserInput.focus();
+    return;
+  }
+
+  if (newPwd || confirmPwd) {
+    if (newPwd.length < 4) {
+      showTraditionalRecoveryAlert("Password must be at least 4 characters.");
+      if (newPwdInput) newPwdInput.focus();
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      showTraditionalRecoveryAlert("New password and confirmation do not match.");
+      if (confirmPwdInput) confirmPwdInput.focus();
+      return;
+    }
+  }
+
+  const payload = {
+    company_id: companyId,
+    company_name: companyName,
+    company_code: companyCode,
+    admin_user_id: adminUserId || undefined,
+    admin_username: adminUsername,
+    new_password: newPwd || undefined,
+  };
+
+  setTraditionalRecoveryLoading(true);
+
+  if (window.backend && typeof window.backend.traditional_recoverCompanyAndAdmin === "function") {
+    window.backend.traditional_recoverCompanyAndAdmin(JSON.stringify(payload), (resp) => {
+      setTraditionalRecoveryLoading(false);
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res && res.success) {
+          if (res.data && res.data.warning) {
+            showNotification(res.data.warning);
+          } else {
+            showNotification(`Company and Administrator credentials recovered successfully!`);
+          }
+          closeTraditionalRecoveryModal();
+          fetchAndPopulateCompanies();
+          if (loginUserInput) loginUserInput.value = adminUsername;
+          if (loginPwdInput) {
+            loginPwdInput.value = "";
+            loginPwdInput.focus();
+          }
+        } else {
+          const errMsg = (res && res.error) ? res.error : "Recovery operation failed.";
+          showTraditionalRecoveryAlert(errMsg);
+        }
+      } catch (e) {
+        showTraditionalRecoveryAlert("Unexpected response from backend: " + e.message);
+      }
+    });
+  } else {
+    setTraditionalRecoveryLoading(false);
+    showTraditionalRecoveryAlert("Backend recovery service not connected.");
+  }
+}
+
+function initTraditionalRecoveryListeners() {
+  const btnOpen = document.getElementById("btn-open-traditional-recovery");
+  const btnClose = document.getElementById("btn-close-traditional-recovery-modal");
+  const btnCancel = document.getElementById("btn-cancel-traditional-recovery");
+  const formRecovery = document.getElementById("form-traditional-recovery");
+
+  if (btnOpen) btnOpen.onclick = openTraditionalRecoveryModal;
+  if (btnClose) btnClose.onclick = closeTraditionalRecoveryModal;
+  if (btnCancel) btnCancel.onclick = closeTraditionalRecoveryModal;
+  if (formRecovery) {
+    formRecovery.onsubmit = (e) => {
+      e.preventDefault();
+      handleTraditionalRecoverySubmit();
+    };
+  }
+}
+
+window.openTraditionalRecoveryModal = openTraditionalRecoveryModal;
+window.closeTraditionalRecoveryModal = closeTraditionalRecoveryModal;
+window.handleTraditionalRecoverySubmit = handleTraditionalRecoverySubmit;
+window.initTraditionalRecoveryListeners = initTraditionalRecoveryListeners;
+
 function showLoginAlert(msg) {
   if (loginAlert && loginAlertText) {
     loginAlertText.textContent = msg;
@@ -1338,7 +1576,7 @@ function handleMainLoginSubmit() {
     if (activeLoginMode === "traditional") {
       enterCompanyDashboard(activeCompany);
     } else {
-      openBillingModeSelection(activeCompany);
+      openFastBillingPos();
     }
   };
 
@@ -10826,6 +11064,7 @@ activeCompany = null;
 renderCompanyTable();
 initLoginModeToggle();
 initTraditionalSetupListeners();
+initTraditionalRecoveryListeners();
 fetchAndPopulateCompanies();
 updateSystemClock();
 setInterval(updateSystemClock, 10000);

@@ -108,8 +108,15 @@ class Company(TraditionalBase):
     branches = relationship("Branch", back_populates="company", cascade="all, delete-orphan")
     users = relationship("User", back_populates="company", cascade="all, delete-orphan")
     accounts = relationship("Account", back_populates="company", cascade="all, delete-orphan")
+    account_groups = relationship("AccountGroup", back_populates="company", cascade="all, delete-orphan")
+    accounting_periods = relationship("AccountingPeriod", back_populates="company", cascade="all, delete-orphan")
+    journal_entries = relationship("JournalEntry", back_populates="company", cascade="all, delete-orphan")
+    year_closings = relationship("FinancialYearClosing", back_populates="company", cascade="all, delete-orphan")
     items = relationship("Item", back_populates="company", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="company", cascade="all, delete-orphan")
+    stock_movements = relationship("StockMovement", back_populates="company", cascade="all, delete-orphan")
+    stock_adjustments = relationship("StockAdjustment", back_populates="company", cascade="all, delete-orphan")
+    stock_transfers = relationship("StockTransfer", back_populates="company", cascade="all, delete-orphan")
 
 
 class Branch(TraditionalBase):
@@ -159,6 +166,28 @@ class User(TraditionalBase):
     )
 
 
+class AccountGroup(TraditionalBase):
+    __tablename__ = "account_groups"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(50), nullable=False)
+    name = Column(String(100), nullable=False)
+    nature = Column(String(20), nullable=False)  # ASSET, LIABILITY, EQUITY, INCOME, EXPENSE
+    parent_group_id = Column(String(36), ForeignKey("account_groups.id", ondelete="SET NULL"), nullable=True)
+    is_system = Column(Boolean, default=False, nullable=False)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="account_groups")
+    parent_group = relationship("AccountGroup", remote_side=[id], backref="subgroups")
+    mappings = relationship("AccountGroupMapping", back_populates="group", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "code", name="uq_account_groups_company_code"),
+        CheckConstraint("nature IN ('ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE')", name="chk_account_groups_nature"),
+    )
+
+
 class Account(TraditionalBase):
     __tablename__ = "accounts"
 
@@ -177,9 +206,52 @@ class Account(TraditionalBase):
     updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=True)
 
     company = relationship("Company", back_populates="accounts")
+    group_mapping = relationship("AccountGroupMapping", uselist=False, back_populates="account", cascade="all, delete-orphan")
+    journal_lines = relationship("JournalEntryLine", back_populates="account")
 
     __table_args__ = (
         UniqueConstraint("company_id", "code", name="uq_accounts_company_code"),
+    )
+
+    @property
+    def group_id(self):
+        return self.group_mapping.group_id if self.group_mapping else None
+
+    @property
+    def account_nature(self):
+        return self.group_mapping.account_nature if self.group_mapping else None
+
+    @property
+    def opening_balance(self):
+        return self.group_mapping.opening_balance if self.group_mapping else Decimal("0.00")
+
+    @property
+    def opening_balance_type(self):
+        return self.group_mapping.opening_balance_type if self.group_mapping else "DR"
+
+
+class AccountGroupMapping(TraditionalBase):
+    __tablename__ = "account_group_mappings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(String(36), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    group_id = Column(String(36), ForeignKey("account_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_nature = Column(String(20), nullable=False)
+    opening_balance = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    opening_balance_type = Column(String(2), server_default="DR", default="DR", nullable=False)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    company = relationship("Company")
+    account = relationship("Account", back_populates="group_mapping")
+    group = relationship("AccountGroup", back_populates="mappings")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "account_id", name="uq_account_group_mappings_account"),
+        Index("ix_agm_company_group", "company_id", "group_id"),
+        CheckConstraint("account_nature IN ('ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE')", name="chk_agm_nature"),
+        CheckConstraint("opening_balance_type IN ('DR', 'CR')", name="chk_agm_op_type"),
     )
 
 
@@ -363,4 +435,216 @@ class SaleInvoice(TraditionalBase):
             name="uq_sales_invoices_scope_seq_no",
         ),
         Index("ix_sales_invoices_scope_date", "company_id", "branch_id", "vch_date"),
+    )
+
+
+class StockMovement(TraditionalBase):
+    __tablename__ = "stock_movements"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(String(36), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True)
+    movement_type = Column(String(30), nullable=False)  # OPENING, PURCHASE, SALE, ADJUSTMENT, TRANSFER_IN, TRANSFER_OUT, SALES_RETURN, PURCHASE_RETURN, REVERSAL
+    qty_scaled = Column(BigInteger, nullable=False)  # Scaled by 1000 (positive = inward, negative = outward)
+    unit_cost = Column(Numeric(12, 2), server_default="0.00", default=0.00, nullable=False)
+    reference_type = Column(String(50), nullable=True)  # OPENING, PURCHASE_VOUCHER, SALES_INVOICE, STOCK_ADJUSTMENT, STOCK_TRANSFER, SALES_RETURN, PURCHASE_RETURN
+    reference_id = Column(String(100), nullable=True)
+    idempotency_key = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="stock_movements")
+    branch = relationship("Branch")
+    item = relationship("Item")
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_stock_movements_company_item", "company_id", "item_id"),
+        Index("ix_stock_movements_company_branch_date", "company_id", "branch_id", "created_at"),
+        Index("ix_stock_movements_reference", "company_id", "reference_type", "reference_id"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_stock_movements_company_idempotency"),
+    )
+
+
+class StockAdjustment(TraditionalBase):
+    __tablename__ = "stock_adjustments"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(String(36), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_name = Column(String(255), nullable=False)
+    adjustment_type = Column(String(50), nullable=False)  # DAMAGE, PHYSICAL_COUNT, EXPIRED, OPENING, CORRECTION
+    quantity_scaled = Column(BigInteger, nullable=False)  # Scaled by 1000
+    quantity = Column(Numeric(12, 3), nullable=False)
+    unit_cost = Column(Numeric(12, 2), server_default="0.00", default=0.00, nullable=False)
+    reason = Column(Text, nullable=True)
+    authorized_by = Column(String(100), nullable=True)
+    idempotency_key = Column(String(100), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="stock_adjustments")
+    branch = relationship("Branch")
+    item = relationship("Item")
+
+    __table_args__ = (
+        Index("ix_stock_adjustments_company_created", "company_id", "created_at"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_stock_adjustments_company_idempotency"),
+    )
+
+
+class StockTransfer(TraditionalBase):
+    __tablename__ = "stock_transfers"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    dest_branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(String(36), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_name = Column(String(255), nullable=False)
+    quantity_scaled = Column(BigInteger, nullable=False)  # Scaled by 1000
+    quantity = Column(Numeric(12, 3), nullable=False)
+    transfer_number = Column(String(50), nullable=False)
+    reason = Column(Text, nullable=True)
+    authorized_by = Column(String(100), nullable=True)
+    idempotency_key = Column(String(100), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="stock_transfers")
+    source_branch = relationship("Branch", foreign_keys=[source_branch_id])
+    dest_branch = relationship("Branch", foreign_keys=[dest_branch_id])
+    item = relationship("Item")
+
+    __table_args__ = (
+        Index("ix_stock_transfers_company_created", "company_id", "created_at"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_stock_transfers_company_idempotency"),
+    )
+
+
+class AccountingPeriod(TraditionalBase):
+    __tablename__ = "accounting_periods"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    financial_year = Column(String(20), nullable=False)
+    period_name = Column(String(50), nullable=False)
+    start_date = Column(String(10), nullable=False)
+    end_date = Column(String(10), nullable=False)
+    is_closed = Column(Boolean, default=False, nullable=False)
+    closed_at = Column(UTCDateTime, nullable=True)
+    closed_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="accounting_periods")
+    closed_by_user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "financial_year", "period_name", name="uq_accounting_periods_company_fy_name"),
+        Index("ix_accounting_periods_company_dates", "company_id", "start_date", "end_date"),
+        CheckConstraint("start_date <= end_date", name="chk_accounting_periods_dates"),
+    )
+
+
+class JournalEntry(TraditionalBase):
+    __tablename__ = "journal_entries"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    financial_year = Column(String(20), nullable=False, index=True)
+    voucher_number = Column(String(50), nullable=False)
+    voucher_type = Column(String(30), nullable=False, index=True)  # JOURNAL, SALES, PURCHASE, PAYMENT, RECEIPT, CONTRA, SALES_RETURN, PURCHASE_RETURN, REVERSAL, OPENING
+    voucher_date = Column(String(10), nullable=False, index=True)
+    narration = Column(Text, nullable=True)
+    total_debit = Column(Numeric(15, 2), nullable=False)
+    total_credit = Column(Numeric(15, 2), nullable=False)
+    status = Column(String(20), server_default="POSTED", default="POSTED", nullable=False)  # DRAFT, POSTED, REVERSED
+    reference_type = Column(String(50), nullable=True)
+    reference_id = Column(String(100), nullable=True)
+    reversal_of_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True)
+    reversed_by_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True)
+    reversal_reason = Column(Text, nullable=True)
+    idempotency_key = Column(String(128), nullable=True)
+    posted_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="journal_entries")
+    branch = relationship("Branch")
+    posted_by_user = relationship("User")
+    lines = relationship("JournalEntryLine", back_populates="journal", cascade="all, delete-orphan", order_by="JournalEntryLine.line_number")
+    reversal_of = relationship("JournalEntry", remote_side=[id], foreign_keys=[reversal_of_id])
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "branch_id", "financial_year", "voucher_type", "voucher_number", name="uq_journal_entries_scope_vch"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_journal_entries_idempotency"),
+        Index("ix_journal_entries_company_date", "company_id", "voucher_date"),
+        Index("ix_journal_entries_ref", "company_id", "reference_type", "reference_id"),
+        CheckConstraint("total_debit = total_credit", name="chk_journal_entries_total_balanced"),
+        CheckConstraint("total_debit > 0", name="chk_journal_entries_total_positive"),
+        CheckConstraint("status IN ('DRAFT', 'POSTED', 'REVERSED')", name="chk_journal_entries_status"),
+    )
+
+
+class JournalEntryLine(TraditionalBase):
+    __tablename__ = "journal_entry_lines"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    journal_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    line_number = Column(Integer, nullable=False)
+    account_id = Column(String(36), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    debit = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    credit = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    narration = Column(Text, nullable=True)
+    party_type = Column(String(30), nullable=True)
+    party_id = Column(String(36), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    journal = relationship("JournalEntry", back_populates="lines")
+    account = relationship("Account", back_populates="journal_lines")
+
+    __table_args__ = (
+        UniqueConstraint("journal_id", "line_number", name="uq_journal_entry_lines_journal_line"),
+        Index("ix_jlines_company_account", "company_id", "account_id", "created_at"),
+        CheckConstraint("debit >= 0", name="chk_jlines_debit_non_neg"),
+        CheckConstraint("credit >= 0", name="chk_jlines_credit_non_neg"),
+        CheckConstraint("((debit > 0 AND credit == 0) OR (credit > 0 AND debit == 0))", name="chk_jlines_one_side_nonzero"),
+    )
+
+
+class FinancialYearClosing(TraditionalBase):
+    __tablename__ = "financial_year_closings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    financial_year = Column(String(20), nullable=False)
+    closing_date = Column(String(10), nullable=False)
+    closing_journal_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True)
+    next_financial_year = Column(String(20), nullable=True)
+    next_opening_journal_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True)
+    net_profit = Column(Numeric(15, 2), nullable=False)
+    status = Column(String(20), server_default="CLOSED", default="CLOSED", nullable=False)  # CLOSED, REOPENED
+    closed_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reopened_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reopened_at = Column(UTCDateTime, nullable=True)
+    reopen_reason = Column(Text, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    company = relationship("Company", back_populates="year_closings")
+    branch = relationship("Branch")
+    closing_journal = relationship("JournalEntry", foreign_keys=[closing_journal_id])
+    next_opening_journal = relationship("JournalEntry", foreign_keys=[next_opening_journal_id])
+    closed_by_user = relationship("User", foreign_keys=[closed_by])
+    reopened_by_user = relationship("User", foreign_keys=[reopened_by])
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "financial_year", name="uq_fy_closings_company_fy"),
+        CheckConstraint("status IN ('CLOSED', 'REOPENED')", name="chk_fy_closings_status"),
+        Index("ix_fy_closings_company_date", "company_id", "closing_date"),
     )

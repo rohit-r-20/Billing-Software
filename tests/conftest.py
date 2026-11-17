@@ -7,6 +7,8 @@ Enforces strict test database isolation:
 """
 import os
 import sys
+import shutil
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 import pytest
@@ -14,7 +16,21 @@ import pytest
 # 1. Environment configuration established at the very top of conftest.py BEFORE any application imports
 _test_db_url = os.environ.get("TEST_DATABASE_URL", "").strip()
 if not _test_db_url:
-    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+    source_db = Path(__file__).resolve().parent.parent / "data" / "anti_matrix_billing.db"
+    if source_db.exists():
+        temp_dir = tempfile.mkdtemp(prefix="amb_test_")
+        temp_db = Path(temp_dir) / "anti_matrix_billing_disposable.db"
+        shutil.copy2(source_db, temp_db)
+        os.environ["DATABASE_URL"] = f"sqlite:///{temp_db}"
+    else:
+        os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
+    source_trad_db = Path(__file__).resolve().parent.parent / "data" / "traditional_billing.db"
+    if source_trad_db.exists() and "TRADITIONAL_DATABASE_URL" not in os.environ:
+        temp_trad_dir = tempfile.mkdtemp(prefix="amb_trad_test_")
+        temp_trad_db = Path(temp_trad_dir) / "traditional_billing_disposable.db"
+        shutil.copy2(source_trad_db, temp_trad_db)
+        os.environ["TRADITIONAL_DATABASE_URL"] = f"sqlite:///{temp_trad_db}"
     os.environ["TESTING"] = "1"
     # Neutralize secondary database URLs that core.configuration checks if DATABASE_URL was absent
     os.environ.pop("SUPABASE_DATABASE_URL", None)
@@ -49,7 +65,10 @@ def assert_safe_test_environment():
 
 @pytest.fixture(scope="session")
 def qt_app():
+    from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import QApplication
+    import PyQt5.QtWebEngineWidgets
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     return QApplication.instance() or QApplication(sys.argv)
 
 
