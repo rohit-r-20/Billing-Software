@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from db.database import db_manager, DatabaseManager
 from services.supplier_service import SupplierService
 from services.tax_service import tax_service
+from services.voucher_numbering_service import voucher_numbering_service
 from core.logging_config import logger
 
 
@@ -31,12 +32,26 @@ class PurchaseService:
         if not cid:
             raise ValueError("Company context is required. Missing company identifier.")
 
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-            c_row = cursor.fetchone()
-            if c_row:
-                return c_row["id"]
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
+                c_row = cursor.fetchone()
+                if c_row:
+                    return c_row["id"]
+        except Exception:
+            pass
+
+        try:
+            from db.traditional_database import traditional_db_manager
+            from db.traditional_models import Company as TradCompany
+            with traditional_db_manager.read_session_scope() as session:
+                trad_comp = session.get(TradCompany, cid)
+                if trad_comp:
+                    return trad_comp.id
+        except Exception:
+            pass
+
         raise ValueError(f"Invalid company context: '{cid}' not found.")
 
     def _get_default_branch_id(self, company_id: str) -> Optional[str]:
@@ -53,25 +68,46 @@ class PurchaseService:
     def get_next_purchase_voucher_number(self, company_id: str, series: str = "Main") -> str:
         """Calculates next sequential internal purchase voucher number e.g. PUR-000001."""
         actual_comp_id = self._resolve_company_id(company_id)
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT vch_no FROM purchase_vouchers
-                WHERE company_id = ?;
-            """, (actual_comp_id,))
-            rows = cursor.fetchall()
+        max_num = 0
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT vch_no FROM purchase_vouchers
+                    WHERE company_id = ?;
+                """, (actual_comp_id,))
+                rows = cursor.fetchall()
+                for r in rows:
+                    num_str = "".join(ch for ch in r["vch_no"] if ch.isdigit())
+                    if num_str:
+                        try:
+                            n = int(num_str)
+                            if n > max_num:
+                                max_num = n
+                        except ValueError:
+                            pass
+        except Exception:
             max_num = 0
-            for r in rows:
-                num_str = "".join(ch for ch in r["vch_no"] if ch.isdigit())
-                if num_str:
-                    try:
-                        n = int(num_str)
-                        if n > max_num:
-                            max_num = n
-                    except ValueError:
-                        pass
-            next_num = max_num + 1
-            return f"PUR-{str(next_num).zfill(6)}"
+        next_num = max_num + 1
+
+        vch_cfg = voucher_numbering_service.get_config(actual_comp_id, "purchase_invoice")
+        if vch_cfg.get("is_custom_enabled"):
+            start_num = int(vch_cfg.get("start_number") or 1)
+            eff_seq = max(next_num, start_num)
+            candidate_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+            try:
+                with self.db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    while True:
+                        cursor.execute("SELECT id FROM purchase_vouchers WHERE company_id = ? AND vch_no = ?;", (actual_comp_id, candidate_no))
+                        if not cursor.fetchone():
+                            return candidate_no
+                        eff_seq += 1
+                        candidate_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+            except Exception:
+                return candidate_no
+
+        return f"PUR-{str(next_num).zfill(6)}"
 
     def check_duplicate_supplier_invoice(
         self,
@@ -940,7 +976,20 @@ class PurchaseService:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(id) FROM purchase_returns WHERE company_id = ?;", (actual_comp_id,))
             cnt = cursor.fetchone()[0] + 1
-            vch_no = f"PR-{str(cnt).zfill(6)}"
+
+            vch_cfg = voucher_numbering_service.get_config(actual_comp_id, "purchase_return")
+            if vch_cfg.get("is_custom_enabled"):
+                start_num = int(vch_cfg.get("start_number") or 1)
+                eff_seq = max(cnt, start_num)
+                vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+                while True:
+                    cursor.execute("SELECT id FROM purchase_returns WHERE company_id = ? AND vch_no = ?;", (actual_comp_id, vch_no))
+                    if not cursor.fetchone():
+                        break
+                    eff_seq += 1
+                    vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+            else:
+                vch_no = f"PR-{str(cnt).zfill(6)}"
 
             total_taxable = Decimal("0")
             total_cgst = Decimal("0")

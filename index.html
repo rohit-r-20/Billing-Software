@@ -128,6 +128,7 @@
 
           <!-- Settings Shortcut -->
           <button type="button" class="header-icon-btn" id="btn-header-settings" title="Configuration & Features">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
 
           <!-- User Profile Trigger -->
@@ -1955,11 +1956,12 @@
               <thead>
                 <tr>
                   <th style="width: 12%;">Vch No.</th>
-                  <th style="width: 15%;">Date</th>
-                  <th style="width: 33%;">Party / Customer Name</th>
-                  <th style="width: 15%;">Sale Type</th>
-                  <th style="width: 12%;">Tax (Rs.)</th>
-                  <th style="width: 13%;">Total Amount (Rs.)</th>
+                  <th style="width: 14%;">Date</th>
+                  <th style="width: 28%;">Party / Customer Name</th>
+                  <th style="width: 14%;">Sale Type</th>
+                  <th style="width: 10%;">Tax (Rs.)</th>
+                  <th style="width: 12%;">Total Amount (Rs.)</th>
+                  <th style="width: 10%; text-align: center;">Actions</th>
                 </tr>
               </thead>
               <tbody id="sales-register-tbody">
@@ -2572,7 +2574,6 @@
           </div>
         </div>
       </section>
-
       <!-- =========================================================
            VIEW 13: DAY BOOK & TRIAL BALANCE (ACCOUNTING INTEGRATION)
       ========================================================== -->
@@ -2674,7 +2675,1750 @@
         </div>
       </section>
 
+      <!-- =========================================================
+           VIEW 14: SYSTEM CONFIGURATION — PAPER CONFIGURATION (PHASE 1)
+      ========================================================== -->
+      <section class="screen-view erp-form-screen" id="view-configuration">
+        <!-- Top Action Ribbon -->
+        <div class="form-screen-ribbon config-ribbon">
+          <div class="ribbon-left">
+            <button type="button" class="btn-ribbon-back" id="btn-config-back" title="Back to Dashboard">&larr; Dashboard</button>
+            <span class="screen-badge-title">ADMINISTRATION &bull; CONFIGURATION</span>
+            <span class="pos-company-badge" id="config-company-badge">ANTI MATRIX</span>
+            <span class="config-mode-pill" id="config-mode-badge">Traditional Billing</span>
+          </div>
+          <div class="ribbon-center">
+            <span class="config-unsaved-badge" id="config-unsaved-badge" style="display: none;">⚠️ Unsaved Changes</span>
+            <span class="config-status-msg" id="config-status-msg" style="display: none;"></span>
+          </div>
+          <div class="ribbon-right">
+            <button type="button" class="btn-action" id="btn-config-refresh-printers" title="Discover installed system printers">🔄 Refresh Printers</button>
+            <button type="button" class="btn-action" id="btn-config-test-print" title="Generate test print output">🖨️ Test Print</button>
+            <button type="button" class="btn-action secondary-btn" id="btn-config-reset-default" title="Restore factory defaults for current format">↺ Reset to Default</button>
+            <button type="button" class="btn-action primary-btn" id="btn-config-save" title="Save paper settings (Ctrl+S)">💾 Save Configuration</button>
+            <button type="button" class="ribbon-btn-close" id="btn-config-close" title="Close Configuration">&times;</button>
+          </div>
+        </div>
+
+        <div class="config-workspace">
+          <!-- 1. Left Configuration Navigation Interface -->
+          <aside class="config-nav-sidebar" aria-label="Configuration Categories">
+            <div class="config-nav-header">
+              <span class="config-nav-title">Configuration</span>
+              <span class="config-nav-version">V2.0</span>
+            </div>
+            <ul class="config-category-list">
+              <li class="config-category-item active" id="cfg-cat-paper" data-category="paper">
+                <span class="cat-icon">📄</span>
+                <div class="cat-info">
+                  <span class="cat-name">Paper Configuration</span>
+                  <span class="cat-desc">A4, A5 &amp; Thermal receipt layout</span>
+                </div>
+                <span class="cat-active-indicator"></span>
+              </li>
+              <li class="config-category-item" id="cfg-cat-bill-layout" data-category="bill-layout">
+                <span class="cat-icon">🧾</span>
+                <div class="cat-info">
+                  <span class="cat-name">Bill Layout Configuration</span>
+                  <span class="cat-desc">Sales &amp; purchase invoice designer</span>
+                </div>
+                <span class="cat-active-indicator"></span>
+              </li>
+              <li class="config-category-item" id="cfg-cat-voucher-numbering" data-category="voucher-numbering">
+                <span class="cat-icon">🏷️</span>
+                <div class="cat-info">
+                  <span class="cat-name">Voucher Numbering</span>
+                  <span class="cat-desc">Prefixes, series &amp; sequences</span>
+                </div>
+                <span class="cat-active-indicator"></span>
+              </li>
+              <li class="config-category-item" id="cfg-cat-gst-tax" data-category="gst-tax">
+                <span class="cat-icon">📊</span>
+                <div class="cat-info">
+                  <span class="cat-name">GST &amp; Taxes</span>
+                  <span class="cat-desc">Tax rates &amp; auto round-off</span>
+                </div>
+                <span class="cat-active-indicator"></span>
+              </li>
+              <li class="config-category-item" id="cfg-cat-inventory" data-category="inventory">
+                <span class="cat-icon">📦</span>
+                <div class="cat-info">
+                  <span class="cat-name">Inventory &amp; Stock</span>
+                  <span class="cat-desc">Negative stock, valuations &amp; alerts</span>
+                </div>
+                <span class="cat-active-indicator"></span>
+              </li>
+            </ul>
+          </aside>
+
+          <!-- 2. Main Configuration Area -->
+          <section class="config-main-area">
+            <!-- PANE 1: PAPER CONFIGURATION (PHASE 1) -->
+            <div class="config-view-pane" id="pane-paper-config">
+              <!-- Paper Format Switcher Tabs -->
+              <div class="config-format-toolbar">
+              <div class="config-format-tabs" role="tablist" aria-label="Paper Format Options">
+                <button type="button" class="btn-format-tab active" id="tab-format-a4" data-format="a4" role="tab" aria-selected="true">
+                  <span class="tab-format-icon">📄</span>
+                  <span class="tab-format-label">A4 Paper</span>
+                  <span class="tab-format-sub">210 &times; 297 mm</span>
+                </button>
+                <button type="button" class="btn-format-tab" id="tab-format-a5" data-format="a5" role="tab" aria-selected="false">
+                  <span class="tab-format-icon">📑</span>
+                  <span class="tab-format-label">A5 Paper</span>
+                  <span class="tab-format-sub">148 &times; 210 mm</span>
+                </button>
+                <button type="button" class="btn-format-tab" id="tab-format-thermal" data-format="thermal" role="tab" aria-selected="false">
+                  <span class="tab-format-icon">🧾</span>
+                  <span class="tab-format-label">Thermal Paper</span>
+                  <span class="tab-format-sub">58mm / 80mm / Custom</span>
+                </button>
+              </div>
+              <div class="config-active-status-bar">
+                <span id="config-format-badge" class="format-indicator-pill">Active: A4 Paper</span>
+                <span id="config-persistence-indicator" class="persistence-status-pill">● Database Synced</span>
+              </div>
+            </div>
+
+            <!-- Two-Column Workspace: Left Settings Form, Right Live Preview -->
+            <div class="config-body-grid">
+              <!-- Left Form Panel -->
+              <div class="config-form-column">
+                <form id="form-paper-config" onsubmit="return false;" autocomplete="off">
+                  
+                  <!-- PANEL A4 -->
+                  <div class="paper-panel active" id="panel-format-a4" data-panel-format="a4">
+                    <fieldset class="group-box">
+                      <legend class="group-title">A4 Page Specifications</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-a4-width">Width (mm)</label>
+                          <input type="number" id="cfg-a4-width" value="210" min="100" max="350" step="1" required />
+                          <span class="sub-label">Standard A4 Width: 210 mm</span>
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a4-height">Height (mm)</label>
+                          <input type="number" id="cfg-a4-height" value="297" min="100" max="500" step="1" required />
+                          <span class="sub-label">Standard A4 Height: 297 mm</span>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 10px;">
+                        <div class="split-item" style="flex: 2;">
+                          <label>Orientation</label>
+                          <div class="orientation-buttons">
+                            <button type="button" class="btn-orientation active" id="btn-a4-orient-portrait" data-orient="portrait">
+                              <span>▯ Portrait (Vertical)</span>
+                            </button>
+                            <button type="button" class="btn-orientation" id="btn-a4-orient-landscape" data-orient="landscape">
+                              <span>▭ Landscape (Horizontal)</span>
+                            </button>
+                          </div>
+                          <input type="hidden" id="cfg-a4-orientation" value="portrait" />
+                        </div>
+                        <div class="split-item" style="flex: 1;">
+                          <label for="cfg-a4-scaling">Print Scaling (%)</label>
+                          <input type="number" id="cfg-a4-scaling" value="100" min="25" max="300" step="5" />
+                          <span class="sub-label">Range: 25% – 300%</span>
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="group-box" style="margin-top: 12px;">
+                      <legend class="group-title">Margins (mm)</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-a4-margin-top">Top Margin (mm)</label>
+                          <input type="number" id="cfg-a4-margin-top" value="10" min="0" max="100" step="0.5" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a4-margin-bottom">Bottom Margin (mm)</label>
+                          <input type="number" id="cfg-a4-margin-bottom" value="10" min="0" max="100" step="0.5" />
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 8px;">
+                        <div class="split-item">
+                          <label for="cfg-a4-margin-left">Left Margin (mm)</label>
+                          <input type="number" id="cfg-a4-margin-left" value="10" min="0" max="100" step="0.5" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a4-margin-right">Right Margin (mm)</label>
+                          <input type="number" id="cfg-a4-margin-right" value="10" min="0" max="100" step="0.5" />
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="group-box" style="margin-top: 12px;">
+                      <legend class="group-title">Layout &amp; Spacing Preferences</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-a4-header-spacing">Header Spacing (mm)</label>
+                          <input type="number" id="cfg-a4-header-spacing" value="5" min="0" max="50" step="0.5" />
+                          <span class="sub-label">Distance below page header</span>
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a4-footer-spacing">Footer Spacing (mm)</label>
+                          <input type="number" id="cfg-a4-footer-spacing" value="5" min="0" max="50" step="0.5" />
+                          <span class="sub-label">Distance above page footer</span>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 8px;">
+                        <div class="split-item">
+                          <label for="cfg-a4-printer">Default Printer</label>
+                          <select id="cfg-a4-printer" class="select-box printer-select-dropdown">
+                            <option value="">System Default Printer</option>
+                          </select>
+                        </div>
+                        <div class="split-item" style="display: flex; flex-direction: column; justify-content: center;">
+                          <label style="margin-bottom: 6px;">Page Numbering Preference</label>
+                          <label class="config-checkbox-label">
+                            <input type="checkbox" id="cfg-a4-page-numbering" checked />
+                            <span>Print Page Numbers (Page X of Y)</span>
+                          </label>
+                        </div>
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <!-- PANEL A5 -->
+                  <div class="paper-panel" id="panel-format-a5" data-panel-format="a5" style="display: none;">
+                    <fieldset class="group-box">
+                      <legend class="group-title">A5 Page Specifications</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-a5-width">Width (mm)</label>
+                          <input type="number" id="cfg-a5-width" value="148" min="80" max="250" step="1" required />
+                          <span class="sub-label">Standard A5 Width: 148 mm</span>
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a5-height">Height (mm)</label>
+                          <input type="number" id="cfg-a5-height" value="210" min="100" max="350" step="1" required />
+                          <span class="sub-label">Standard A5 Height: 210 mm</span>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 10px;">
+                        <div class="split-item" style="flex: 2;">
+                          <label>Orientation</label>
+                          <div class="orientation-buttons">
+                            <button type="button" class="btn-orientation active" id="btn-a5-orient-portrait" data-orient="portrait">
+                              <span>▯ Portrait (Vertical)</span>
+                            </button>
+                            <button type="button" class="btn-orientation" id="btn-a5-orient-landscape" data-orient="landscape">
+                              <span>▭ Landscape (Horizontal)</span>
+                            </button>
+                          </div>
+                          <input type="hidden" id="cfg-a5-orientation" value="portrait" />
+                        </div>
+                        <div class="split-item" style="flex: 1;">
+                          <label for="cfg-a5-scaling">Print Scaling (%)</label>
+                          <input type="number" id="cfg-a5-scaling" value="100" min="25" max="300" step="5" />
+                          <span class="sub-label">Range: 25% – 300%</span>
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="group-box" style="margin-top: 12px;">
+                      <legend class="group-title">Margins (mm)</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-a5-margin-top">Top Margin (mm)</label>
+                          <input type="number" id="cfg-a5-margin-top" value="8" min="0" max="80" step="0.5" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a5-margin-bottom">Bottom Margin (mm)</label>
+                          <input type="number" id="cfg-a5-margin-bottom" value="8" min="0" max="80" step="0.5" />
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 8px;">
+                        <div class="split-item">
+                          <label for="cfg-a5-margin-left">Left Margin (mm)</label>
+                          <input type="number" id="cfg-a5-margin-left" value="8" min="0" max="80" step="0.5" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a5-margin-right">Right Margin (mm)</label>
+                          <input type="number" id="cfg-a5-margin-right" value="8" min="0" max="80" step="0.5" />
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="group-box" style="margin-top: 12px;">
+                      <legend class="group-title">Layout &amp; Spacing Preferences</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-a5-header-spacing">Header Spacing (mm)</label>
+                          <input type="number" id="cfg-a5-header-spacing" value="4" min="0" max="40" step="0.5" />
+                          <span class="sub-label">Distance below page header</span>
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-a5-footer-spacing">Footer Spacing (mm)</label>
+                          <input type="number" id="cfg-a5-footer-spacing" value="4" min="0" max="40" step="0.5" />
+                          <span class="sub-label">Distance above page footer</span>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 8px;">
+                        <div class="split-item">
+                          <label for="cfg-a5-printer">Default Printer</label>
+                          <select id="cfg-a5-printer" class="select-box printer-select-dropdown">
+                            <option value="">System Default Printer</option>
+                          </select>
+                        </div>
+                        <div class="split-item" style="display: flex; flex-direction: column; justify-content: center;">
+                          <label style="margin-bottom: 6px;">Page Numbering Preference</label>
+                          <label class="config-checkbox-label">
+                            <input type="checkbox" id="cfg-a5-page-numbering" checked />
+                            <span>Print Page Numbers (Page X of Y)</span>
+                          </label>
+                        </div>
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <!-- PANEL THERMAL -->
+                  <div class="paper-panel" id="panel-format-thermal" data-panel-format="thermal" style="display: none;">
+                    <fieldset class="group-box">
+                      <legend class="group-title">Thermal Paper Specifications</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item" style="flex: 2;">
+                          <label>Supported Paper Width</label>
+                          <div class="thermal-width-selector">
+                            <button type="button" class="btn-thermal-width-opt active" id="btn-thermal-80" data-width-type="80mm">
+                              <span>80 mm (Standard POS)</span>
+                            </button>
+                            <button type="button" class="btn-thermal-width-opt" id="btn-thermal-58" data-width-type="58mm">
+                              <span>58 mm (Compact)</span>
+                            </button>
+                            <button type="button" class="btn-thermal-width-opt" id="btn-thermal-custom" data-width-type="custom">
+                              <span>Custom Width</span>
+                            </button>
+                          </div>
+                          <input type="hidden" id="cfg-thermal-width-type" value="80mm" />
+                        </div>
+                        <div class="split-item" id="cfg-thermal-custom-width-wrap" style="flex: 1; display: none;">
+                          <label for="cfg-thermal-width">Custom Width (mm)</label>
+                          <input type="number" id="cfg-thermal-width" value="80" min="30" max="120" step="1" />
+                          <span class="sub-label">Supported: 30 mm – 120 mm</span>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 10px;">
+                        <div class="split-item">
+                          <label for="cfg-thermal-printable-width">Printable Width (mm)</label>
+                          <input type="number" id="cfg-thermal-printable-width" value="72" min="20" max="120" step="0.5" />
+                          <span class="sub-label">Actual active thermal printhead width</span>
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-thermal-printer">Default Thermal Printer</label>
+                          <select id="cfg-thermal-printer" class="select-box printer-select-dropdown">
+                            <option value="">Default Thermal Printer</option>
+                          </select>
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="group-box" style="margin-top: 12px;">
+                      <legend class="group-title">Thermal Margins (mm)</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-thermal-margin-left">Left Margin (mm)</label>
+                          <input type="number" id="cfg-thermal-margin-left" value="2" min="0" max="25" step="0.5" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-thermal-margin-right">Right Margin (mm)</label>
+                          <input type="number" id="cfg-thermal-margin-right" value="2" min="0" max="25" step="0.5" />
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 8px;">
+                        <div class="split-item">
+                          <label for="cfg-thermal-margin-top">Top Margin (mm)</label>
+                          <input type="number" id="cfg-thermal-margin-top" value="4" min="0" max="30" step="0.5" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-thermal-margin-bottom">Bottom Feed Margin (mm)</label>
+                          <input type="number" id="cfg-thermal-margin-bottom" value="4" min="0" max="30" step="0.5" />
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="group-box" style="margin-top: 12px;">
+                      <legend class="group-title">Typography &amp; Hardware Output Preferences</legend>
+                      <div class="comp-field-row-split">
+                        <div class="split-item">
+                          <label for="cfg-thermal-font-size">Font Size (pt)</label>
+                          <select id="cfg-thermal-font-size" class="select-box">
+                            <option value="8">8 pt (Compact)</option>
+                            <option value="9">9 pt (58mm Default)</option>
+                            <option value="10" selected>10 pt (80mm Standard)</option>
+                            <option value="11">11 pt (Large)</option>
+                            <option value="12">12 pt (High Readability)</option>
+                          </select>
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-thermal-line-spacing">Line Spacing</label>
+                          <select id="cfg-thermal-line-spacing" class="select-box">
+                            <option value="1.0">1.0 (Tight)</option>
+                            <option value="1.15">1.15 (Compact)</option>
+                            <option value="1.2" selected>1.2 (Standard ERP)</option>
+                            <option value="1.5">1.5 (Relaxed)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 10px;">
+                        <div class="split-item">
+                          <label>Character Alignment</label>
+                          <div class="alignment-buttons">
+                            <button type="button" class="btn-align active" id="btn-align-left" data-align="left" title="Left Align">Left</button>
+                            <button type="button" class="btn-align" id="btn-align-center" data-align="center" title="Center Align">Center</button>
+                            <button type="button" class="btn-align" id="btn-align-right" data-align="right" title="Right Align">Right</button>
+                          </div>
+                          <input type="hidden" id="cfg-thermal-alignment" value="left" />
+                        </div>
+                        <div class="split-item">
+                          <label for="cfg-thermal-density">Print Density <span id="density-support-hint" style="font-size: 10px; color: #64748b;">(Hardware Dependent)</span></label>
+                          <select id="cfg-thermal-density" class="select-box">
+                            <option value="Light">Light</option>
+                            <option value="Normal" selected>Normal</option>
+                            <option value="Dark">Dark</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="comp-field-row-split" style="margin-top: 10px;">
+                        <div class="split-item">
+                          <label class="config-checkbox-label">
+                            <input type="checkbox" id="cfg-thermal-auto-cut" checked />
+                            <span>Auto-Cut Preference <span id="autocut-support-hint" style="font-size: 10px; color: #64748b;">(ESC/POS Hardware Supported)</span></span>
+                          </label>
+                          <span class="sub-label">Sends GS V 0 paper cut signal at voucher end</span>
+                        </div>
+                      </div>
+                    </fieldset>
+                  </div>
+
+                </form>
+              </div>
+
+              <!-- Right Live Preview Column -->
+              <div class="config-preview-column">
+                <div class="config-preview-header">
+                  <div class="preview-title-wrap">
+                    <span class="preview-title-icon">👁️</span>
+                    <span class="preview-title-text" id="preview-header-title">Live Preview &bull; A4 Portrait</span>
+                  </div>
+                  <div class="preview-meta-wrap">
+                    <span class="preview-meta-pill" id="preview-meta-dimensions">210 &times; 297 mm</span>
+                    <span class="preview-meta-pill" id="preview-meta-margins">M: 10, 10, 10, 10 mm</span>
+                  </div>
+                </div>
+
+                <div class="config-preview-viewport" id="config-preview-viewport">
+                  
+                  <!-- SHEET PREVIEW CONTAINER (FOR A4 & A5) -->
+                  <div class="sheet-preview-wrapper" id="sheet-preview-wrapper">
+                    <div class="sheet-paper-element" id="sheet-paper-element">
+                      <!-- Visual margin boundary guidelines -->
+                      <div class="sheet-margin-box" id="sheet-margin-box">
+                        <div class="sheet-test-header">
+                          <div class="sheet-brand-title">ANTI-MATRIX BILLING ERP</div>
+                          <div class="sheet-doc-type" id="sheet-doc-type">NEUTRAL TEST LAYOUT &bull; A4</div>
+                          <div class="sheet-rule-line"></div>
+                        </div>
+
+                        <div class="sheet-test-body" id="sheet-test-body">
+                          <div class="sheet-meta-grid">
+                            <div><strong>Ref:</strong> TEST-SPEC-001</div>
+                            <div><strong>Date:</strong> 15-Nov-2026</div>
+                            <div><strong>Format:</strong> <span id="sheet-preview-fmt-lbl">A4 Standard</span></div>
+                            <div><strong>Orientation:</strong> <span id="sheet-preview-orient-lbl">Portrait</span></div>
+                          </div>
+
+                          <div class="sheet-test-table">
+                            <div class="sheet-th-row">
+                              <span style="flex: 0.5;">#</span>
+                              <span style="flex: 3;">Alignment &amp; Margin Indicator</span>
+                              <span style="flex: 1; text-align: right;">Scale</span>
+                              <span style="flex: 1; text-align: right;">Status</span>
+                            </div>
+                            <div class="sheet-tr-row">
+                              <span style="flex: 0.5;">1</span>
+                              <span style="flex: 3;">Top &amp; Left Margin Visual Boundary</span>
+                              <span style="flex: 1; text-align: right;" id="sheet-scale-lbl">100%</span>
+                              <span style="flex: 1; text-align: right; color: #16a34a; font-weight: 700;">PASS</span>
+                            </div>
+                            <div class="sheet-tr-row">
+                              <span style="flex: 0.5;">2</span>
+                              <span style="flex: 3;">Right &amp; Bottom Dimension Verification</span>
+                              <span style="flex: 1; text-align: right;">1.00</span>
+                              <span style="flex: 1; text-align: right; color: #16a34a; font-weight: 700;">PASS</span>
+                            </div>
+                            <div class="sheet-tr-row">
+                              <span style="flex: 0.5;">3</span>
+                              <span style="flex: 3;">Header &amp; Footer Spacing Offset</span>
+                              <span style="flex: 1; text-align: right;">1.00</span>
+                              <span style="flex: 1; text-align: right; color: #16a34a; font-weight: 700;">PASS</span>
+                            </div>
+                          </div>
+
+                          <div class="sheet-test-summary">
+                            <div class="summary-line"><span>Horizontal Printable:</span> <strong id="sheet-print-w-lbl">190 mm</strong></div>
+                            <div class="summary-line"><span>Vertical Printable:</span> <strong id="sheet-print-h-lbl">277 mm</strong></div>
+                            <div class="summary-line total"><span>Dimensional Check:</span> <strong style="color: #059669;">VALIDATED</strong></div>
+                          </div>
+                        </div>
+
+                        <div class="sheet-test-footer" id="sheet-test-footer">
+                          <div class="sheet-rule-line"></div>
+                          <div class="sheet-footer-content">
+                            <span>Anti-Matrix ERP Paper Configuration Preview</span>
+                            <span id="sheet-preview-page-no">Page 1 of 1</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- CONTINUOUS THERMAL RECEIPT PREVIEW CONTAINER -->
+                  <div class="thermal-receipt-wrapper" id="thermal-receipt-wrapper" style="display: none;">
+                    <div class="thermal-receipt-sheet" id="thermal-receipt-sheet">
+                      <div class="thermal-receipt-cut-top"></div>
+                      <div class="thermal-receipt-content" id="thermal-receipt-content">
+                        <div class="thermal-header-center">*** ANTI-MATRIX BILLING ***</div>
+                        <div class="thermal-sub-center" id="thermal-width-headline">THERMAL RECEIPT PREVIEW (80mm)</div>
+                        <div class="thermal-divider-dashed">--------------------------------</div>
+                        <div class="thermal-row-meta">
+                          <span>Date: 15-Nov-2026</span>
+                          <span>Time: 14:30</span>
+                        </div>
+                        <div class="thermal-row-meta">
+                          <span>Paper Width:</span>
+                          <strong id="thermal-w-lbl">80 mm</strong>
+                        </div>
+                        <div class="thermal-row-meta">
+                          <span>Printable Width:</span>
+                          <strong id="thermal-pw-lbl">72 mm</strong>
+                        </div>
+                        <div class="thermal-divider-dashed">--------------------------------</div>
+                        <div class="thermal-sample-items" id="thermal-sample-items">
+                          <div class="thermal-item-row">
+                            <span class="t-name">Test Pattern Item 01</span>
+                            <span class="t-qty">1.0</span>
+                            <span class="t-amt">OK</span>
+                          </div>
+                          <div class="thermal-item-row">
+                            <span class="t-name">Margin Boundary Check</span>
+                            <span class="t-qty">1.0</span>
+                            <span class="t-amt">OK</span>
+                          </div>
+                          <div class="thermal-item-row">
+                            <span class="t-name">Character Alignment</span>
+                            <span class="t-qty">1.0</span>
+                            <span class="t-amt">OK</span>
+                          </div>
+                        </div>
+                        <div class="thermal-divider-double">================================</div>
+                        <div class="thermal-row-total">
+                          <span>TOTAL CHECK:</span>
+                          <strong style="color: #047857;">PASS</strong>
+                        </div>
+                        <div class="thermal-divider-double">================================</div>
+                        <div class="thermal-density-note" id="thermal-density-lbl">Print Density: Normal &bull; Font: 10pt</div>
+                        <div class="thermal-footer-center">*** THANK YOU FOR SHOPPING ***</div>
+                        <div class="thermal-cut-line" id="thermal-cut-indicator">
+                          <span>- - - - - - [ AUTOMATIC CUT ] - - - - - -</span>
+                        </div>
+                      </div>
+                      <div class="thermal-receipt-cut-bottom"></div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+            <!-- End of PANE 1: PAPER CONFIGURATION -->
+            </div>
+
+            <!-- =======================================================
+                 PANE 2: BILL LAYOUT CONFIGURATION (PHASE 2)
+                 ======================================================= -->
+            <div class="config-view-pane" id="pane-bill-layout-config" style="display: none;">
+              <!-- Voucher Type Toolbar -->
+              <div class="bill-vch-toolbar">
+                <div class="bill-vch-tabs" role="tablist" aria-label="Voucher Types">
+                  <button type="button" class="btn-vch-tab active" id="tab-vch-sales-invoice" data-voucher="sales_invoice" role="tab" aria-selected="true">
+                    <span>🏷️ Sales Invoice</span>
+                  </button>
+                  <button type="button" class="btn-vch-tab" id="tab-vch-sales-return" data-voucher="sales_return" role="tab" aria-selected="false">
+                    <span>↩️ Sales Return</span>
+                  </button>
+                  <button type="button" class="btn-vch-tab" id="tab-vch-purchase-invoice" data-voucher="purchase_invoice" role="tab" aria-selected="false">
+                    <span>📥 Purchase Invoice</span>
+                  </button>
+                  <button type="button" class="btn-vch-tab" id="tab-vch-purchase-return" data-voucher="purchase_return" role="tab" aria-selected="false">
+                    <span>📤 Purchase Return</span>
+                  </button>
+                </div>
+                <div class="bill-vch-actions">
+                  <span id="layout-persistence-indicator" class="persistence-status-pill">● Database Synced</span>
+                  <button type="button" class="btn-action" id="btn-layout-duplicate" title="Duplicate another voucher layout to this layout">📋 Duplicate From...</button>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <select id="sel-layout-reset-section" class="form-control" style="font-size: 11px; padding: 4px 6px; width: 140px; background: #0f172a; color: #f1f5f9; border: 1px solid #334155;">
+                      <option value="">-- Reset Section --</option>
+                      <option value="header_config">Header &amp; Logo</option>
+                      <option value="invoice_info_config">Invoice Info &amp; Party</option>
+                      <option value="columns_config">Product Columns</option>
+                      <option value="totals_config">Totals &amp; Tax</option>
+                      <option value="footer_config">Footer &amp; Bank</option>
+                      <option value="style_config">Styling &amp; Fonts</option>
+                      <option value="all">↺ All to Defaults</option>
+                    </select>
+                    <button type="button" class="btn-action secondary-btn" id="btn-layout-reset-action" title="Reset selected section or all">Reset</button>
+                  </div>
+                  <button type="button" class="btn-action primary-btn" id="btn-layout-save" title="Save Layout (Ctrl+S)">💾 Save Layout</button>
+                </div>
+              </div>
+
+              <!-- Two-Column Workspace -->
+              <div class="bill-layout-designer-grid">
+                <!-- Left Controls Panel -->
+                <div class="bill-layout-controls-column">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #475569;">Layout Name:</span>
+                    <input type="text" id="input-layout-name" class="form-control" style="font-size: 11px; font-weight: 700; padding: 4px 8px; width: 260px;" value="Standard Sales Invoice Layout">
+                  </div>
+
+                  <!-- 1. Header & Logo Accordion -->
+                  <div class="layout-acc-card" id="acc-header">
+                    <div class="layout-acc-header" data-target="acc-header">
+                      <span class="layout-acc-title">🏢 Company Header &amp; Logo</span>
+                      <span class="layout-acc-chevron">▼</span>
+                    </div>
+                    <div class="layout-acc-body">
+                      <div class="layout-row-field">
+                        <label><input type="checkbox" id="chk-hdr-comp-name" checked> Show Company Name</label>
+                      </div>
+                      <div class="layout-row-field">
+                        <label><input type="checkbox" id="chk-hdr-logo"> Enable Company Logo</label>
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                          <input type="file" id="file-hdr-logo" accept="image/*" style="display: none;">
+                          <button type="button" class="btn-action secondary-btn" id="btn-hdr-upload-logo" style="font-size: 10px; padding: 3px 8px;">Upload Logo</button>
+                          <button type="button" class="btn-action secondary-btn" id="btn-hdr-remove-logo" style="font-size: 10px; padding: 3px 6px; display: none;">&times;</button>
+                        </div>
+                      </div>
+                      <div id="wrap-hdr-logo-props" style="display: none; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px dashed #cbd5e1; gap: 8px; flex-direction: column;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <img id="img-hdr-logo-thumb" src="" alt="Logo Preview" style="max-height: 36px; max-width: 60px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px; background: #fff;">
+                          <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                            <div class="layout-row-field">
+                              <span>Position:</span>
+                              <select id="sel-hdr-logo-pos">
+                                <option value="left">Left Aligned</option>
+                                <option value="center">Centered</option>
+                                <option value="right">Right Aligned</option>
+                              </select>
+                            </div>
+                            <div class="layout-row-field">
+                              <span>Size (W &times; H mm):</span>
+                              <div style="display: flex; gap: 4px;">
+                                <input type="number" id="input-hdr-logo-w" value="30" min="10" max="100" style="width: 50px;">
+                                <input type="number" id="input-hdr-logo-h" value="20" min="10" max="100" style="width: 50px;">
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+                        <label><input type="checkbox" id="chk-hdr-address" checked> Business Address</label>
+                        <label><input type="checkbox" id="chk-hdr-phone" checked> Phone Number</label>
+                        <label><input type="checkbox" id="chk-hdr-email" checked> Email Address</label>
+                        <label><input type="checkbox" id="chk-hdr-website" checked> Website</label>
+                        <label><input type="checkbox" id="chk-hdr-gstin" checked> Company GSTIN</label>
+                        <label><input type="checkbox" id="chk-hdr-state" checked> State &amp; Code</label>
+                        <label><input type="checkbox" id="chk-hdr-reg" checked> PAN / Reg Details</label>
+                      </div>
+                      <div class="layout-row-field" style="margin-top: 4px;">
+                        <span>Custom Tagline:</span>
+                        <input type="text" id="input-hdr-tagline" placeholder="e.g. Authorized Distributor">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 2. Invoice Metadata Accordion -->
+                  <div class="layout-acc-card" id="acc-info">
+                    <div class="layout-acc-header" data-target="acc-info">
+                      <span class="layout-acc-title">📄 Invoice Title &amp; Parties</span>
+                      <span class="layout-acc-chevron">▼</span>
+                    </div>
+                    <div class="layout-acc-body">
+                      <div class="layout-row-field">
+                        <label><input type="checkbox" id="chk-inv-show-title" checked> Show Document Title</label>
+                        <input type="text" id="input-inv-title" value="TAX INVOICE" style="width: 150px;">
+                      </div>
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="layout-row-field">
+                          <label><input type="checkbox" id="chk-inv-vch-no" checked> Voucher No</label>
+                          <input type="text" id="input-inv-vch-no-lbl" value="Invoice No" style="width: 80px;">
+                        </div>
+                        <div class="layout-row-field">
+                          <label><input type="checkbox" id="chk-inv-date" checked> Date</label>
+                          <input type="text" id="input-inv-date-lbl" value="Date" style="width: 80px;">
+                        </div>
+                        <div class="layout-row-field">
+                          <label><input type="checkbox" id="chk-inv-due-date" checked> Due Date</label>
+                          <input type="text" id="input-inv-due-date-lbl" value="Due Date" style="width: 80px;">
+                        </div>
+                        <div class="layout-row-field">
+                          <label><input type="checkbox" id="chk-inv-ref-no" checked> Reference No</label>
+                          <input type="text" id="input-inv-ref-no-lbl" value="Ref No" style="width: 80px;">
+                        </div>
+                      </div>
+                      <div style="border-top: 1px dashed #e2e8f0; padding-top: 6px; margin-top: 4px;">
+                        <div class="layout-row-field">
+                          <label><input type="checkbox" id="chk-inv-party-name" checked> Party / Customer Name</label>
+                          <input type="text" id="input-inv-party-lbl" value="Customer (Billed To)" style="width: 150px;">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+                          <label><input type="checkbox" id="chk-inv-party-address" checked> Party Address</label>
+                          <label><input type="checkbox" id="chk-inv-party-gstin" checked> Party GSTIN</label>
+                          <label><input type="checkbox" id="chk-inv-party-state" checked> State &amp; Place of Supply</label>
+                          <label><input type="checkbox" id="chk-inv-party-contact" checked> Contact Info</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 3. Product Table Columns Accordion -->
+                  <div class="layout-acc-card" id="acc-columns">
+                    <div class="layout-acc-header" data-target="acc-columns">
+                      <span class="layout-acc-title">📊 Product Table Columns (16 Columns)</span>
+                      <span class="layout-acc-chevron">▼</span>
+                    </div>
+                    <div class="layout-acc-body">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px;">
+                        <span style="font-weight: 600; color: #475569;">Reorder &amp; customize:</span>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                          <span>Header BG:</span>
+                          <input type="color" id="input-tbl-header-bg" value="#1e40af" style="width: 24px; height: 22px; padding: 0; border: none; cursor: pointer;">
+                          <span>Text:</span>
+                          <input type="color" id="input-tbl-header-color" value="#ffffff" style="width: 24px; height: 22px; padding: 0; border: none; cursor: pointer;">
+                        </div>
+                      </div>
+                      <!-- 16 Columns Container -->
+                      <div class="columns-config-container" id="columns-config-container">
+                        <!-- Populated dynamically via JS -->
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 4. Totals & Tax Summary Accordion -->
+                  <div class="layout-acc-card" id="acc-totals">
+                    <div class="layout-acc-header" data-target="acc-totals">
+                      <span class="layout-acc-title">💰 Totals &amp; Tax Summary</span>
+                      <span class="layout-acc-chevron">▼</span>
+                    </div>
+                    <div class="layout-acc-body">
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <label><input type="checkbox" id="chk-tot-subtotal" checked> Subtotal</label>
+                        <label><input type="checkbox" id="chk-tot-discount" checked> Discount Total</label>
+                        <label><input type="checkbox" id="chk-tot-taxable" checked> Taxable Amount</label>
+                        <label><input type="checkbox" id="chk-tot-cgst" checked> CGST Breakdown</label>
+                        <label><input type="checkbox" id="chk-tot-sgst" checked> SGST Breakdown</label>
+                        <label><input type="checkbox" id="chk-tot-igst" checked> IGST Breakdown</label>
+                        <label><input type="checkbox" id="chk-tot-roundoff" checked> Round-Off</label>
+                        <label><input type="checkbox" id="chk-tot-grandtotal" checked> Grand Total</label>
+                        <label><input type="checkbox" id="chk-tot-words" checked> Amount in Words</label>
+                        <label><input type="checkbox" id="chk-tot-payment-method" checked> Payment Method</label>
+                        <label><input type="checkbox" id="chk-tot-amount-paid" checked> Amount Paid</label>
+                        <label><input type="checkbox" id="chk-tot-balance-due" checked> Balance Due</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 5. Footer, Bank & Signatures Accordion -->
+                  <div class="layout-acc-card" id="acc-footer">
+                    <div class="layout-acc-header" data-target="acc-footer">
+                      <span class="layout-acc-title">✍️ Footer, Bank &amp; Signatures</span>
+                      <span class="layout-acc-chevron">▼</span>
+                    </div>
+                    <div class="layout-acc-body">
+                      <div class="layout-row-field" style="flex-direction: column; align-items: flex-start;">
+                        <label><input type="checkbox" id="chk-ftr-terms" checked> Terms &amp; Conditions</label>
+                        <textarea id="txt-ftr-terms" rows="2">1. Goods once sold will not be taken back.
+2. Interest @ 18% p.a. charged after due date.
+3. Subject to local jurisdiction.</textarea>
+                      </div>
+                      <div style="border-top: 1px dashed #e2e8f0; padding-top: 6px;">
+                        <div class="layout-row-field">
+                          <label><input type="checkbox" id="chk-ftr-bank" checked> Bank &amp; UPI Details</label>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+                          <input type="text" id="input-ftr-bank-name" placeholder="Bank Name (e.g. HDFC Bank)">
+                          <input type="text" id="input-ftr-acc-no" placeholder="Account Number">
+                          <input type="text" id="input-ftr-ifsc" placeholder="IFSC Code">
+                          <input type="text" id="input-ftr-upi" placeholder="UPI ID / VPA">
+                        </div>
+                      </div>
+                      <div class="layout-row-field" style="margin-top: 4px;">
+                        <label><input type="checkbox" id="chk-ftr-notes" checked> Customer Notes</label>
+                        <input type="text" id="input-ftr-notes" value="Thank you for your business!" style="width: 220px;">
+                      </div>
+                      <div style="border-top: 1px dashed #e2e8f0; padding-top: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <label><input type="checkbox" id="chk-ftr-signatory" checked> Authorized Signatory</label>
+                        <label><input type="checkbox" id="chk-ftr-seal" checked> Company Seal Box</label>
+                      </div>
+                      <div class="layout-row-field" style="margin-top: 4px;">
+                        <span>Signatory Title:</span>
+                        <input type="text" id="input-ftr-signatory-title" value="Authorized Signatory" style="width: 180px;">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Live Preview Column -->
+                <div class="bill-layout-preview-column">
+                  <!-- Live Preview Toolbar -->
+                  <div class="bill-preview-toolbar">
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                      <span style="font-size: 11px; font-weight: 700; color: #94a3b8;">Format:</span>
+                      <div class="config-format-tabs" style="gap: 4px;">
+                        <button type="button" class="btn-format-tab active" id="btn-prev-fmt-a4" data-fmt="a4" style="padding: 4px 10px; font-size: 11px;">A4</button>
+                        <button type="button" class="btn-format-tab" id="btn-prev-fmt-a5" data-fmt="a5" style="padding: 4px 10px; font-size: 11px;">A5</button>
+                        <button type="button" class="btn-format-tab" id="btn-prev-fmt-thermal" data-fmt="thermal" style="padding: 4px 10px; font-size: 11px;">Thermal</button>
+                      </div>
+                      <span style="font-size: 11px; font-weight: 700; color: #94a3b8; margin-left: 8px;">Orientation:</span>
+                      <select id="sel-prev-orientation" style="font-size: 11px; padding: 3px 6px; background: #0f172a; color: #f1f5f9; border: 1px solid #334155; border-radius: 4px;">
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
+                      </select>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                      <div class="header-zoom-strip" style="background: #0f172a; border-color: #334155;">
+                        <button type="button" class="btn-header-zoom" id="btn-prev-zoom-out" style="color: #f1f5f9;">-</button>
+                        <span class="header-zoom-label" id="prev-zoom-lvl" style="color: #f1f5f9; font-size: 11px;">80%</span>
+                        <button type="button" class="btn-header-zoom" id="btn-prev-zoom-in" style="color: #f1f5f9;">+</button>
+                      </div>
+                      <button type="button" class="btn-action" id="btn-layout-print-sample" title="Generate sample PDF with this design">🖨️ Test Print Invoice</button>
+                    </div>
+                  </div>
+
+                  <!-- Canvas Container -->
+                  <div class="bill-preview-canvas-container" id="bill-preview-canvas-container">
+                    <div id="bill-invoice-preview-canvas" style="display: flex; justify-content: center; width: 100%;">
+                      <!-- Rendered dynamically -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- =======================================================
+                 PANE 3: VOUCHER NUMBERING CONFIGURATION (PHASE 4)
+                 ======================================================= -->
+            <div class="config-view-pane" id="pane-voucher-numbering-config" style="display: none;">
+              <!-- Voucher Type Toolbar -->
+              <div class="bill-vch-toolbar">
+                <div class="bill-vch-tabs" role="tablist" aria-label="Voucher Types for Numbering">
+                  <button type="button" class="btn-vch-tab active" id="tab-vch-num-sales-invoice" data-vch-type="sales_invoice" role="tab" aria-selected="true">
+                    <span>🏷️ Sales Invoice</span>
+                  </button>
+                  <button type="button" class="btn-vch-tab" id="tab-vch-num-sales-return" data-vch-type="sales_return" role="tab" aria-selected="false">
+                    <span>↩️ Sales Return</span>
+                  </button>
+                  <button type="button" class="btn-vch-tab" id="tab-vch-num-purchase-invoice" data-vch-type="purchase_invoice" role="tab" aria-selected="false">
+                    <span>📦 Purchase Invoice</span>
+                  </button>
+                  <button type="button" class="btn-vch-tab" id="tab-vch-num-purchase-return" data-vch-type="purchase_return" role="tab" aria-selected="false">
+                    <span>↪️ Purchase Return</span>
+                  </button>
+                </div>
+                <div class="bill-vch-actions">
+                  <span id="vch-num-persistence-indicator" style="font-size: 11px; font-weight: 700; color: #10b981; padding: 2px 8px; border-radius: 4px; border: 1px solid #10b981;">● Saved</span>
+                  <button type="button" class="btn-action secondary-btn" id="btn-vch-num-reset" title="Restore factory numbering defaults for this voucher type">↺ Reset to Default</button>
+                  <button type="button" class="btn-action primary-btn" id="btn-vch-num-save" title="Save voucher numbering rules (Ctrl+S)">💾 Save Numbering Configuration</button>
+                </div>
+              </div>
+
+              <!-- Main Numbering Configuration Workspace -->
+              <div class="vch-num-workspace" style="display: flex; flex: 1; overflow: hidden; background: #0f172a;">
+                <!-- Left: Form Controls (Scrollable) -->
+                <div class="vch-num-controls-panel" style="flex: 1.2; overflow-y: auto; padding: 20px 24px; border-right: 1px solid #334155; display: flex; flex-direction: column; gap: 18px;">
+                  
+                  <!-- Section 1: Activation & Series -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                      <div>
+                        <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">1. Numbering Scheme Mode</h3>
+                        <p style="margin: 2px 0 0; font-size: 11px; color: #94a3b8;">Choose whether to use custom format rules or standard system sequential numbering.</p>
+                      </div>
+                      <label class="switch-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-vch-enable-custom" style="width: 18px; height: 18px; cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: 700; color: #38bdf8;">Custom Numbering</span>
+                      </label>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Voucher Series Name:</label>
+                        <input type="text" id="cfg-vch-series" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" value="Main" placeholder="Main">
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Sequence Reset Rule:</label>
+                        <select id="cfg-vch-reset-freq" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="yearly">Yearly (At start of financial year)</option>
+                          <option value="never">Never (Continuous uninterrupted sequence)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section 2: Prefix, Starting Number & Digits -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">2. Format, Affixes &amp; Padding</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Define prefix, number padding width, optional suffix and initial sequence start.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Voucher Prefix:</label>
+                        <input type="text" id="cfg-vch-prefix" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" placeholder="e.g. INV-, SI/, PUR-">
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Letters, numbers, hyphens (-) or slashes (/)</span>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Voucher Suffix (Optional):</label>
+                        <input type="text" id="cfg-vch-suffix" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" placeholder="e.g. /HO, -TAX">
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Appended at the end of the voucher number</span>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Starting Number:</label>
+                        <input type="number" id="cfg-vch-start-num" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" min="1" max="10000000" value="1">
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Initial number for new series (Preserves historical vouchers)</span>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Number Padding (Digits):</label>
+                        <select id="cfg-vch-padding" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="3">3 digits (001)</option>
+                          <option value="4" selected>4 digits (0001)</option>
+                          <option value="5">5 digits (00001)</option>
+                          <option value="6">6 digits (000001)</option>
+                          <option value="8">8 digits (00000001)</option>
+                        </select>
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Controls zero-padding width for the sequence number</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section 3: Financial Year & Branch Context -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">3. Financial Year &amp; Branch Context</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Embed financial accounting year and branch identifiers into the voucher number.</p>
+
+                    <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: #0f172a; border-radius: 6px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-vch-include-fy" style="width: 16px; height: 16px; cursor: pointer;">
+                        <span>Include Financial Year</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-vch-include-branch" style="width: 16px; height: 16px; cursor: pointer;">
+                        <span>Include Branch Code</span>
+                      </label>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">FY Format:</label>
+                        <select id="cfg-vch-fy-format" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="YYYY-YY" selected>YYYY-YY (e.g. 2026-27)</option>
+                          <option value="YY-YY">YY-YY (e.g. 26-27)</option>
+                          <option value="YYYY">YYYY (e.g. 2026)</option>
+                          <option value="YYYY-YYYY">YYYY-YYYY (e.g. 2026-2027)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Separator:</label>
+                        <select id="cfg-vch-fy-sep" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="/" selected>Slash (/)</option>
+                          <option value="-">Hyphen (-)</option>
+                          <option value="_">Underscore (_)</option>
+                          <option value="">None (Concatenated)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 12px;">
+                      <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Branch Code Placement:</label>
+                      <select id="cfg-vch-branch-pos" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                        <option value="prefix" selected>Prefix (e.g. BR01/INV/0001)</option>
+                        <option value="after_prefix">After Prefix (e.g. INV/BR01/0001)</option>
+                        <option value="after_fy">After Financial Year (e.g. INV/2026-27/BR01/0001)</option>
+                        <option value="suffix">Suffix (e.g. INV/0001/BR01)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Validation feedback container -->
+                  <div id="vch-num-validation-box" style="display: none; padding: 10px 14px; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 6px; font-size: 12px; color: #fca5a5;">
+                  </div>
+
+                </div>
+
+                <!-- Right: Live Interactive Preview & Integrity Status -->
+                <div class="vch-num-preview-panel" style="flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; background: #0b1120;">
+                  
+                  <!-- Live Preview Header & Showcase -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                      <span style="font-size: 12px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">Live Voucher Preview</span>
+                      <span style="font-size: 10px; font-weight: 700; background: rgba(56, 189, 248, 0.2); color: #38bdf8; padding: 2px 8px; border-radius: 10px;">Example Representation</span>
+                    </div>
+
+                    <div style="text-align: center; padding: 24px 16px; background: #0f172a; border: 2px dashed #0284c7; border-radius: 8px; margin-bottom: 12px;">
+                      <div id="vch-num-live-preview-display" style="font-family: 'Courier New', Courier, monospace; font-size: 26px; font-weight: 800; color: #38bdf8; letter-spacing: 1px;">
+                        INV-0001
+                      </div>
+                      <span style="font-size: 11px; color: #94a3b8; display: block; margin-top: 8px;">Next generated voucher number for this series</span>
+                    </div>
+
+                    <!-- Component Breakdown Chips -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;" id="vch-num-components-chips">
+                      <span style="font-size: 10px; background: #334155; color: #cbd5e1; padding: 3px 8px; border-radius: 4px;">Prefix: <strong id="chip-vch-prefix">INV-</strong></span>
+                      <span style="font-size: 10px; background: #334155; color: #cbd5e1; padding: 3px 8px; border-radius: 4px;">Sequence: <strong id="chip-vch-seq">0001</strong></span>
+                      <span style="font-size: 10px; background: #334155; color: #cbd5e1; padding: 3px 8px; border-radius: 4px;" id="chip-wrap-fy" style="display:none;">FY: <strong id="chip-vch-fy">--</strong></span>
+                      <span style="font-size: 10px; background: #334155; color: #cbd5e1; padding: 3px 8px; border-radius: 4px;" id="chip-wrap-br" style="display:none;">Branch: <strong id="chip-vch-br">--</strong></span>
+                    </div>
+                  </div>
+
+                  <!-- Projected Sequence Series -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h4 style="margin: 0 0 10px; font-size: 12px; font-weight: 800; color: #f8fafc; text-transform: uppercase;">Projected Sequence Series</h4>
+                    <div style="display: flex; flex-direction: column; gap: 6px;" id="vch-num-projected-list">
+                      <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 8px 12px; background: #0f172a; border-radius: 4px; border-left: 3px solid #0284c7;">
+                        <span style="color: #94a3b8;">Voucher #1 (Next):</span>
+                        <strong style="color: #38bdf8; font-family: monospace;" id="proj-vch-1">INV-0001</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 8px 12px; background: #0f172a; border-radius: 4px;">
+                        <span style="color: #94a3b8;">Voucher #2:</span>
+                        <strong style="color: #cbd5e1; font-family: monospace;" id="proj-vch-2">INV-0002</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 8px 12px; background: #0f172a; border-radius: 4px;">
+                        <span style="color: #94a3b8;">Voucher #3:</span>
+                        <strong style="color: #cbd5e1; font-family: monospace;" id="proj-vch-3">INV-0003</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Database & Sequence Audit Status -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h4 style="margin: 0 0 10px; font-size: 12px; font-weight: 800; color: #f8fafc; text-transform: uppercase;">Sequence Audit &amp; Database State</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
+                      <div style="background: #0f172a; padding: 8px 10px; border-radius: 4px;">
+                        <span style="color: #64748b; display: block;">Last Sequence Allocated:</span>
+                        <strong style="color: #f1f5f9; font-size: 13px;" id="status-vch-last-allocated">0</strong>
+                      </div>
+                      <div style="background: #0f172a; padding: 8px 10px; border-radius: 4px;">
+                        <span style="color: #64748b; display: block;">Total Committed in DB:</span>
+                        <strong style="color: #f1f5f9; font-size: 13px;" id="status-vch-total-committed">0</strong>
+                      </div>
+                      <div style="background: #0f172a; padding: 8px 10px; border-radius: 4px;">
+                        <span style="color: #64748b; display: block;">Active Financial Year:</span>
+                        <strong style="color: #f1f5f9; font-size: 12px;" id="status-vch-fy">2026-2027</strong>
+                      </div>
+                      <div style="background: #0f172a; padding: 8px 10px; border-radius: 4px;">
+                        <span style="color: #64748b; display: block;">Current Branch Code:</span>
+                        <strong style="color: #f1f5f9; font-size: 12px;" id="status-vch-branch">BR01</strong>
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 12px; padding: 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid #059669; border-radius: 6px; font-size: 11px; color: #6ee7b7; display: flex; align-items: center; gap: 8px;">
+                      <span>🔒</span>
+                      <span><strong>Numbering Integrity Active:</strong> Historical invoices are never renumbered, overwritten, or modified.</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- =======================================================
+                 PANE 4: GST & TAX CONFIGURATION (PHASE 5)
+                 ======================================================= -->
+            <div class="config-view-pane" id="pane-gst-tax-config" style="display: none;">
+              <!-- GST & Tax Toolbar -->
+              <div class="bill-vch-toolbar">
+                <div class="bill-vch-tabs" role="tablist" aria-label="GST and Tax Sections">
+                  <span style="font-weight: 800; font-size: 13px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                    <span>📊 GST &amp; Tax Configuration</span>
+                    <span class="pos-company-badge" id="gst-tax-scope-badge" style="background: #3b82f6; font-size: 10px;">Company Scope</span>
+                  </span>
+                </div>
+                <div class="bill-vch-actions">
+                  <span id="gst-tax-persistence-indicator" style="font-size: 11px; font-weight: 700; color: #10b981; padding: 2px 8px; border-radius: 4px; border: 1px solid #10b981;">● Saved</span>
+                  <button type="button" class="btn-action secondary-btn" id="btn-gst-tax-reset" title="Restore standard GST factory defaults">↺ Reset to Default</button>
+                  <button type="button" class="btn-action primary-btn" id="btn-gst-tax-save" title="Save GST & Tax settings (Ctrl+S)">💾 Save GST Configuration</button>
+                </div>
+              </div>
+
+              <!-- Main GST & Tax Workspace -->
+              <div class="vch-num-workspace" style="display: flex; flex: 1; overflow: hidden; background: #0f172a;">
+                <!-- Left: Configuration Form Panels (Scrollable) -->
+                <div class="vch-num-controls-panel" style="flex: 1.2; overflow-y: auto; padding: 20px 24px; border-right: 1px solid #334155; display: flex; flex-direction: column; gap: 18px;">
+                  
+                  <!-- Section A: GST Registration -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                      <div>
+                        <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">A. GST Registration &amp; Identity</h3>
+                        <p style="margin: 2px 0 0; font-size: 11px; color: #94a3b8;">Manage company GSTIN, legal registered name, state, and registration type.</p>
+                      </div>
+                      <label class="switch-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-gst-enabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: 700; color: #38bdf8;">GST Registered</span>
+                      </label>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Company GSTIN (15 Digits):</label>
+                        <div style="display: flex; gap: 6px;">
+                          <input type="text" id="cfg-gst-gstin" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-family: monospace; font-weight: 700; text-transform: uppercase;" placeholder="e.g. 33AAAPL9876C1Z2" maxlength="15">
+                          <button type="button" class="btn-action" id="btn-gst-verify-gstin" style="padding: 0 10px; font-size: 11px;" title="Verify 15-digit GSTIN Structure">Verify</button>
+                        </div>
+                        <span id="gstin-validation-msg" style="font-size: 10px; color: #94a3b8; margin-top: 3px; display: block;">Format: 2-digit State + 10-char PAN + 1 Entity + 'Z' + Checksum</span>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Registered Business / Legal Name:</label>
+                        <input type="text" id="cfg-gst-legal-name" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" placeholder="Legal Company Name">
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">State &amp; State Code:</label>
+                        <input type="text" id="cfg-gst-state" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" placeholder="e.g. Tamil Nadu (33)">
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Registration Type:</label>
+                        <select id="cfg-gst-reg-type" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="Regular" selected>Regular Taxpayer (Standard CGST+SGST/IGST)</option>
+                          <option value="Composition">Composition Dealer (Quarterly Concessional Rate)</option>
+                          <option value="Exempt">Exempt / Non-GST Entity</option>
+                          <option value="Unregistered">Unregistered Business</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 12px;">
+                      <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Place of Supply:</label>
+                      <input type="text" id="cfg-gst-place-of-supply" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" placeholder="e.g. Tamil Nadu (33)">
+                      <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Determines whether transaction is intra-state (CGST+SGST) or inter-state (IGST)</span>
+                    </div>
+                  </div>
+
+                  <!-- Section B: Supported Tax Rates -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">B. Standard GST Tax Slabs</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Configure active GST rate tiers and default fallback rate for inventory &amp; billing.</p>
+
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+                      <span class="vch-chip" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #059669; color: #6ee7b7; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px;">0% (Nil / Exempt)</span>
+                      <span class="vch-chip" style="background: rgba(59, 130, 246, 0.2); border: 1px solid #2563eb; color: #93c5fd; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px;">5% (2.5% + 2.5%)</span>
+                      <span class="vch-chip" style="background: rgba(168, 85, 247, 0.2); border: 1px solid #9333ea; color: #d8b4fe; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px;">12% (6% + 6%)</span>
+                      <span class="vch-chip" style="background: rgba(245, 158, 11, 0.2); border: 1px solid #d97706; color: #fcd34d; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px;">18% (9% + 9% Standard)</span>
+                      <span class="vch-chip" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #dc2626; color: #fca5a5; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px;">28% (14% + 14% Luxury)</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Tax Rate for New Products:</label>
+                        <select id="cfg-gst-default-rate" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="0.00">0.00% (Exempt)</option>
+                          <option value="5.00">5.00%</option>
+                          <option value="12.00">12.00%</option>
+                          <option value="18.00" selected>18.00% (Standard Default)</option>
+                          <option value="28.00">28.00%</option>
+                        </select>
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Item Master rates always take precedence on actual line items</span>
+                      </div>
+                      <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                          <label style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Compensation Cess:</label>
+                          <label class="switch-toggle" style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="cfg-gst-enable-cess" style="width: 14px; height: 14px;">
+                            <span style="font-size: 10px; color: #94a3b8;">Enable Cess</span>
+                          </label>
+                        </div>
+                        <input type="number" id="cfg-gst-default-cess-rate" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" value="0.00" min="0" max="100" step="0.5" disabled>
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Additional cess percentage for applicable notified goods</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section C: Calculation & Rounding -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">C. Tax Calculation &amp; Rounding Rules</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Configure default pricing mode, decimal rounding method, and precision.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Product Pricing Mode:</label>
+                        <select id="cfg-gst-tax-mode" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="exclusive" selected>Tax Exclusive (Price + Tax = Total)</option>
+                          <option value="inclusive">Tax Inclusive (Price includes Tax)</option>
+                        </select>
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Taxable = Net / (1 + Rate/100) when inclusive</span>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Invoice Total Rounding Method:</label>
+                        <select id="cfg-gst-rounding-rule" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="nearest_rupee" selected>Round to Nearest Rupee (ROUND_HALF_UP with Round-off)</option>
+                          <option value="two_decimals">Exact 2 Decimal Places (No Rupee Round-off)</option>
+                          <option value="none">Unrounded Raw Float</option>
+                        </select>
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Synchronized across preview, saved invoice, PDF &amp; ledger</span>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Currency Decimal Precision:</label>
+                        <select id="cfg-gst-prec-curr" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="2" selected>2 Decimals (₹ 100.00 - Standard)</option>
+                          <option value="3">3 Decimals (₹ 100.000)</option>
+                          <option value="4">4 Decimals (₹ 100.0000 - High Precision)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Quantity Decimal Precision:</label>
+                        <select id="cfg-gst-prec-qty" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="0">0 Decimals (10 Pcs - Integer only)</option>
+                          <option value="2">2 Decimals (10.50 Mtrs)</option>
+                          <option value="3" selected>3 Decimals (0.250 Kg - Weighted retail)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section D: HSN / SAC & Reverse Charge -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">D. HSN/SAC &amp; Statutory Compliance</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Enforce HSN code formats and statutory GST compliance rules.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">HSN/SAC Enforcement Level:</label>
+                        <select id="cfg-gst-hsn-mode" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="optional" selected>Optional (Any 2-8 digit code or blank)</option>
+                          <option value="4_digit">Enforce Minimum 4 Digits (Turnover &lt; ₹5 Cr)</option>
+                          <option value="6_digit">Enforce Minimum 6 Digits (Turnover &ge; ₹5 Cr)</option>
+                          <option value="8_digit">Enforce Exact 8 Digits (Export / Chemical)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Effective Date (Prospective):</label>
+                        <input type="date" id="cfg-gst-effective-date" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Changes take effect prospectively; historical vouchers remain untouched</span>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; align-items: center; margin-top: 12px; padding: 8px 12px; background: #0f172a; border-radius: 6px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-gst-show-hsn-summary" checked style="width: 16px; height: 16px;">
+                        <span>Show HSN / SAC Summary Table on Bills</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-gst-enable-rcm" style="width: 16px; height: 16px;">
+                        <span>Enable Reverse Charge Mechanism (RCM) Tracking</span>
+                      </label>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- Right: Interactive Calculation Sandbox & Audit State -->
+                <div class="vch-num-preview-panel" style="flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; background: #0b1120;">
+                  
+                  <!-- Calculation Sandbox Card -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <h4 style="margin: 0; font-size: 12px; font-weight: 800; color: #f8fafc; text-transform: uppercase;">🧮 Live Tax Calculator Sandbox</h4>
+                      <button type="button" class="btn-action" id="btn-gst-run-sandbox" style="font-size: 10px; padding: 2px 8px;">Run Test</button>
+                    </div>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Test tax calculation live with current settings without saving or touching database records.</p>
+
+                    <!-- Sandbox inputs -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Sample Price (₹):</label>
+                        <input type="number" id="sandbox-price" value="100.00" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Quantity:</label>
+                        <input type="number" id="sandbox-qty" value="1.0" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Tax Rate (%):</label>
+                        <select id="sandbox-tax-rate" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                          <option value="0">0%</option>
+                          <option value="5">5%</option>
+                          <option value="12">12%</option>
+                          <option value="18" selected>18%</option>
+                          <option value="28">28%</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Customer State:</label>
+                        <select id="sandbox-customer-state" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                          <option value="Tamil Nadu (33)" selected>Tamil Nadu (33) [Intra-state]</option>
+                          <option value="Karnataka (29)">Karnataka (29) [Inter-state]</option>
+                          <option value="Kerala (32)">Kerala (32) [Inter-state]</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Sandbox Results Canvas -->
+                    <div id="sandbox-results-box" style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 12px; font-size: 11px;">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="color: #94a3b8;">Tax Type:</span>
+                        <strong id="sandbox-res-tax-type" style="color: #38bdf8;">Intra-state (CGST + SGST)</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="color: #94a3b8;">Taxable Amount:</span>
+                        <strong id="sandbox-res-taxable" style="color: #f1f5f9;">₹ 100.00</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;" id="sandbox-row-cgst">
+                        <span style="color: #94a3b8;">CGST (9%):</span>
+                        <strong id="sandbox-res-cgst" style="color: #34d399;">₹ 9.00</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;" id="sandbox-row-sgst">
+                        <span style="color: #94a3b8;">SGST (9%):</span>
+                        <strong id="sandbox-res-sgst" style="color: #34d399;">₹ 9.00</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px; display: none;" id="sandbox-row-igst">
+                        <span style="color: #94a3b8;">IGST (18%):</span>
+                        <strong id="sandbox-res-igst" style="color: #f59e0b;">₹ 0.00</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px; border-top: 1px dashed #334155; padding-top: 4px;">
+                        <span style="color: #94a3b8;">Round-Off:</span>
+                        <strong id="sandbox-res-roundoff" style="color: #94a3b8;">₹ 0.00</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-top: 1px solid #475569; padding-top: 6px; font-size: 13px;">
+                        <span style="color: #f8fafc; font-weight: 700;">Grand Total:</span>
+                        <strong id="sandbox-res-grandtotal" style="color: #38bdf8; font-size: 14px;">₹ 118.00</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Statutory Audit & Historical Safety Badge -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h4 style="margin: 0 0 10px; font-size: 12px; font-weight: 800; color: #f8fafc; text-transform: uppercase;">GST Compliance &amp; Accounting Audit</h4>
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Intra-State:</strong> Splits equal CGST &amp; SGST with zero penny discrepancy.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Inter-State:</strong> Allocates 100% to IGST based on Place of Supply.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Returns Reversal:</strong> Credit/Debit notes reverse respective Output/Input tax accounts.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Accounting Immutability:</strong> Historical vouchers and saved tax records are never modified.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- PANE 5: INVENTORY & STOCK CONFIGURATION (PHASE 6) -->
+            <div class="config-view-pane" id="pane-inventory-config" style="display: none;">
+              <!-- Inventory Toolbar -->
+              <div class="bill-vch-toolbar">
+                <div class="bill-vch-tabs" role="tablist" aria-label="Inventory Configuration Sections">
+                  <span style="font-weight: 800; font-size: 13px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                    <span>📦 Inventory &amp; Stock Configuration</span>
+                    <span class="pos-company-badge" id="inventory-scope-badge" style="background: #10b981; font-size: 10px;">Company Scope</span>
+                  </span>
+                </div>
+                <div class="bill-vch-actions">
+                  <span id="inventory-persistence-indicator" style="font-size: 11px; font-weight: 700; color: #10b981; padding: 2px 8px; border-radius: 4px; border: 1px solid #10b981;">● Saved</span>
+                  <button type="button" class="btn-action secondary-btn" id="btn-inventory-reset" title="Restore standard inventory factory defaults">↺ Reset to Default</button>
+                  <button type="button" class="btn-action primary-btn" id="btn-inventory-save" title="Save inventory settings (Ctrl+S)">💾 Save Inventory Configuration</button>
+                </div>
+              </div>
+
+              <!-- Main Inventory Workspace -->
+              <div class="vch-num-workspace" style="display: flex; flex: 1; overflow: hidden; background: #0f172a;">
+                <!-- Left: Configuration Form Panels (Scrollable) -->
+                <div class="vch-num-controls-panel" style="flex: 1.2; overflow-y: auto; padding: 20px 24px; border-right: 1px solid #334155; display: flex; flex-direction: column; gap: 18px;">
+                  
+                  <!-- Section A: General Inventory Settings -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                      <div>
+                        <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">A. General Inventory Settings</h3>
+                        <p style="margin: 2px 0 0; font-size: 11px; color: #94a3b8;">Configure default units of measurement, decimal precisions, and product types.</p>
+                      </div>
+                      <label class="switch-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-inv-enable-tracking" checked style="width: 18px; height: 18px; cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: 700; color: #38bdf8;">Track Inventory</span>
+                      </label>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Unit of Measurement (UOM):</label>
+                        <select id="cfg-inv-default-uom" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="Pcs." selected>Pcs. (Pieces / Units)</option>
+                          <option value="Kg">Kg (Kilograms)</option>
+                          <option value="Boxes">Boxes</option>
+                          <option value="Rolls">Rolls</option>
+                          <option value="Mtrs">Mtrs (Metres)</option>
+                          <option value="Pack">Pack</option>
+                          <option value="Litres">Litres</option>
+                          <option value="Dozen">Dozen</option>
+                          <option value="Bags">Bags</option>
+                          <option value="Nos.">Nos.</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Quantity Decimal Precision:</label>
+                        <select id="cfg-inv-qty-precision" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="0">0 Decimals (10 Pcs - Integer Only)</option>
+                          <option value="1">1 Decimal (10.5)</option>
+                          <option value="2">2 Decimals (10.50 Mtrs)</option>
+                          <option value="3" selected>3 Decimals (0.250 Kg - Weighted Retail Default)</option>
+                          <option value="4">4 Decimals (0.0025 - High Precision)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Product Type:</label>
+                        <select id="cfg-inv-default-type" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="Stockable" selected>Stockable Product (Physical Inventory)</option>
+                          <option value="Consumable">Consumable (Expensed upon receipt)</option>
+                          <option value="Service">Service (Non-stockable item)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Barcode Symbology / Format:</label>
+                        <select id="cfg-inv-barcode-symbology" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="EAN-13" selected>EAN-13 (Standard 13-digit Retail with Checksum)</option>
+                          <option value="UPC-A">UPC-A (12-digit Standard)</option>
+                          <option value="Code 128">Code 128 / Custom SKU (Alphanumeric)</option>
+                          <option value="EAN-8">EAN-8 (Compact 8-digit)</option>
+                          <option value="Custom">Custom / Free-form</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; align-items: center; margin-top: 12px; padding: 8px 12px; background: #0f172a; border-radius: 6px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-allow-fractional" checked style="width: 16px; height: 16px;">
+                        <span>Allow Fractional Quantities (e.g. 1.250 Kg)</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-auto-sku" checked style="width: 16px; height: 16px;">
+                        <span>Auto-Generate Barcode / SKU on Product Creation</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Section B: Stock Control & Negative Stock Policy -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                      <div>
+                        <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">B. Stock Control &amp; Negative Stock Policy</h3>
+                        <p style="margin: 2px 0 0; font-size: 11px; color: #94a3b8;">Control negative stock enforcement, outward validation, and stock thresholds.</p>
+                      </div>
+                      <label class="switch-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-inv-allow-negative-stock" style="width: 18px; height: 18px; cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: 700; color: #f59e0b;">Allow Negative Stock</span>
+                      </label>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Outward Availability Validation:</label>
+                        <select id="cfg-inv-warning-behavior" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="block_outward">Strict: Block outward transactions if stock insufficient</option>
+                          <option value="warn_and_allow" selected>Standard: Warn operator but allow negative checkout</option>
+                          <option value="silent_allow">Permissive: Allow silently without checkout warning</option>
+                        </select>
+                        <span style="font-size: 10px; color: #64748b; margin-top: 2px; display: block;">Synchronized with central BillingService &amp; InventoryService checks</span>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Validate Stock on Sales Voucher:</label>
+                        <div style="display: flex; align-items: center; gap: 8px; height: 38px;">
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                            <input type="checkbox" id="cfg-inv-validate-availability" checked style="width: 16px; height: 16px;">
+                            <span>Active pre-sale stock availability check</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-top: 12px;">
+                      <div>
+                        <label style="font-size: 10px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Min Stock:</label>
+                        <input type="number" id="cfg-inv-min-stock-level" value="10.0" min="0" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Reorder Level:</label>
+                        <input type="number" id="cfg-inv-reorder-level" value="15.0" min="0" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Reorder Qty:</label>
+                        <input type="number" id="cfg-inv-reorder-qty" value="50.0" min="1" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Max Stock:</label>
+                        <input type="number" id="cfg-inv-max-stock-level" value="500.0" min="0" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section C: Stock Valuation -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">C. Stock Valuation Method</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Configure inventory valuation formula for balance sheets, closing stock &amp; P&amp;L reports.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Active Valuation Engine:</label>
+                        <select id="cfg-inv-valuation-method" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;">
+                          <option value="weighted_average" selected>Weighted Average Cost (WAC - Active Engine)</option>
+                          <option value="fifo">FIFO (First-In, First-Out - Standard Accounting Model)</option>
+                        </select>
+                      </div>
+                      <div style="padding: 8px 12px; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
+                        <span style="font-size: 11px; color: #38bdf8; font-weight: 700; display: block; margin-bottom: 2px;">ℹ️ Statutory Accounting Note</span>
+                        <span style="font-size: 10px; color: #94a3b8; display: block; line-height: 1.4;">Valuation rate updates prospectively upon inward purchase vouchers. Historical transactions, committed sales invoices and ledger postings remain strictly immutable.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section D: Warehouse, Branches & Material Centres -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">D. Warehouse &amp; Branch Settings</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Manage multi-location stock isolation and inter-branch transfers.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 4px;">Default Material Centre / Warehouse:</label>
+                        <input type="text" id="cfg-inv-default-mat-centre" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc;" value="Main Store">
+                      </div>
+                      <div style="display: flex; flex-direction: column; gap: 8px; justify-content: center;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                          <input type="checkbox" id="cfg-inv-track-branch-stock" checked style="width: 16px; height: 16px;">
+                          <span>Isolate Stock Balances per Branch</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                          <input type="checkbox" id="cfg-inv-allow-transfers" checked style="width: 16px; height: 16px;">
+                          <span>Allow Inter-Branch / Godown Stock Transfers</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section E: Product Tracking & Attributes -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">E. Product Tracking &amp; Attributes</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Configure supported product identifiers and traceability features.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-enable-barcode" checked style="width: 16px; height: 16px;">
+                        <span>Enable Multi-Barcode Lookup &amp; Scanning</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-enable-batch" style="width: 16px; height: 16px;">
+                        <span>Enable Batch Tracking on Purchase Inward</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-enable-expiry" style="width: 16px; height: 16px;">
+                        <span>Enable Expiry Date Tracking</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-link-hsn" checked style="width: 16px; height: 16px;">
+                        <span>Link HSN / SAC Code to Item Master</span>
+                      </label>
+                    </div>
+
+                    <!-- Explicit limitation note for serial tracking -->
+                    <div style="margin-top: 12px; padding: 8px 12px; background: #0f172a; border-radius: 6px; border: 1px dashed #475569; display: flex; align-items: center; justify-content: space-between;">
+                      <span style="font-size: 11px; color: #94a3b8;">Serial Number Tracking:</span>
+                      <span style="font-size: 10px; font-weight: 700; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.3);">Unsupported in Current Engine (Planned)</span>
+                    </div>
+                  </div>
+
+                  <!-- Section F: Stock Alerts & Notifications -->
+                  <div class="vch-num-card" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h3 style="margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.5px;">F. Stock Alerts &amp; Notifications</h3>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Manage automated low-stock and reorder notifications.</p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-enable-low-stock-alert" checked style="width: 16px; height: 16px;">
+                        <span>Enable Low Stock Dashboard Alerts</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-warn-on-low-stock" checked style="width: 16px; height: 16px;">
+                        <span>Warn Cashier when Selling Low Stock Item</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                        <input type="checkbox" id="cfg-inv-warn-on-negative-stock" checked style="width: 16px; height: 16px;">
+                        <span>Warn when Transaction Causes Negative Stock</span>
+                      </label>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; font-weight: 700; color: #f1f5f9;">
+                          <input type="checkbox" id="cfg-inv-warn-on-expiry" style="width: 16px; height: 16px;">
+                          <span>Expiry Alert Window:</span>
+                        </label>
+                        <input type="number" id="cfg-inv-expiry-days" value="30" min="1" max="365" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; width: 70px; font-size: 11px; padding: 2px 6px;">
+                        <span style="font-size: 11px; color: #94a3b8;">days</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- Right: Interactive Stock Simulator & Audit Sandbox -->
+                <div class="vch-num-preview-panel" style="flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; background: #0b1120;">
+                  
+                  <!-- Stock Transaction Simulator Card -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <h4 style="margin: 0; font-size: 12px; font-weight: 800; color: #f8fafc; text-transform: uppercase;">📊 Live Stock Simulator Sandbox</h4>
+                      <button type="button" class="btn-action" id="btn-inv-run-simulator" style="font-size: 10px; padding: 2px 8px;">Simulate</button>
+                    </div>
+                    <p style="margin: 0 0 12px; font-size: 11px; color: #94a3b8;">Test stock movements and policy validations live without writing to database records.</p>
+
+                    <!-- Simulator Inputs -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Current Available Stock:</label>
+                        <input type="number" id="sim-current-stock" value="12.0" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Current WAC Cost (₹):</label>
+                        <input type="number" id="sim-current-wac" value="100.00" step="0.5" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Purchase Inward Qty:</label>
+                        <input type="number" id="sim-inward-qty" value="0.0" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div>
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Inward Unit Cost (₹):</label>
+                        <input type="number" id="sim-unit-cost" value="0.0" step="0.5" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                      <div style="grid-column: span 2;">
+                        <label style="font-size: 10px; color: #94a3b8; display: block;">Sales Outward Qty (Attempted):</label>
+                        <input type="number" id="sim-outward-qty" value="15.0" step="1" class="form-control" style="background: #0f172a; border-color: #475569; color: #f8fafc; font-size: 12px;">
+                      </div>
+                    </div>
+
+                    <!-- Simulator Results Canvas -->
+                    <div id="sim-results-box" style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 12px; font-size: 11px;">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="color: #94a3b8;">Policy Status:</span>
+                        <strong id="sim-res-policy-status" style="color: #f87171;">✗ Blocked: Negative Stock Prohibited</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="color: #94a3b8;">Projected Closing Stock:</span>
+                        <strong id="sim-res-projected-stock" style="color: #f1f5f9;">-3.000 Pcs.</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="color: #94a3b8;">Inventory Status:</span>
+                        <strong id="sim-res-stock-status" style="color: #f59e0b;">NEGATIVE_STOCK</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 4px; border-top: 1px dashed #334155; padding-top: 4px;">
+                        <span style="color: #94a3b8;">Projected WAC Rate:</span>
+                        <strong id="sim-res-wac-rate" style="color: #38bdf8;">₹ 100.00</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-top: 1px solid #475569; padding-top: 6px; font-size: 13px;">
+                        <span style="color: #f8fafc; font-weight: 700;">Projected Valuation:</span>
+                        <strong id="sim-res-valuation" style="color: #10b981; font-size: 14px;">₹ 0.00</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Inventory & Stock Immutability Card -->
+                  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px;">
+                    <h4 style="margin: 0 0 10px; font-size: 12px; font-weight: 800; color: #f8fafc; text-transform: uppercase;">Stock Transaction Integrity &amp; Audit</h4>
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Purchase Inward:</strong> Increases available stock atomically in balance ledger.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Purchase Return:</strong> Decreases available stock via debit note reversal.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Sales Outward:</strong> Decreases available stock atomically with negative guard.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Sales Return:</strong> Increases available stock via credit note reversal.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Idempotency:</strong> Reprinting invoices or previewing never consumes or mutates stock.</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; color: #cbd5e1;">
+                        <span>✓</span>
+                        <span><strong>Accounting Immutability:</strong> Historical stock movements and ledgers are never recalculated.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
     </main>
+
+    <!-- =========================================================
+         POPUP MODAL: DUPLICATE BILL LAYOUT (PHASE 2)
+    ========================================================== -->
+    <div class="modal-overlay" id="modal-duplicate-layout" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 440px;">
+        <div class="create-comp-header">
+          <h2>Duplicate Bill Layout</h2>
+          <button type="button" class="dialog-close-btn" id="btn-close-dup-modal">&times;</button>
+        </div>
+        <div class="create-comp-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <p style="font-size: 12px; color: #475569; margin: 0;">
+            Copy header styling, column order, totals breakdown, and footer settings from an existing layout as a starting point.
+          </p>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 4px;">Source Voucher Layout:</label>
+            <select id="sel-dup-source-vch" class="form-control" style="width: 100%;">
+              <option value="sales_invoice">Sales Invoice</option>
+              <option value="sales_return">Sales Return</option>
+              <option value="purchase_invoice">Purchase Invoice</option>
+              <option value="purchase_return">Purchase Return</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 4px;">Target Voucher Type:</label>
+            <input type="text" id="disp-dup-target-vch" class="form-control" style="width: 100%; background: #f1f5f9;" readonly value="Sales Return">
+          </div>
+        </div>
+        <div class="create-comp-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn-classic" id="btn-cancel-dup-layout">Cancel</button>
+          <button type="button" class="btn-classic primary-action-btn" id="btn-confirm-dup-layout">Duplicate Layout</button>
+        </div>
+      </div>
+    </div>
 
     <!-- =========================================================
          POPUP MODAL: CONFIGURATION / FEATURES & OPTIONS

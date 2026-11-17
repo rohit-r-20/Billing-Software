@@ -65,8 +65,8 @@ const PRIMARY_NAV_CONFIG = [
         id: "sub-admin-configuration", 
         label: "Configuration", 
         icon: "settings", 
-        action: "open-modal", 
-        modalId: "modal-config" 
+        action: "open-view", 
+        targetView: "view-configuration" 
       },
       { 
         id: "sub-admin-users", 

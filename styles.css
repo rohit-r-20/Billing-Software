@@ -5288,50 +5288,82 @@ html, body {
   border-radius: 2px;
   transition: all 0.2s ease;
   box-sizing: border-box;
+  overflow: hidden;
+  margin: 0 auto;
+  max-width: 100%;
 }
 
 /* A4 Page Layout */
 .pos-invoice-sheet.sheet-a4 {
   width: 720px;
+  max-width: 720px;
   min-height: 980px;
-  padding: 36px;
+  padding: 28px 32px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #0f172a;
+}
+
+.pos-invoice-sheet.sheet-a4.orientation-landscape {
+  width: 980px;
+  max-width: 980px;
+  min-height: 720px;
+  padding: 24px 32px;
 }
 
 /* A5 Half Page Layout */
 .pos-invoice-sheet.sheet-a5 {
   width: 520px;
-  min-height: 700px;
-  padding: 24px;
+  max-width: 520px;
+  min-height: 720px;
+  padding: 18px 20px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #0f172a;
+  font-size: 10px;
+}
+
+.pos-invoice-sheet.sheet-a5.orientation-landscape {
+  width: 720px;
+  max-width: 720px;
+  min-height: 520px;
+  padding: 18px 24px;
 }
 
 /* Thermal 80mm Layout */
 .pos-invoice-sheet.sheet-thermal-80 {
-  width: 320px;
-  padding: 16px 14px;
+  width: 310px;
+  max-width: 310px;
+  padding: 12px 10px;
   font-family: "Courier New", Courier, monospace;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
   color: #000000;
 }
 
 /* Thermal 58mm Layout */
 .pos-invoice-sheet.sheet-thermal-58 {
-  width: 240px;
-  padding: 12px 10px;
+  width: 226px;
+  max-width: 226px;
+  padding: 10px 8px;
   font-family: "Courier New", Courier, monospace;
-  font-size: 11px;
+  font-size: 9.5px;
   line-height: 1.35;
   color: #000000;
+}
+
+/* Custom Dimensions Sheet */
+.pos-invoice-sheet.sheet-custom {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
 }
 
 /* Thermal Receipt Styling within preview */
 .thermal-receipt-view {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .thermal-receipt-view .t-center {
@@ -5339,30 +5371,34 @@ html, body {
 }
 
 .thermal-receipt-view .t-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .thermal-receipt-view .t-sub {
-  font-size: 11px;
+  font-size: 10.5px;
   color: #333333;
 }
 
 .thermal-receipt-view .t-divider {
   border-top: 1px dashed #444444;
-  margin: 8px 0;
+  margin: 6px 0;
+  width: 100%;
 }
 
 .thermal-receipt-view .t-double-divider {
   border-top: 2px dashed #000000;
-  margin: 8px 0;
+  margin: 6px 0;
+  width: 100%;
 }
 
 .thermal-receipt-view .t-row {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 10.5px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .thermal-receipt-view .t-bold {
@@ -5371,26 +5407,34 @@ html, body {
 
 .thermal-receipt-view .t-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 10.5px;
+  box-sizing: border-box;
 }
 
 .thermal-receipt-view .t-table th {
   text-align: left;
   border-bottom: 1px dashed #444444;
-  padding: 4px 0;
+  padding: 3px 0;
+  box-sizing: border-box;
 }
 
 .thermal-receipt-view .t-table td {
-  padding: 4px 0;
+  padding: 3px 0;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .thermal-receipt-view .t-grand-total {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   display: flex;
   justify-content: space-between;
-  padding: 4px 0;
+  padding: 3px 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .pos-print-saved-badge {
@@ -5551,6 +5595,8 @@ html, body {
     border: none !important;
     margin: 0 auto !important;
     page-break-after: avoid !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
   }
 
   .pos-invoice-sheet.sheet-a4 {
@@ -5560,25 +5606,35 @@ html, body {
     padding: 10mm !important;
   }
 
+  .pos-invoice-sheet.sheet-a4.orientation-landscape {
+    max-width: 297mm !important;
+    padding: 8mm 10mm !important;
+  }
+
   .pos-invoice-sheet.sheet-a5 {
     width: 100% !important;
     max-width: 148mm !important;
     min-height: auto !important;
-    padding: 8mm !important;
+    padding: 7mm !important;
+  }
+
+  .pos-invoice-sheet.sheet-a5.orientation-landscape {
+    max-width: 210mm !important;
+    padding: 6mm 8mm !important;
   }
 
   .pos-invoice-sheet.sheet-thermal-80 {
     width: 80mm !important;
     max-width: 80mm !important;
-    padding: 3mm !important;
-    font-size: 12px !important;
+    padding: 2mm !important;
+    font-size: 11px !important;
   }
 
   .pos-invoice-sheet.sheet-thermal-58 {
     width: 58mm !important;
     max-width: 58mm !important;
-    padding: 2mm !important;
-    font-size: 11px !important;
+    padding: 1.5mm !important;
+    font-size: 9.5px !important;
   }
 
   .thermal-paper-pre {
@@ -5711,5 +5767,1049 @@ html, body {
   }
 }
 
+
+
+
+
+/* =============================================================
+   CONFIGURATION MODULE: PAPER CONFIGURATION (PHASE 1)
+   ============================================================= */
+.config-ribbon {
+  background: #1e293b !important;
+  border-bottom: 2px solid #334155 !important;
+}
+
+.config-mode-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: #0284c7;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.config-unsaved-badge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #fde68a;
+  animation: pulse-unsaved 1.5s infinite;
+}
+
+@keyframes pulse-unsaved {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.config-workspace {
+  display: flex;
+  height: calc(100vh - 84px);
+  overflow: hidden;
+  background: #0f172a;
+}
+
+/* 1. Left Configuration Navigation Interface */
+.config-nav-sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #1e293b;
+  border-right: 1px solid #334155;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-nav-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.config-nav-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f1f5f9;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.config-nav-version {
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.config-category-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-category-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #94a3b8;
+  position: relative;
+}
+
+.config-category-item:hover:not(.disabled) {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.config-category-item.active {
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.config-category-item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cat-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.cat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.cat-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cat-desc {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.cat-badge-planned {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #475569;
+  color: #cbd5e1;
+}
+
+/* 2. Main Configuration Area */
+.config-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+/* Format Switcher Toolbar */
+.config-format-toolbar {
+  background: #ffffff;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.config-format-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-format-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-format-tab:hover:not(.active) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.btn-format-tab.active {
+  background: #1e3a8a;
+  border-color: #1e3a8a;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+}
+
+.tab-format-icon {
+  font-size: 16px;
+}
+
+.tab-format-label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tab-format-sub {
+  font-size: 10px;
+  opacity: 0.75;
+  font-weight: 600;
+}
+
+.config-active-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.format-indicator-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #dbeafe;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.persistence-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+/* Two-Column Grid */
+.config-body-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 480px 1fr;
+  overflow: hidden;
+}
+
+/* Left Form Column */
+.config-form-column {
+  background: #ffffff;
+  border-right: 1px solid #cbd5e1;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.paper-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.thermal-width-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.btn-thermal-width-opt {
+  padding: 7px 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.btn-thermal-width-opt:hover:not(.active) {
+  background: #f1f5f9;
+}
+
+.btn-thermal-width-opt.active {
+  background: #0284c7;
+  border-color: #0369a1;
+  color: #ffffff;
+}
+
+.alignment-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-align {
+  flex: 1;
+  height: 30px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+}
+
+.btn-align:hover:not(.active) {
+  background: #f1f5f9;
+}
+
+.btn-align.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+.config-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.config-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Right Live Preview Column */
+.config-preview-column {
+  background: #475569;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.config-preview-header {
+  background: #334155;
+  border-bottom: 1px solid #1e293b;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-title-icon {
+  font-size: 14px;
+}
+
+.preview-title-text {
+  font-size: 12px;
+  font-weight: 800;
+  color: #f8fafc;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.preview-meta-wrap {
+  display: flex;
+  gap: 6px;
+}
+
+.preview-meta-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: #1e293b;
+  color: #94a3b8;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.config-preview-viewport {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* Sheet Preview (A4 / A5) */
+.sheet-preview-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet-paper-element {
+  background: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  border-radius: 2px;
+  box-sizing: border-box;
+  position: relative;
+  transition: width 0.2s ease, height 0.2s ease;
+  overflow: hidden;
+}
+
+.sheet-margin-box {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed #94a3b8;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.sheet-test-header {
+  padding: 6px 10px 2px 10px;
+  text-align: center;
+}
+
+.sheet-brand-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #1e3a8a;
+  letter-spacing: 0.5px;
+}
+
+.sheet-doc-type {
+  font-size: 8px;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: 1px;
+}
+
+.sheet-rule-line {
+  height: 1px;
+  background: #cbd5e1;
+  margin-top: 4px;
+}
+
+.sheet-test-body {
+  flex: 1;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 8px;
+  color: #334155;
+}
+
+.sheet-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  background: #f8fafc;
+  padding: 4px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  font-size: 8px;
+}
+
+.sheet-test-table {
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sheet-th-row {
+  display: flex;
+  background: #1e40af;
+  color: #ffffff;
+  padding: 3px 6px;
+  font-weight: 700;
+  font-size: 8px;
+}
+
+.sheet-tr-row {
+  display: flex;
+  padding: 3px 6px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 8px;
+}
+
+.sheet-test-summary {
+  margin-top: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7.5px;
+}
+
+.summary-line.total {
+  border-top: 1px solid #cbd5e1;
+  padding-top: 2px;
+  font-weight: 700;
+}
+
+.sheet-test-footer {
+  padding: 2px 10px 4px 10px;
+}
+
+.sheet-footer-content {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7.5px;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+/* Continuous Thermal Receipt Preview */
+.thermal-receipt-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.thermal-receipt-sheet {
+  background: #fffefb;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
+  font-family: 'Courier New', Courier, monospace;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease;
+}
+
+.thermal-receipt-cut-top {
+  height: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    #fffefb 4px,
+    #fffefb 8px
+  );
+}
+
+.thermal-receipt-content {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px dashed #cbd5e1;
+  border-right: 1px dashed #cbd5e1;
+}
+
+.thermal-header-center {
+  text-align: center;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: 0.5px;
+}
+
+.thermal-sub-center {
+  text-align: center;
+  font-weight: 700;
+  color: #475569;
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.thermal-divider-dashed {
+  text-align: center;
+  color: #94a3b8;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+  font-weight: bold;
+}
+
+.thermal-divider-double {
+  text-align: center;
+  color: #475569;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+  font-weight: bold;
+}
+
+.thermal-row-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #334155;
+  padding: 1px 0;
+}
+
+.thermal-sample-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 0;
+}
+
+.thermal-item-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+}
+
+.thermal-item-row .t-name {
+  flex: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thermal-item-row .t-qty {
+  flex: 0.6;
+  text-align: right;
+}
+
+.thermal-item-row .t-amt {
+  flex: 0.8;
+  text-align: right;
+  font-weight: 700;
+}
+
+.thermal-row-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 900;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.thermal-density-note {
+  font-size: 8px;
+  text-align: center;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.thermal-footer-center {
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #334155;
+  margin-top: 4px;
+}
+
+.thermal-cut-line {
+  margin-top: 8px;
+  border-top: 1px dashed #dc2626;
+  text-align: center;
+  padding-top: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  color: #dc2626;
+}
+
+.thermal-receipt-cut-bottom {
+  height: 10px;
+  background: radial-gradient(circle, transparent, transparent 3px, #fffefb 3px, #fffefb 10px);
+  background-size: 12px 12px;
+  background-position: bottom;
+  border-bottom: 2px dashed #94a3b8;
+}
+
+/* =============================================================================
+   PHASE 2: BILL LAYOUT CONFIGURATION & LIVE INVOICE DESIGNER
+   ============================================================================= */
+
+.config-view-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Voucher Type Toolbar */
+.bill-vch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  gap: 12px;
+}
+
+.bill-vch-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-vch-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-vch-tab:hover:not(.active) {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-color: #475569;
+}
+
+.btn-vch-tab.active {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);
+}
+
+.bill-vch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bill-layout-designer-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 520px 1fr;
+  overflow: hidden;
+}
+
+.bill-layout-controls-column {
+  background: #ffffff;
+  border-right: 1px solid #cbd5e1;
+  padding: 14px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.layout-acc-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.layout-acc-card:hover {
+  border-color: #cbd5e1;
+}
+
+.layout-acc-header {
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.layout-acc-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layout-acc-chevron {
+  font-size: 11px;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.layout-acc-card.collapsed .layout-acc-chevron {
+  transform: rotate(-90deg);
+}
+
+.layout-acc-card.collapsed .layout-acc-body {
+  display: none;
+}
+
+.layout-acc-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.layout-row-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  gap: 10px;
+}
+
+.layout-row-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.layout-row-field input[type="text"],
+.layout-row-field input[type="number"],
+.layout-row-field select {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #0f172a;
+  background: #ffffff;
+  max-width: 200px;
+}
+
+.layout-row-field textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #0f172a;
+  background: #ffffff;
+  resize: vertical;
+}
+
+/* Columns Config Table */
+.columns-config-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px;
+  background: #f8fafc;
+}
+
+.col-cfg-row {
+  display: grid;
+  grid-template-columns: 24px 24px 100px 1fr 60px 75px 50px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+
+.col-cfg-row:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.col-cfg-row.col-hidden {
+  opacity: 0.55;
+  background: #f8fafc;
+}
+
+.col-cfg-order {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+}
+
+.col-cfg-key-pill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-cfg-label-input {
+  padding: 3px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.col-cfg-width-input {
+  padding: 3px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 10px;
+  text-align: center;
+  color: #0f172a;
+}
+
+.col-cfg-align-select {
+  padding: 3px 2px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #0f172a;
+}
+
+.col-cfg-btn-order {
+  padding: 1px 4px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  font-size: 9px;
+  cursor: pointer;
+  color: #475569;
+}
+
+.col-cfg-btn-order:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
+/* Right Invoice Preview Column */
+.bill-layout-preview-column {
+  background: #1e293b;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bill-preview-toolbar {
+  padding: 8px 16px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bill-preview-canvas-container {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: #0f172a;
+}
+
+/* Simulated Invoice Sheet (A4 & A5) */
+.invoice-preview-sheet {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  border-radius: 3px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  font-family: system-ui, -apple-system, sans-serif;
+  transform-origin: top center;
+}
+
+/* Simulated Thermal Receipt */
+.invoice-preview-thermal {
+  background: #fffefb;
+  color: #1e293b;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  border-radius: 2px 2px 0 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Courier New', Courier, monospace;
+  transition: all 0.2s ease;
+  transform-origin: top center;
+}
+
+/* =============================================================================
+   PHASE 4: VOUCHER NUMBERING CONFIGURATION MODULE STYLES
+   ============================================================================= */
+.vch-num-workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.vch-num-controls-panel {
+  flex: 1.2;
+  overflow-y: auto;
+  padding: 20px 24px;
+  border-right: 1px solid #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vch-num-preview-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: #0b1120;
+}
+
+.vch-num-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 1024px) {
+  .vch-num-workspace {
+    flex-direction: column;
+  }
+  .vch-num-controls-panel {
+    border-right: none;
+    border-bottom: 1px solid #334155;
+  }
+}
 
 
