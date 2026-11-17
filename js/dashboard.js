@@ -37,7 +37,7 @@ class DashboardManager {
 
     // Refresh button binding
     const refreshBtn = document.getElementById("dash-btn-refresh-overview");
-    if (refreshBtn) {
+    if (refreshBtn && typeof refreshBtn.addEventListener === "function") {
       refreshBtn.addEventListener("click", () => {
         if (window.BusinessContext && window.BusinessContext.isAuthenticatedSession()) {
           this.loadLiveBackendData();
@@ -612,20 +612,22 @@ class DashboardManager {
     }
 
     // Activity Tabs Binding
-    const tabBtns = document.querySelectorAll(".btn-activity-tab");
-    tabBtns.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const targetTab = btn.getAttribute("data-tab-target");
-        tabBtns.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
+    if (typeof document.querySelectorAll === "function") {
+      const tabBtns = document.querySelectorAll(".btn-activity-tab");
+      tabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const targetTab = btn.getAttribute("data-tab-target");
+          tabBtns.forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
 
-        document.querySelectorAll(".activity-tab-pane").forEach(pane => {
-          pane.classList.remove("active");
+          document.querySelectorAll(".activity-tab-pane").forEach(pane => {
+            pane.classList.remove("active");
+          });
+          const targetPane = document.getElementById(`tab-pane-${targetTab}`);
+          if (targetPane) targetPane.classList.add("active");
         });
-        const targetPane = document.getElementById(`tab-pane-${targetTab}`);
-        if (targetPane) targetPane.classList.add("active");
       });
-    });
+    }
   }
 
   renderQuickActions() {

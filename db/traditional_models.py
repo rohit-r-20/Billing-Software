@@ -31,7 +31,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
 )
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base, relationship, synonym
 from sqlalchemy.types import TypeDecorator
 
 TraditionalBase = declarative_base()
@@ -117,6 +117,8 @@ class Company(TraditionalBase):
     stock_movements = relationship("StockMovement", back_populates="company", cascade="all, delete-orphan")
     stock_adjustments = relationship("StockAdjustment", back_populates="company", cascade="all, delete-orphan")
     stock_transfers = relationship("StockTransfer", back_populates="company", cascade="all, delete-orphan")
+    receipts = relationship("CustomerReceipt", back_populates="company", cascade="all, delete-orphan")
+    payments = relationship("SupplierPayment", back_populates="company", cascade="all, delete-orphan")
 
 
 class Branch(TraditionalBase):
@@ -416,6 +418,7 @@ class SaleInvoice(TraditionalBase):
     company = relationship("Company")
     branch = relationship("Branch")
     account = relationship("Account")
+    receipt_allocations = relationship("ReceiptAllocation", back_populates="invoice")
 
     __table_args__ = (
         UniqueConstraint(
@@ -647,4 +650,189 @@ class FinancialYearClosing(TraditionalBase):
         UniqueConstraint("company_id", "financial_year", name="uq_fy_closings_company_fy"),
         CheckConstraint("status IN ('CLOSED', 'REOPENED')", name="chk_fy_closings_status"),
         Index("ix_fy_closings_company_date", "company_id", "closing_date"),
+    )
+
+
+class CustomerReceipt(TraditionalBase):
+    __tablename__ = "customer_receipts"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    financial_year = Column(String(20), nullable=False)
+    voucher_number = Column(String(50), nullable=False)
+    receipt_date = Column(String(20), nullable=False)  # DD-MM-YYYY
+
+    customer_account_id = Column(String(36), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    deposit_account_id = Column(String(36), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    payment_method = Column(String(50), server_default="CASH", default="CASH", nullable=False)
+
+    total_amount = Column(Numeric(15, 2), nullable=False)
+    allocated_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    unallocated_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    discount_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+
+    reference_number = Column(String(100), nullable=True)
+    reference_date = Column(String(20), nullable=True)
+    notes = Column(Text, nullable=True)
+
+    journal_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(String(20), server_default="POSTED", default="POSTED", nullable=False)  # POSTED, REVERSED, CANCELLED
+    reversal_of_id = Column(String(36), ForeignKey("customer_receipts.id", ondelete="SET NULL"), nullable=True)
+    reversal_reason = Column(Text, nullable=True)
+    idempotency_key = Column(String(100), nullable=True)
+
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    # Synonyms for API/spec flexibility
+    receipt_voucher_number = synonym("voucher_number")
+    narration = synonym("notes")
+    journal_entry_id = synonym("journal_id")
+
+    # Relationships
+    company = relationship("Company", back_populates="receipts")
+    branch = relationship("Branch")
+    customer_account = relationship("Account", foreign_keys=[customer_account_id])
+    deposit_account = relationship("Account", foreign_keys=[deposit_account_id])
+    journal = relationship("JournalEntry", foreign_keys=[journal_id])
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    reversal_of = relationship("CustomerReceipt", remote_side=[id], foreign_keys=[reversal_of_id])
+    allocations = relationship("ReceiptAllocation", back_populates="receipt", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "financial_year", "voucher_number", name="uq_cust_receipts_company_fy_vch"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_cust_receipts_idempotency"),
+        Index("ix_cust_receipts_company_date", "company_id", "receipt_date"),
+        Index("ix_cust_receipts_customer", "company_id", "customer_account_id"),
+        Index("ix_cust_receipts_deposit", "company_id", "deposit_account_id"),
+        CheckConstraint("total_amount > 0", name="chk_cust_receipt_total_positive"),
+        CheckConstraint("allocated_amount >= 0", name="chk_cust_receipt_allocated_non_neg"),
+        CheckConstraint("unallocated_amount >= 0", name="chk_cust_receipt_unallocated_non_neg"),
+        CheckConstraint("discount_amount >= 0", name="chk_cust_receipt_discount_non_neg"),
+        CheckConstraint("status IN ('POSTED', 'REVERSED', 'CANCELLED')", name="chk_cust_receipt_status"),
+    )
+
+
+class ReceiptAllocation(TraditionalBase):
+    __tablename__ = "receipt_allocations"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    receipt_id = Column(String(36), ForeignKey("customer_receipts.id", ondelete="CASCADE"), nullable=False, index=True)
+    invoice_id = Column(String(36), ForeignKey("sales_invoices.id", ondelete="RESTRICT"), nullable=False, index=True)
+    allocated_amount = Column(Numeric(15, 2), nullable=False)
+    discount_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    # Synonyms for API/spec flexibility
+    customer_receipt_id = synonym("receipt_id")
+    sales_invoice_id = synonym("invoice_id")
+    allocation_timestamp = synonym("created_at")
+
+    # Relationships
+    receipt = relationship("CustomerReceipt", back_populates="allocations")
+    invoice = relationship("SaleInvoice", back_populates="receipt_allocations")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+
+    __table_args__ = (
+        UniqueConstraint("receipt_id", "invoice_id", name="uq_ralloc_receipt_invoice"),
+        Index("ix_ralloc_invoice", "invoice_id"),
+        Index("ix_ralloc_receipt", "receipt_id"),
+        CheckConstraint("allocated_amount > 0", name="chk_ralloc_allocated_positive"),
+        CheckConstraint("discount_amount >= 0", name="chk_ralloc_discount_non_neg"),
+    )
+
+
+class SupplierPayment(TraditionalBase):
+    __tablename__ = "supplier_payments"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    financial_year = Column(String(20), nullable=False)
+    voucher_number = Column(String(50), nullable=False)
+    payment_date = Column(String(20), nullable=False)  # DD-MM-YYYY
+
+    supplier_account_id = Column(String(36), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    source_account_id = Column(String(36), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    payment_method = Column(String(50), server_default="CASH", default="CASH", nullable=False)
+
+    total_amount = Column(Numeric(15, 2), nullable=False)
+    allocated_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    unallocated_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    discount_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+
+    reference_number = Column(String(100), nullable=True)
+    reference_date = Column(String(20), nullable=True)
+    notes = Column(Text, nullable=True)
+
+    journal_id = Column(String(36), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(String(20), server_default="POSTED", default="POSTED", nullable=False)  # POSTED, REVERSED, CANCELLED
+    reversal_of_id = Column(String(36), ForeignKey("supplier_payments.id", ondelete="SET NULL"), nullable=True)
+    reversal_reason = Column(Text, nullable=True)
+    idempotency_key = Column(String(100), nullable=True)
+
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    # Synonyms for API/spec flexibility
+    payment_voucher_number = synonym("voucher_number")
+    narration = synonym("notes")
+    journal_entry_id = synonym("journal_id")
+
+    # Relationships
+    company = relationship("Company", back_populates="payments")
+    branch = relationship("Branch")
+    supplier_account = relationship("Account", foreign_keys=[supplier_account_id])
+    source_account = relationship("Account", foreign_keys=[source_account_id])
+    journal = relationship("JournalEntry", foreign_keys=[journal_id])
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    reversal_of = relationship("SupplierPayment", remote_side=[id], foreign_keys=[reversal_of_id])
+    allocations = relationship("PaymentAllocation", back_populates="payment", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "financial_year", "voucher_number", name="uq_supp_payments_company_fy_vch"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_supp_payments_idempotency"),
+        Index("ix_supp_payments_company_date", "company_id", "payment_date"),
+        Index("ix_supp_payments_supplier", "company_id", "supplier_account_id"),
+        Index("ix_supp_payments_source", "company_id", "source_account_id"),
+        CheckConstraint("total_amount > 0", name="chk_supp_payment_total_positive"),
+        CheckConstraint("allocated_amount >= 0", name="chk_supp_payment_allocated_non_neg"),
+        CheckConstraint("unallocated_amount >= 0", name="chk_supp_payment_unallocated_non_neg"),
+        CheckConstraint("discount_amount >= 0", name="chk_supp_payment_discount_non_neg"),
+        CheckConstraint("status IN ('POSTED', 'REVERSED', 'CANCELLED')", name="chk_supp_payment_status"),
+    )
+
+
+class PaymentAllocation(TraditionalBase):
+    __tablename__ = "payment_allocations"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    payment_id = Column(String(36), ForeignKey("supplier_payments.id", ondelete="CASCADE"), nullable=False, index=True)
+    purchase_voucher_id = Column(String(36), nullable=True, index=True)  # Nullable forward-compatible reference to Friend 2's future Purchase model
+    bill_number = Column(String(100), nullable=True)  # Vendor bill/invoice number
+    allocated_amount = Column(Numeric(15, 2), nullable=False)
+    discount_amount = Column(Numeric(15, 2), server_default="0.00", default=0.00, nullable=False)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    # Synonyms for API/spec flexibility
+    supplier_payment_id = synonym("payment_id")
+    supplier_bill_number = synonym("bill_number")
+    discount_received = synonym("discount_amount")
+    allocation_timestamp = synonym("created_at")
+
+    # Relationships
+    payment = relationship("SupplierPayment", back_populates="allocations")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+
+    __table_args__ = (
+        Index("ix_palloc_payment", "payment_id"),
+        Index("ix_palloc_bill_no", "bill_number"),
+        Index("ix_palloc_purchase_vch", "purchase_voucher_id"),
+        CheckConstraint("allocated_amount > 0", name="chk_palloc_allocated_positive"),
+        CheckConstraint("discount_amount >= 0", name="chk_palloc_discount_non_neg"),
     )

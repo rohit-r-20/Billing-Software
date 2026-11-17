@@ -56,6 +56,13 @@ const viewStockAdjustments = document.getElementById("view-stock-adjustments");
 const viewDayBook = document.getElementById("view-day-book");
 const viewFastBillingHistory = document.getElementById("view-fast-billing-history");
 const viewFastBillingPrint = document.getElementById("view-fast-billing-print");
+const viewCustomerReceipt = document.getElementById("view-customer-receipt");
+const viewReceiptList = document.getElementById("view-receipt-list");
+const viewSupplierPayment = document.getElementById("view-supplier-payment");
+const viewPaymentList = document.getElementById("view-payment-list");
+const viewCustomerOutstanding = document.getElementById("view-customer-outstanding");
+const viewSupplierOutstanding = document.getElementById("view-supplier-outstanding");
+const viewReconciliationDashboard = document.getElementById("view-reconciliation-dashboard");
 
 // Dual Billing Mode & Tabs DOM Elements
 const appTabsBar = document.getElementById("app-tabs-bar");
@@ -625,7 +632,14 @@ function showScreen(screenId) {
     viewSupplierMaster,
     viewStockSummary,
     viewStockAdjustments,
-    viewDayBook
+    viewDayBook,
+    viewCustomerReceipt,
+    viewReceiptList,
+    viewSupplierPayment,
+    viewPaymentList,
+    viewCustomerOutstanding,
+    viewSupplierOutstanding,
+    viewReconciliationDashboard
   ];
 
   allViews.forEach((view) => {
@@ -697,6 +711,13 @@ function showScreen(screenId) {
     "view-stock-summary": { title: "Stock Valuation & WAC Summary", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Stock Valuation</strong>" },
     "view-stock-adjustments": { title: "Stock Adjustments & Transfers", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Stock Operations</strong>" },
     "view-day-book": { title: "Financial Day Book & Trial Balance", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Day Book & Trial Balance</strong>" },
+    "view-customer-receipt": { title: "Customer Receipt (Collection)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Customer Receipt</strong>" },
+    "view-receipt-list": { title: "Customer Receipts Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Receipts Register</strong>" },
+    "view-supplier-payment": { title: "Supplier Payment (Disbursement)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Supplier Payment</strong>" },
+    "view-payment-list": { title: "Supplier Payments Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Payments Register</strong>" },
+    "view-customer-outstanding": { title: "Accounts Receivable (Customer Outstandings)", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Accounts Receivable</strong>" },
+    "view-supplier-outstanding": { title: "Accounts Payable (Supplier Outstandings)", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Accounts Payable</strong>" },
+    "view-reconciliation-dashboard": { title: "Financial Reconciliation & Audit", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Financial Reconciliation</strong>" },
     "view-companies": { title: "List of Companies", bc: "Alpha Billing &rsaquo; Company &rsaquo; <strong>Switch Company</strong>" },
     "view-login": { title: "Sign In", bc: "Alpha Billing &rsaquo; <strong>Authentication</strong>" }
   };
@@ -784,6 +805,20 @@ function showScreen(screenId) {
     initStockAdjustmentsScreen();
   } else if (screenId === "view-day-book") {
     renderDayBookScreen();
+  } else if (screenId === "view-customer-receipt") {
+    initCustomerReceiptScreen();
+  } else if (screenId === "view-receipt-list") {
+    renderCustomerReceiptsRegister();
+  } else if (screenId === "view-supplier-payment") {
+    initSupplierPaymentScreen();
+  } else if (screenId === "view-payment-list") {
+    renderSupplierPaymentsRegister();
+  } else if (screenId === "view-customer-outstanding") {
+    renderCustomerOutstandingView();
+  } else if (screenId === "view-supplier-outstanding") {
+    renderSupplierOutstandingView();
+  } else if (screenId === "view-reconciliation-dashboard") {
+    renderReconciliationDashboard();
   }
 }
 
@@ -11495,6 +11530,1589 @@ function setupThreeOptionWorkflowListeners() {
   }
 }
 
+// =============================================================================
+// PHASE 3.6: TRADITIONAL PAYMENT, RECEIPT & RECONCILIATION CONTROLLER MODULE
+// =============================================================================
+
+let currentReceiptInvoices = [];
+let cashAndBankAccounts = [];
+let activeReversalContext = { type: null, id: null, number: null, party: null, amount: null };
+let activePrintContext = null;
+
+function formatMoney(amount) {
+  const num = parseFloat(amount || 0);
+  return "₹ " + num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function convertNumberToWords(amount) {
+  const num = Math.floor(Math.abs(parseFloat(amount || 0)));
+  if (num === 0) return "Zero Rupees Only";
+  const units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  function numToWords(n) {
+    if (n < 20) return units[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + units[n % 10] : "");
+    if (n < 1000) return units[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + numToWords(n % 100) : "");
+    if (n < 100000) return numToWords(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + numToWords(n % 1000) : "");
+    if (n < 10000000) return numToWords(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + numToWords(n % 100000) : "");
+    return numToWords(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + numToWords(n % 10000000) : "");
+  }
+  return "Rupees " + numToWords(num) + " Only";
+}
+
+function loadCashAndBankAccounts(callback) {
+  if (window.backend && window.backend.traditional_listCashAndBankAccounts) {
+    window.backend.traditional_listCashAndBankAccounts((resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          cashAndBankAccounts = res.data;
+        } else {
+          cashAndBankAccounts = [];
+        }
+      } catch (e) {
+        console.error("Error parsing cash and bank accounts:", e);
+        cashAndBankAccounts = [];
+      }
+      if (typeof callback === "function") callback(cashAndBankAccounts);
+    });
+  } else {
+    if (typeof callback === "function") callback([]);
+  }
+}
+
+function populateAccountsDropdown(selectId, paymentMethod) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = "";
+  const pm = (paymentMethod || "CASH").toUpperCase();
+  const isCash = pm === "CASH";
+  const filtered = cashAndBankAccounts.filter(acc => {
+    const accType = (acc.account_type || "").toLowerCase();
+    const grpCode = (acc.group_code || "").toUpperCase();
+    if (isCash) {
+      return accType === "cash" || grpCode === "GRP_CASH" || acc.code === "CASH";
+    } else {
+      return accType === "bank" || grpCode === "GRP_BANK" || grpCode === "GRP_BANK_OD" || (acc.code || "").startsWith("BANK");
+    }
+  });
+
+  const listToUse = filtered.length > 0 ? filtered : cashAndBankAccounts;
+  listToUse.forEach(acc => {
+    const opt = document.createElement("option");
+    opt.value = acc.id;
+    opt.textContent = `${acc.name} (${acc.code || acc.account_type})`;
+    sel.appendChild(opt);
+  });
+}
+
+// -----------------------------------------------------------------------------
+// 1. Customer Receipt Form Controller
+// -----------------------------------------------------------------------------
+function initCustomerReceiptScreen(preselectedCustomerId = null) {
+  const dateInp = document.getElementById("rct-date");
+  if (dateInp && !dateInp.value) {
+    const today = new Date().toISOString().split("T")[0];
+    dateInp.value = today;
+  }
+
+  // Peek voucher number
+  if (window.backend && window.backend.traditional_getNextReceiptNumber) {
+    window.backend.traditional_getNextReceiptNumber("RCT", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const numEl = document.getElementById("rct-number");
+          if (numEl) numEl.value = res.data.voucher_number || "RCT-001";
+        }
+      } catch (e) {
+        console.error("Error peeking receipt number:", e);
+      }
+    });
+  }
+
+  // Load accounts and populate
+  loadCashAndBankAccounts(() => {
+    const pm = document.getElementById("rct-payment-method") ? document.getElementById("rct-payment-method").value : "CASH";
+    populateAccountsDropdown("rct-deposit-account", pm);
+  });
+
+  // Populate customers
+  if (window.backend && window.backend.traditional_listCustomers) {
+    window.backend.traditional_listCustomers("", true, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          const sel = document.getElementById("rct-customer-select");
+          if (sel) {
+            sel.innerHTML = '<option value="">-- Select Customer --</option>';
+            res.data.forEach(c => {
+              const opt = document.createElement("option");
+              opt.value = c.id;
+              opt.textContent = `${c.name} (${c.code || "CUST"})`;
+              sel.appendChild(opt);
+            });
+            if (preselectedCustomerId) {
+              sel.value = preselectedCustomerId;
+              onCustomerReceiptCustomerChanged();
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error listing customers for receipt:", e);
+      }
+    });
+  }
+}
+
+function onCustomerReceiptCustomerChanged() {
+  const sel = document.getElementById("rct-customer-select");
+  const custId = sel ? sel.value : "";
+  const nameEl = document.getElementById("rct-disp-cust-name");
+  const codeEl = document.getElementById("rct-disp-cust-code");
+  const arEl = document.getElementById("rct-disp-ledger-ar");
+  const advEl = document.getElementById("rct-disp-advances");
+  const countEl = document.getElementById("rct-disp-unpaid-count");
+  const tbody = document.getElementById("rct-invoices-tbody");
+  const emptyMsg = document.getElementById("rct-invoices-empty");
+
+  if (!custId) {
+    if (nameEl) nameEl.textContent = "None Selected";
+    if (codeEl) codeEl.textContent = "";
+    if (arEl) arEl.textContent = "₹ 0.00";
+    if (advEl) advEl.textContent = "₹ 0.00";
+    if (countEl) countEl.textContent = "0";
+    if (tbody) tbody.innerHTML = "";
+    if (emptyMsg) emptyMsg.style.display = "block";
+    currentReceiptInvoices = [];
+    recalculateReceiptSummary();
+    return;
+  }
+
+  // Load customer position
+  if (window.backend && window.backend.traditional_getCustomerOutstanding) {
+    window.backend.traditional_getCustomerOutstanding(custId, "", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const d = res.data;
+          if (nameEl) nameEl.textContent = d.customer_name || "Customer";
+          if (codeEl) codeEl.textContent = d.customer_code ? `(${d.customer_code})` : "";
+          if (arEl) {
+            const arVal = parseFloat(d.net_ledger_outstanding || 0);
+            arEl.textContent = formatMoney(arVal);
+            arEl.style.color = arVal > 0 ? "#b91c1c" : "#15803d";
+          }
+          if (advEl) advEl.textContent = formatMoney(d.total_unallocated_advances || 0);
+          if (countEl) countEl.textContent = d.unpaid_invoices_count || 0;
+        }
+      } catch (e) {
+        console.error("Error fetching customer outstanding:", e);
+      }
+    });
+  }
+
+  // Load unsettled invoices
+  if (window.backend && window.backend.traditional_getCustomerInvoices) {
+    window.backend.traditional_getCustomerInvoices(custId, "", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          currentReceiptInvoices = res.data;
+          renderInvoiceAllocationsGrid();
+        } else {
+          currentReceiptInvoices = [];
+          renderInvoiceAllocationsGrid();
+        }
+      } catch (e) {
+        console.error("Error fetching customer invoices:", e);
+        currentReceiptInvoices = [];
+        renderInvoiceAllocationsGrid();
+      }
+    });
+  }
+}
+
+function renderInvoiceAllocationsGrid() {
+  const tbody = document.getElementById("rct-invoices-tbody");
+  const emptyMsg = document.getElementById("rct-invoices-empty");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (!currentReceiptInvoices || currentReceiptInvoices.length === 0) {
+    if (emptyMsg) {
+      emptyMsg.textContent = "No unpaid invoices found for this customer. Any amount entered will be recorded as unallocated Customer Advance.";
+      emptyMsg.style.display = "block";
+    }
+    recalculateReceiptSummary();
+    return;
+  }
+
+  if (emptyMsg) emptyMsg.style.display = "none";
+
+  currentReceiptInvoices.forEach((inv, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+      <td style="font-weight: 700; color: #1e3a8a;">${inv.voucher_number || "INV"}</td>
+      <td>${inv.vch_date || ""}</td>
+      <td style="text-align: right;">${formatMoney(inv.grand_total)}</td>
+      <td style="text-align: right; font-weight: 700; color: #b91c1c;">${formatMoney(inv.outstanding_amount)}</td>
+      <td style="text-align: right;">
+        <input type="number" step="0.01" min="0" max="${inv.outstanding_amount}" value="0.00" class="input-meta-compact rct-alloc-input" data-inv-id="${inv.invoice_id}" data-due="${inv.outstanding_amount}" style="text-align: right; width: 110px; font-weight: 700;" />
+      </td>
+      <td style="text-align: right;">
+        <input type="number" step="0.01" min="0" value="0.00" class="input-meta-compact rct-disc-input" data-inv-id="${inv.invoice_id}" style="text-align: right; width: 90px;" />
+      </td>
+      <td style="text-align: right; font-weight: 700;" id="rct-bal-after-${inv.invoice_id}">${formatMoney(inv.outstanding_amount)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Attach input event listeners for dynamic recalculation
+  tbody.querySelectorAll(".rct-alloc-input, .rct-disc-input").forEach(inp => {
+    inp.addEventListener("input", recalculateReceiptSummary);
+  });
+
+  recalculateReceiptSummary();
+}
+
+function recalculateReceiptSummary() {
+  const totalReceived = parseFloat(document.getElementById("rct-total-amount")?.value || 0);
+  let totalAllocated = 0;
+  let totalDiscount = 0;
+
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => {
+    const alloc = parseFloat(inp.value || 0);
+    const due = parseFloat(inp.dataset.due || 0);
+    const invId = inp.dataset.invId;
+    const discInp = document.querySelector(`.rct-disc-input[data-inv-id="${invId}"]`);
+    const disc = parseFloat(discInp?.value || 0);
+
+    totalAllocated += alloc;
+    totalDiscount += disc;
+
+    const balAfter = Math.max(0, due - alloc - disc);
+    const balEl = document.getElementById(`rct-bal-after-${invId}`);
+    if (balEl) {
+      balEl.textContent = formatMoney(balAfter);
+      balEl.style.color = balAfter === 0 ? "#15803d" : "#334155";
+    }
+  });
+
+  const unallocatedAdvance = Math.max(0, totalReceived - totalAllocated);
+
+  const sumTotalEl = document.getElementById("rct-sum-total");
+  const sumAllocEl = document.getElementById("rct-sum-allocated");
+  const sumDiscEl = document.getElementById("rct-sum-discount");
+  const sumAdvEl = document.getElementById("rct-sum-advance");
+
+  if (sumTotalEl) sumTotalEl.textContent = formatMoney(totalReceived);
+  if (sumAllocEl) sumAllocEl.textContent = formatMoney(totalAllocated);
+  if (sumDiscEl) sumDiscEl.textContent = formatMoney(totalDiscount);
+  if (sumAdvEl) sumAdvEl.textContent = formatMoney(unallocatedAdvance);
+}
+
+function autoAllocateCustomerReceipt() {
+  const totalAmount = parseFloat(document.getElementById("rct-total-amount")?.value || 0);
+  if (totalAmount <= 0) {
+    if (typeof showNotification === "function") {
+      showNotification("Please enter a Total Amount Received (₹) first.", "warning");
+    }
+    const totInp = document.getElementById("rct-total-amount");
+    if (totInp) totInp.focus();
+    return;
+  }
+
+  let remaining = totalAmount;
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => {
+    const due = parseFloat(inp.dataset.due || 0);
+    if (remaining > 0) {
+      const alloc = Math.min(remaining, due);
+      inp.value = alloc.toFixed(2);
+      remaining -= alloc;
+    } else {
+      inp.value = "0.00";
+    }
+  });
+
+  recalculateReceiptSummary();
+}
+
+function clearReceiptAllocations() {
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => inp.value = "0.00");
+  document.querySelectorAll(".rct-disc-input").forEach(inp => inp.value = "0.00");
+  recalculateReceiptSummary();
+}
+
+function saveCustomerReceipt() {
+  const custSelect = document.getElementById("rct-customer-select");
+  const custId = custSelect ? custSelect.value : "";
+  const dateInp = document.getElementById("rct-date");
+  const rctDate = dateInp ? dateInp.value : "";
+  const totalInp = document.getElementById("rct-total-amount");
+  const totalAmount = parseFloat(totalInp?.value || 0);
+  const methodSelect = document.getElementById("rct-payment-method");
+  const method = methodSelect ? methodSelect.value : "CASH";
+  const depositSelect = document.getElementById("rct-deposit-account");
+  const depositAccId = depositSelect ? depositSelect.value : "";
+  const refNo = document.getElementById("rct-ref-number")?.value.trim() || null;
+  const refDate = document.getElementById("rct-ref-date")?.value || null;
+  const narration = document.getElementById("rct-narration")?.value.trim() || null;
+
+  if (!custId) {
+    showNotification("Please select a customer.", "warning");
+    if (custSelect) custSelect.focus();
+    return;
+  }
+  if (!rctDate) {
+    showNotification("Please enter a valid receipt date.", "warning");
+    if (dateInp) dateInp.focus();
+    return;
+  }
+  if (totalAmount <= 0) {
+    showNotification("Receipt total amount must be greater than zero.", "warning");
+    if (totalInp) totalInp.focus();
+    return;
+  }
+  if (!depositAccId) {
+    showNotification("Please select a deposit ledger account.", "warning");
+    if (depositSelect) depositSelect.focus();
+    return;
+  }
+
+  // Collect allocations
+  const allocations = [];
+  let sumAlloc = 0;
+  let validationError = null;
+
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => {
+    const val = parseFloat(inp.value || 0);
+    const due = parseFloat(inp.dataset.due || 0);
+    const invId = inp.dataset.invId;
+    const discInp = document.querySelector(`.rct-disc-input[data-inv-id="${invId}"]`);
+    const discVal = parseFloat(discInp?.value || 0);
+
+    if (val > due) {
+      validationError = `Allocation for invoice exceeds current due amount (${val} > ${due}).`;
+    }
+    if (val > 0 || discVal > 0) {
+      sumAlloc += val;
+      allocations.push({
+        invoice_id: invId,
+        allocated_amount: val,
+        discount_amount: discVal
+      });
+    }
+  });
+
+  if (validationError) {
+    showNotification(validationError, "error");
+    return;
+  }
+  if (sumAlloc > totalAmount) {
+    showNotification(`Total allocated amount (${formatMoney(sumAlloc)}) exceeds total received (${formatMoney(totalAmount)}).`, "error");
+    return;
+  }
+
+  const payload = {
+    customer_id: custId,
+    receipt_date: rctDate,
+    total_amount: totalAmount,
+    payment_method: method,
+    deposit_account_id: depositAccId,
+    reference_number: refNo,
+    reference_date: refDate,
+    notes: narration,
+    allocations: allocations
+  };
+
+  const btnSave = document.getElementById("btn-rct-save");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = "Posting Receipt...";
+  }
+
+  if (window.backend && window.backend.traditional_createCustomerReceipt) {
+    window.backend.traditional_createCustomerReceipt(JSON.stringify(payload), (resStr) => {
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.textContent = "Post Receipt (F2)";
+      }
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          showNotification(`Customer Receipt ${res.data.voucher_number} posted successfully!`, "success");
+          openVoucherPrintModal(res.data, "RECEIPT");
+          resetCustomerReceiptForm();
+        } else {
+          showNotification(`Receipt failed: ${res.error || "Unknown error"}`, "error");
+        }
+      } catch (e) {
+        console.error("Error creating receipt:", e);
+        showNotification("An error occurred while posting the customer receipt.", "error");
+      }
+    });
+  }
+}
+
+function resetCustomerReceiptForm() {
+  const totInp = document.getElementById("rct-total-amount");
+  if (totInp) totInp.value = "";
+  const refInp = document.getElementById("rct-ref-number");
+  if (refInp) refInp.value = "";
+  const refDateInp = document.getElementById("rct-ref-date");
+  if (refDateInp) refDateInp.value = "";
+  const narrInp = document.getElementById("rct-narration");
+  if (narrInp) narrInp.value = "";
+  const custSel = document.getElementById("rct-customer-select");
+  if (custSel) custSel.value = "";
+  onCustomerReceiptCustomerChanged();
+  initCustomerReceiptScreen();
+}
+
+// -----------------------------------------------------------------------------
+// 2. Customer Receipts Register Controller
+// -----------------------------------------------------------------------------
+function renderCustomerReceiptsRegister() {
+  const search = document.getElementById("rct-list-search")?.value.trim() || "";
+  const fromDate = document.getElementById("rct-list-from-date")?.value || "";
+  const toDate = document.getElementById("rct-list-to-date")?.value || "";
+  const status = document.getElementById("rct-list-status")?.value || "";
+  const tbody = document.getElementById("receipts-register-tbody");
+  const emptyMsg = document.getElementById("receipts-register-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Loading receipts register...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listCustomerReceipts) {
+    window.backend.traditional_listCustomerReceipts("", fromDate, toDate, status, search, 100, 0, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const receipts = res.data.receipts || [];
+          tbody.innerHTML = "";
+
+          if (receipts.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            updateReceiptsRegisterSummary(0, 0, 0);
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalReceivedSum = 0;
+          let totalAdvanceSum = 0;
+
+          receipts.forEach((r, idx) => {
+            const tr = document.createElement("tr");
+            const isReversed = r.status === "REVERSED";
+            const tot = parseFloat(r.total_amount || 0);
+            const adv = parseFloat(r.unallocated_amount || 0);
+            if (!isReversed) {
+              totalReceivedSum += tot;
+              totalAdvanceSum += adv;
+            }
+
+            const statusBadge = isReversed
+              ? '<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">REVERSED</span>'
+              : '<span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">POSTED</span>';
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td>${r.receipt_date || ""}</td>
+              <td style="font-weight: 800; color: #1e3a8a;">${r.voucher_number || ""}</td>
+              <td><strong>${r.customer_name || "Customer"}</strong> <span style="color: #64748b; font-size: 11px;">(${r.customer_code || ""})</span></td>
+              <td>${r.payment_method || ""}</td>
+              <td style="text-align: right; font-weight: 700;">${formatMoney(r.total_amount)}</td>
+              <td style="text-align: right; color: #15803d;">${formatMoney(r.allocated_amount)}</td>
+              <td style="text-align: right; color: #7c3aed; font-weight: 700;">${formatMoney(r.unallocated_amount)}</td>
+              <td style="text-align: center;">${statusBadge}</td>
+              <td style="text-align: center;">
+                <div style="display: flex; gap: 4px; justify-content: center;">
+                  <button type="button" class="btn-classic btn-sm btn-view-rct" data-id="${r.id}" style="padding: 2px 8px; font-size: 11px;">View</button>
+                  ${!isReversed ? `<button type="button" class="btn-classic btn-sm btn-reverse-rct" data-id="${r.id}" data-num="${r.voucher_number}" data-party="${r.customer_name || ""}" data-amount="${formatMoney(r.total_amount)}" style="padding: 2px 8px; font-size: 11px; color: #dc2626;">Reverse</button>` : ''}
+                  <button type="button" class="btn-classic btn-sm btn-print-rct" data-id="${r.id}" style="padding: 2px 8px; font-size: 11px;">Print</button>
+                </div>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          // Bind row action buttons
+          tbody.querySelectorAll(".btn-view-rct").forEach(b => {
+            b.addEventListener("click", () => openVoucherDetailsModal("RECEIPT", b.dataset.id));
+          });
+          tbody.querySelectorAll(".btn-reverse-rct").forEach(b => {
+            b.addEventListener("click", () => openReversalModal("RECEIPT", b.dataset.id, b.dataset.num, b.dataset.party, b.dataset.amount));
+          });
+          tbody.querySelectorAll(".btn-print-rct").forEach(b => {
+            b.addEventListener("click", () => {
+              if (window.backend && window.backend.traditional_getCustomerReceipt) {
+                window.backend.traditional_getCustomerReceipt(b.dataset.id, (vStr) => {
+                  try {
+                    const vr = JSON.parse(vStr);
+                    if (vr.success && vr.data) openVoucherPrintModal(vr.data, "RECEIPT");
+                  } catch (e) {
+                    console.error("Error loading receipt for print:", e);
+                  }
+                });
+              }
+            });
+          });
+
+          updateReceiptsRegisterSummary(receipts.length, totalReceivedSum, totalAdvanceSum);
+        }
+      } catch (e) {
+        console.error("Error rendering receipts register:", e);
+      }
+    });
+  }
+}
+
+function updateReceiptsRegisterSummary(count, totalReceived, totalAdvance) {
+  const countEl = document.getElementById("rct-list-count");
+  const totEl = document.getElementById("rct-list-total-sum");
+  const advEl = document.getElementById("rct-list-advance-sum");
+  if (countEl) countEl.textContent = `Receipts: ${count}`;
+  if (totEl) totEl.textContent = formatMoney(totalReceived);
+  if (advEl) advEl.textContent = formatMoney(totalAdvance);
+}
+
+// -----------------------------------------------------------------------------
+// 3. Supplier Payment Form Controller
+// -----------------------------------------------------------------------------
+function initSupplierPaymentScreen(preselectedSupplierId = null) {
+  const dateInp = document.getElementById("pmt-date");
+  if (dateInp && !dateInp.value) {
+    const today = new Date().toISOString().split("T")[0];
+    dateInp.value = today;
+  }
+
+  // Peek payment voucher number
+  if (window.backend && window.backend.traditional_getNextPaymentNumber) {
+    window.backend.traditional_getNextPaymentNumber("PMT", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const numEl = document.getElementById("pmt-number");
+          if (numEl) numEl.value = res.data.voucher_number || "PMT-001";
+        }
+      } catch (e) {
+        console.error("Error peeking payment number:", e);
+      }
+    });
+  }
+
+  // Load accounts and populate
+  loadCashAndBankAccounts(() => {
+    const pm = document.getElementById("pmt-payment-method") ? document.getElementById("pmt-payment-method").value : "CASH";
+    populateAccountsDropdown("pmt-source-account", pm);
+  });
+
+  // Populate suppliers
+  if (window.backend && window.backend.traditional_listSuppliers) {
+    window.backend.traditional_listSuppliers("", true, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          const sel = document.getElementById("pmt-supplier-select");
+          if (sel) {
+            sel.innerHTML = '<option value="">-- Select Supplier --</option>';
+            res.data.forEach(s => {
+              const opt = document.createElement("option");
+              opt.value = s.id;
+              opt.textContent = `${s.name} (${s.code || "SUPP"})`;
+              sel.appendChild(opt);
+            });
+            if (preselectedSupplierId) {
+              sel.value = preselectedSupplierId;
+              onSupplierPaymentSupplierChanged();
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error listing suppliers:", e);
+      }
+    });
+  }
+}
+
+function onSupplierPaymentSupplierChanged() {
+  const sel = document.getElementById("pmt-supplier-select");
+  const suppId = sel ? sel.value : "";
+  const nameEl = document.getElementById("pmt-disp-supp-name");
+  const codeEl = document.getElementById("pmt-disp-supp-code");
+  const apEl = document.getElementById("pmt-disp-ledger-ap");
+  const advEl = document.getElementById("pmt-disp-advances");
+
+  if (!suppId) {
+    if (nameEl) nameEl.textContent = "None Selected";
+    if (codeEl) codeEl.textContent = "";
+    if (apEl) apEl.textContent = "₹ 0.00";
+    if (advEl) advEl.textContent = "₹ 0.00";
+    recalculatePaymentSummary();
+    return;
+  }
+
+  // Load supplier position
+  if (window.backend && window.backend.traditional_getSupplierOutstanding) {
+    window.backend.traditional_getSupplierOutstanding(suppId, "", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const d = res.data;
+          if (nameEl) nameEl.textContent = d.supplier_name || "Supplier";
+          if (codeEl) codeEl.textContent = d.supplier_code ? `(${d.supplier_code})` : "";
+          if (apEl) {
+            const apVal = parseFloat(d.net_ledger_payable || 0);
+            apEl.textContent = formatMoney(apVal);
+            apEl.style.color = apVal > 0 ? "#b91c1c" : "#15803d";
+          }
+          if (advEl) advEl.textContent = formatMoney(d.total_unallocated_advances || 0);
+        }
+      } catch (e) {
+        console.error("Error fetching supplier outstanding:", e);
+      }
+    });
+  }
+
+  recalculatePaymentSummary();
+}
+
+function recalculatePaymentSummary() {
+  const total = parseFloat(document.getElementById("pmt-total-amount")?.value || 0);
+  const sumTotalEl = document.getElementById("pmt-sum-total");
+  const sumAdvEl = document.getElementById("pmt-sum-advance");
+  if (sumTotalEl) sumTotalEl.textContent = formatMoney(total);
+  if (sumAdvEl) sumAdvEl.textContent = formatMoney(total);
+}
+
+function saveSupplierPayment() {
+  const suppSelect = document.getElementById("pmt-supplier-select");
+  const suppId = suppSelect ? suppSelect.value : "";
+  const dateInp = document.getElementById("pmt-date");
+  const pmtDate = dateInp ? dateInp.value : "";
+  const totalInp = document.getElementById("pmt-total-amount");
+  const totalAmount = parseFloat(totalInp?.value || 0);
+  const methodSelect = document.getElementById("pmt-payment-method");
+  const method = methodSelect ? methodSelect.value : "CASH";
+  const sourceSelect = document.getElementById("pmt-source-account");
+  const sourceAccId = sourceSelect ? sourceSelect.value : "";
+  const refNo = document.getElementById("pmt-ref-number")?.value.trim() || null;
+  const refDate = document.getElementById("pmt-ref-date")?.value || null;
+  const narration = document.getElementById("pmt-narration")?.value.trim() || null;
+
+  if (!suppId) {
+    showNotification("Please select a supplier.", "warning");
+    if (suppSelect) suppSelect.focus();
+    return;
+  }
+  if (!pmtDate) {
+    showNotification("Please enter a valid payment date.", "warning");
+    if (dateInp) dateInp.focus();
+    return;
+  }
+  if (totalAmount <= 0) {
+    showNotification("Payment total amount must be greater than zero.", "warning");
+    if (totalInp) totalInp.focus();
+    return;
+  }
+  if (!sourceAccId) {
+    showNotification("Please select a source payment account.", "warning");
+    if (sourceSelect) sourceSelect.focus();
+    return;
+  }
+
+  const payload = {
+    supplier_id: suppId,
+    payment_date: pmtDate,
+    total_amount: totalAmount,
+    payment_method: method,
+    payment_account_id: sourceAccId,
+    reference_number: refNo,
+    reference_date: refDate,
+    notes: narration,
+    allocations: []
+  };
+
+  const btnSave = document.getElementById("btn-pmt-save");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = "Disbursing Payment...";
+  }
+
+  if (window.backend && window.backend.traditional_createSupplierPayment) {
+    window.backend.traditional_createSupplierPayment(JSON.stringify(payload), (resStr) => {
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.textContent = "Disburse Payment (F2)";
+      }
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          showNotification(`Supplier Payment ${res.data.voucher_number} posted successfully!`, "success");
+          openVoucherPrintModal(res.data, "PAYMENT");
+          resetSupplierPaymentForm();
+        } else {
+          showNotification(`Payment failed: ${res.error || "Unknown error"}`, "error");
+        }
+      } catch (e) {
+        console.error("Error creating payment:", e);
+        showNotification("An error occurred while disbursing the supplier payment.", "error");
+      }
+    });
+  }
+}
+
+function resetSupplierPaymentForm() {
+  const totInp = document.getElementById("pmt-total-amount");
+  if (totInp) totInp.value = "";
+  const refInp = document.getElementById("pmt-ref-number");
+  if (refInp) refInp.value = "";
+  const refDateInp = document.getElementById("pmt-ref-date");
+  if (refDateInp) refDateInp.value = "";
+  const narrInp = document.getElementById("pmt-narration");
+  if (narrInp) narrInp.value = "";
+  const suppSel = document.getElementById("pmt-supplier-select");
+  if (suppSel) suppSel.value = "";
+  onSupplierPaymentSupplierChanged();
+  initSupplierPaymentScreen();
+}
+
+// -----------------------------------------------------------------------------
+// 4. Supplier Payments Register Controller
+// -----------------------------------------------------------------------------
+function renderSupplierPaymentsRegister() {
+  const search = document.getElementById("pmt-list-search")?.value.trim() || "";
+  const fromDate = document.getElementById("pmt-list-from-date")?.value || "";
+  const toDate = document.getElementById("pmt-list-to-date")?.value || "";
+  const status = document.getElementById("pmt-list-status")?.value || "";
+  const tbody = document.getElementById("payments-register-tbody");
+  const emptyMsg = document.getElementById("payments-register-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Loading payments register...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listSupplierPayments) {
+    window.backend.traditional_listSupplierPayments("", fromDate, toDate, status, search, 100, 0, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const payments = res.data.payments || [];
+          tbody.innerHTML = "";
+
+          if (payments.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            updatePaymentsRegisterSummary(0, 0, 0);
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalDisbursedSum = 0;
+          let totalAdvanceSum = 0;
+
+          payments.forEach((p, idx) => {
+            const tr = document.createElement("tr");
+            const isReversed = p.status === "REVERSED";
+            const tot = parseFloat(p.total_amount || 0);
+            const adv = parseFloat(p.unallocated_amount || 0);
+            if (!isReversed) {
+              totalDisbursedSum += tot;
+              totalAdvanceSum += adv;
+            }
+
+            const statusBadge = isReversed
+              ? '<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">REVERSED</span>'
+              : '<span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">POSTED</span>';
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td>${p.payment_date || ""}</td>
+              <td style="font-weight: 800; color: #1e3a8a;">${p.voucher_number || ""}</td>
+              <td><strong>${p.supplier_name || "Supplier"}</strong> <span style="color: #64748b; font-size: 11px;">(${p.supplier_code || ""})</span></td>
+              <td>${p.payment_method || ""}</td>
+              <td style="text-align: right; font-weight: 700; color: #b91c1c;">${formatMoney(p.total_amount)}</td>
+              <td style="text-align: right;">${formatMoney(p.allocated_amount)}</td>
+              <td style="text-align: right; color: #7c3aed; font-weight: 700;">${formatMoney(p.unallocated_amount)}</td>
+              <td style="text-align: center;">${statusBadge}</td>
+              <td style="text-align: center;">
+                <div style="display: flex; gap: 4px; justify-content: center;">
+                  <button type="button" class="btn-classic btn-sm btn-view-pmt" data-id="${p.id}" style="padding: 2px 8px; font-size: 11px;">View</button>
+                  ${!isReversed ? `<button type="button" class="btn-classic btn-sm btn-reverse-pmt" data-id="${p.id}" data-num="${p.voucher_number}" data-party="${p.supplier_name || ""}" data-amount="${formatMoney(p.total_amount)}" style="padding: 2px 8px; font-size: 11px; color: #dc2626;">Reverse</button>` : ''}
+                  <button type="button" class="btn-classic btn-sm btn-print-pmt" data-id="${p.id}" style="padding: 2px 8px; font-size: 11px;">Print</button>
+                </div>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tbody.querySelectorAll(".btn-view-pmt").forEach(b => {
+            b.addEventListener("click", () => openVoucherDetailsModal("PAYMENT", b.dataset.id));
+          });
+          tbody.querySelectorAll(".btn-reverse-pmt").forEach(b => {
+            b.addEventListener("click", () => openReversalModal("PAYMENT", b.dataset.id, b.dataset.num, b.dataset.party, b.dataset.amount));
+          });
+          tbody.querySelectorAll(".btn-print-pmt").forEach(b => {
+            b.addEventListener("click", () => {
+              if (window.backend && window.backend.traditional_getSupplierPayment) {
+                window.backend.traditional_getSupplierPayment(b.dataset.id, (vStr) => {
+                  try {
+                    const vr = JSON.parse(vStr);
+                    if (vr.success && vr.data) openVoucherPrintModal(vr.data, "PAYMENT");
+                  } catch (e) {
+                    console.error("Error loading payment for print:", e);
+                  }
+                });
+              }
+            });
+          });
+
+          updatePaymentsRegisterSummary(payments.length, totalDisbursedSum, totalAdvanceSum);
+        }
+      } catch (e) {
+        console.error("Error rendering payments register:", e);
+      }
+    });
+  }
+}
+
+function updatePaymentsRegisterSummary(count, totalDisbursed, totalAdvance) {
+  const countEl = document.getElementById("pmt-list-count");
+  const totEl = document.getElementById("pmt-list-total-sum");
+  const advEl = document.getElementById("pmt-list-advance-sum");
+  if (countEl) countEl.textContent = `Payments: ${count}`;
+  if (totEl) totEl.textContent = formatMoney(totalDisbursed);
+  if (advEl) advEl.textContent = formatMoney(totalAdvance);
+}
+
+// -----------------------------------------------------------------------------
+// 5. Customer Outstanding View (Accounts Receivable)
+// -----------------------------------------------------------------------------
+function renderCustomerOutstandingView() {
+  const asOfDate = document.getElementById("cust-out-as-of-date")?.value || "";
+  const search = (document.getElementById("cust-out-search")?.value || "").toLowerCase().trim();
+  const tbody = document.getElementById("cust-out-tbody");
+  const emptyMsg = document.getElementById("cust-out-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Calculating accounts receivable...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listCustomersOutstanding) {
+    window.backend.traditional_listCustomersOutstanding(asOfDate, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          let customers = res.data.customers || [];
+          if (search) {
+            customers = customers.filter(c =>
+              (c.customer_name || "").toLowerCase().includes(search) ||
+              (c.customer_code || "").toLowerCase().includes(search) ||
+              (c.phone || "").toLowerCase().includes(search) ||
+              (c.gstin || "").toLowerCase().includes(search)
+            );
+          }
+
+          tbody.innerHTML = "";
+          if (customers.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            const cntEl = document.getElementById("cust-out-count");
+            const totEl = document.getElementById("cust-out-total-sum");
+            if (cntEl) cntEl.textContent = "Total Customers: 0";
+            if (totEl) totEl.textContent = "₹ 0.00";
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalAR = 0;
+
+          customers.forEach((c, idx) => {
+            const tr = document.createElement("tr");
+            const outAmt = parseFloat(c.outstanding_amount || 0);
+            totalAR += outAmt;
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #1e3a8a;">${c.customer_code || ""}</td>
+              <td><strong>${c.customer_name || "Customer"}</strong></td>
+              <td>${c.phone || "-"}</td>
+              <td>${c.gstin || "-"}</td>
+              <td style="text-align: right;">${formatMoney(c.total_billed)}</td>
+              <td style="text-align: right; color: #15803d;">${formatMoney(c.total_paid)}</td>
+              <td style="text-align: right; font-weight: 800; color: ${outAmt > 0 ? '#b91c1c' : '#15803d'};">${formatMoney(outAmt)}</td>
+              <td style="text-align: center; font-weight: 700;">${c.balance_type || "Dr"}</td>
+              <td style="text-align: center;">
+                <button type="button" class="btn-classic btn-sm btn-cust-out-rct" data-id="${c.customer_id}" style="padding: 2px 8px; font-size: 11px; background: #15803d; color: #fff; font-weight: 700;">Receive</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tbody.querySelectorAll(".btn-cust-out-rct").forEach(b => {
+            b.addEventListener("click", () => {
+              showScreen("view-customer-receipt");
+              initCustomerReceiptScreen(b.dataset.id);
+            });
+          });
+
+          const cntEl = document.getElementById("cust-out-count");
+          const totEl = document.getElementById("cust-out-total-sum");
+          if (cntEl) cntEl.textContent = `Total Customers: ${customers.length}`;
+          if (totEl) totEl.textContent = formatMoney(totalAR);
+        }
+      } catch (e) {
+        console.error("Error rendering customer outstandings:", e);
+      }
+    });
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 6. Supplier Outstanding View (Accounts Payable)
+// -----------------------------------------------------------------------------
+function renderSupplierOutstandingView() {
+  const asOfDate = document.getElementById("supp-out-as-of-date")?.value || "";
+  const search = (document.getElementById("supp-out-search")?.value || "").toLowerCase().trim();
+  const tbody = document.getElementById("supp-out-tbody");
+  const emptyMsg = document.getElementById("supp-out-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Calculating accounts payable...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listSuppliersOutstanding) {
+    window.backend.traditional_listSuppliersOutstanding(asOfDate, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          let suppliers = res.data.suppliers || [];
+          if (search) {
+            suppliers = suppliers.filter(s =>
+              (s.supplier_name || "").toLowerCase().includes(search) ||
+              (s.supplier_code || "").toLowerCase().includes(search) ||
+              (s.phone || "").toLowerCase().includes(search) ||
+              (s.gstin || "").toLowerCase().includes(search)
+            );
+          }
+
+          tbody.innerHTML = "";
+          if (suppliers.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            const cntEl = document.getElementById("supp-out-count");
+            const totEl = document.getElementById("supp-out-total-sum");
+            if (cntEl) cntEl.textContent = "Total Suppliers: 0";
+            if (totEl) totEl.textContent = "₹ 0.00";
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalAP = 0;
+
+          suppliers.forEach((s, idx) => {
+            const tr = document.createElement("tr");
+            const outAmt = parseFloat(s.outstanding_amount || 0);
+            totalAP += outAmt;
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #78350f;">${s.supplier_code || ""}</td>
+              <td><strong>${s.supplier_name || "Supplier"}</strong></td>
+              <td>${s.phone || "-"}</td>
+              <td>${s.gstin || "-"}</td>
+              <td style="text-align: right;">${formatMoney(s.total_purchases)}</td>
+              <td style="text-align: right; color: #15803d;">${formatMoney(s.total_paid)}</td>
+              <td style="text-align: right; font-weight: 800; color: ${outAmt > 0 ? '#b91c1c' : '#15803d'};">${formatMoney(outAmt)}</td>
+              <td style="text-align: center; font-weight: 700;">${s.balance_type || "Cr"}</td>
+              <td style="text-align: center;">
+                <button type="button" class="btn-classic btn-sm btn-supp-out-pmt" data-id="${s.supplier_id}" style="padding: 2px 8px; font-size: 11px; background: #b91c1c; color: #fff; font-weight: 700;">Pay</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tbody.querySelectorAll(".btn-supp-out-pmt").forEach(b => {
+            b.addEventListener("click", () => {
+              showScreen("view-supplier-payment");
+              initSupplierPaymentScreen(b.dataset.id);
+            });
+          });
+
+          const cntEl = document.getElementById("supp-out-count");
+          const totEl = document.getElementById("supp-out-total-sum");
+          if (cntEl) cntEl.textContent = `Total Suppliers: ${suppliers.length}`;
+          if (totEl) totEl.textContent = formatMoney(totalAP);
+        }
+      } catch (e) {
+        console.error("Error rendering supplier outstandings:", e);
+      }
+    });
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 7. Financial Reconciliation Dashboard Controller
+// -----------------------------------------------------------------------------
+function renderReconciliationDashboard() {
+  const asOfDate = document.getElementById("recon-as-of-date")?.value || "";
+  const runBtn = document.getElementById("btn-recon-run-audit");
+  if (runBtn) {
+    runBtn.disabled = true;
+    runBtn.textContent = "Auditing Subledgers...";
+  }
+
+  if (window.backend && window.backend.traditional_getFinancialReconciliationSummary) {
+    window.backend.traditional_getFinancialReconciliationSummary(asOfDate, (resStr) => {
+      if (runBtn) {
+        runBtn.disabled = false;
+        runBtn.textContent = "Run Full Financial Audit";
+      }
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const d = res.data;
+          const timeEl = document.getElementById("recon-last-audit-time");
+          if (timeEl) timeEl.textContent = `Last audited: ${new Date().toLocaleTimeString()} (${d.as_of_date || "Today"})`;
+
+          // Executive Banner
+          const isBalanced = d.overall_status === "BALANCED";
+          const bannerEl = document.getElementById("recon-executive-banner");
+          const badgeEl = document.getElementById("recon-executive-badge");
+          const titleEl = document.getElementById("recon-executive-title");
+          const descEl = document.getElementById("recon-executive-desc");
+          const scoreEl = document.getElementById("recon-executive-score");
+
+          if (badgeEl) {
+            badgeEl.textContent = d.overall_status || "BALANCED";
+            badgeEl.style.background = isBalanced ? "#15803d" : "#dc2626";
+          }
+          if (bannerEl) {
+            bannerEl.style.background = isBalanced ? "#f0fdf4" : "#fef2f2";
+            bannerEl.style.borderColor = isBalanced ? "#86efac" : "#fecaca";
+          }
+          if (titleEl) {
+            titleEl.textContent = isBalanced ? "Books & Subledgers Perfectly Balanced" : "Subledger Discrepancies Detected";
+          }
+          if (descEl) {
+            descEl.textContent = isBalanced
+              ? "All customer AR, supplier AP, cash/bank liquid movements and double-entry journals are 100% reconciled."
+              : "Audit diagnostic has identified variance between General Ledger balances and transactional subledgers.";
+          }
+          if (scoreEl) {
+            scoreEl.textContent = d.health_score || (isBalanced ? "100%" : "85%");
+            scoreEl.style.color = isBalanced ? "#15803d" : "#dc2626";
+          }
+
+          // Card 1: AR
+          const ar = d.customer_ar || {};
+          setReconCardStatus("recon-ar-status", ar.status);
+          setElText("recon-ar-gl", formatMoney(ar.gl_ar_balance));
+          setElText("recon-ar-sub", formatMoney(ar.subledger_net_receivable));
+          setElText("recon-ar-diff", formatMoney(ar.discrepancy));
+
+          // Card 2: AP
+          const ap = d.supplier_ap || {};
+          setReconCardStatus("recon-ap-status", ap.status);
+          setElText("recon-ap-gl", formatMoney(ap.gl_ap_balance));
+          setElText("recon-ap-sub", formatMoney(ap.subledger_net_payable));
+          setElText("recon-ap-diff", formatMoney(ap.discrepancy));
+
+          // Card 3: Cash & Bank
+          const cb = d.cash_and_bank || {};
+          setReconCardStatus("recon-cb-status", cb.status);
+          setElText("recon-cb-gl", formatMoney(cb.total_liquid_gl_balance));
+          setElText("recon-cb-sub", formatMoney(cb.total_net_voucher_movement));
+          setElText("recon-cb-diff", formatMoney(cb.discrepancy));
+
+          // Card 4: Customer Advances
+          const ca = d.customer_advances || {};
+          setReconCardStatus("recon-adv-cust-status", ca.status);
+          setElText("recon-adv-cust-vch", formatMoney(ca.unallocated_receipts_advances));
+          setElText("recon-adv-cust-gl", formatMoney(ca.gl_advance_liability_balance));
+          setElText("recon-adv-cust-diff", formatMoney(ca.discrepancy));
+
+          // Card 5: Supplier Advances
+          const sa = d.supplier_advances || {};
+          setReconCardStatus("recon-adv-supp-status", sa.status);
+          setElText("recon-adv-supp-vch", formatMoney(sa.unallocated_payments_advances));
+          setElText("recon-adv-supp-gl", formatMoney(sa.gl_advance_asset_balance));
+          setElText("recon-adv-supp-diff", formatMoney(sa.discrepancy));
+
+          // Card 6: Journal Integrity
+          const aud = d.journal_audit || {};
+          setReconCardStatus("recon-audit-status", aud.status === "CLEAN" ? "CLEAN" : "ANOMALIES");
+          setElText("recon-audit-orphan", aud.orphan_journals_count || "0");
+          setElText("recon-audit-unbalanced", aud.unbalanced_lines_count || "0");
+          setElText("recon-audit-total", aud.total_anomalies_count || "0");
+        }
+      } catch (e) {
+        console.error("Error rendering reconciliation summary:", e);
+      }
+    });
+  }
+}
+
+function setReconCardStatus(elementId, status) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const isOk = status === "BALANCED" || status === "CLEAN";
+  el.textContent = status || "UNKNOWN";
+  el.style.background = isOk ? "#dcfce7" : "#fee2e2";
+  el.style.color = isOk ? "#15803d" : "#dc2626";
+}
+
+function setElText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+}
+
+// -----------------------------------------------------------------------------
+// 8. Modals Controller (Details, Reversals, Print)
+// -----------------------------------------------------------------------------
+function openVoucherDetailsModal(type, voucherId) {
+  const modal = document.getElementById("modal-voucher-details");
+  if (!modal) return;
+
+  const titleBadge = document.getElementById("vch-detail-type-badge");
+  const titleEl = document.getElementById("vch-detail-title");
+  if (titleBadge) {
+    titleBadge.textContent = type;
+    titleBadge.style.background = type === "RECEIPT" ? "#1e3a8a" : "#b91c1c";
+  }
+
+  const numEl = document.getElementById("vch-det-num");
+  const dateEl = document.getElementById("vch-det-date");
+  const partyEl = document.getElementById("vch-det-party");
+  const methEl = document.getElementById("vch-det-method");
+  const accEl = document.getElementById("vch-det-account");
+  const refEl = document.getElementById("vch-det-ref");
+  const statEl = document.getElementById("vch-det-status");
+  const userEl = document.getElementById("vch-det-user");
+  const totEl = document.getElementById("vch-det-total");
+  const allocEl = document.getElementById("vch-det-allocated");
+  const advEl = document.getElementById("vch-det-advance");
+  const discEl = document.getElementById("vch-det-discount");
+  const revAlert = document.getElementById("vch-det-reversal-alert");
+  const revReason = document.getElementById("vch-det-reversal-reason");
+  const tbody = document.getElementById("vch-det-alloc-tbody");
+  const emptyAlloc = document.getElementById("vch-det-alloc-empty");
+
+  const cb = (resStr) => {
+    try {
+      const res = JSON.parse(resStr);
+      if (res.success && res.data) {
+        const d = res.data;
+        activePrintContext = { data: d, type: type };
+        if (titleEl) titleEl.textContent = `Voucher Details: ${d.voucher_number || ""}`;
+        if (numEl) numEl.textContent = d.voucher_number || "";
+        if (dateEl) dateEl.textContent = d.receipt_date || d.payment_date || "";
+        if (partyEl) partyEl.textContent = d.customer_name || d.supplier_name || "Party";
+        if (methEl) methEl.textContent = d.payment_method || "";
+        if (accEl) accEl.textContent = d.deposit_account_name || d.source_account_name || d.deposit_account_id || d.source_account_id || "";
+        if (refEl) refEl.textContent = d.reference_number || "-";
+        if (statEl) {
+          const isRev = d.status === "REVERSED";
+          statEl.textContent = d.status || "POSTED";
+          statEl.style.background = isRev ? "#fee2e2" : "#dcfce7";
+          statEl.style.color = isRev ? "#991b1b" : "#15803d";
+        }
+        if (userEl) userEl.textContent = d.created_by || "Administrator";
+        if (totEl) totEl.textContent = formatMoney(d.total_amount);
+        if (allocEl) allocEl.textContent = formatMoney(d.allocated_amount);
+        if (advEl) advEl.textContent = formatMoney(d.unallocated_amount);
+        if (discEl) discEl.textContent = formatMoney(d.discount_amount);
+
+        if (d.status === "REVERSED") {
+          if (revAlert) revAlert.style.display = "block";
+          if (revReason) revReason.textContent = d.reversal_reason || "Reversed by authorized user.";
+        } else {
+          if (revAlert) revAlert.style.display = "none";
+        }
+
+        if (tbody) tbody.innerHTML = "";
+        const allocs = d.allocations || [];
+        if (allocs.length === 0) {
+          if (emptyAlloc) emptyAlloc.style.display = "block";
+        } else {
+          if (emptyAlloc) emptyAlloc.style.display = "none";
+          allocs.forEach((a, idx) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #1e3a8a;">${a.invoice_number || a.bill_number || a.invoice_id || a.purchase_voucher_id || "Bill"}</td>
+              <td style="text-align: right; font-weight: 700;">${formatMoney(a.allocated_amount)}</td>
+              <td style="text-align: right; color: #b45309;">${formatMoney(a.discount_amount)}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+
+        openModal("modal-voucher-details");
+      }
+    } catch (e) {
+      console.error("Error loading voucher details:", e);
+    }
+  };
+
+  if (type === "RECEIPT" && window.backend && window.backend.traditional_getCustomerReceipt) {
+    window.backend.traditional_getCustomerReceipt(voucherId, cb);
+  } else if (type === "PAYMENT" && window.backend && window.backend.traditional_getSupplierPayment) {
+    window.backend.traditional_getSupplierPayment(voucherId, cb);
+  }
+}
+
+function openReversalModal(type, voucherId, voucherNumber, partyName, amount) {
+  activeReversalContext = { type, id: voucherId, number: voucherNumber, party: partyName, amount };
+  const numEl = document.getElementById("reversal-vch-num");
+  const partyEl = document.getElementById("reversal-party-name");
+  const amtEl = document.getElementById("reversal-amount");
+  const reasonInp = document.getElementById("reversal-reason-input");
+
+  if (numEl) numEl.textContent = voucherNumber;
+  if (partyEl) partyEl.textContent = partyName;
+  if (amtEl) amtEl.textContent = amount;
+  if (reasonInp) {
+    reasonInp.value = "";
+    setTimeout(() => reasonInp.focus(), 50);
+  }
+
+  openModal("modal-reversal-confirm");
+}
+
+function executeVoucherReversal() {
+  const reasonInp = document.getElementById("reversal-reason-input");
+  const reason = reasonInp ? reasonInp.value.trim() : "";
+  if (!reason) {
+    showNotification("Reversal reason is mandatory for double-entry audit compliance.", "warning");
+    if (reasonInp) reasonInp.focus();
+    return;
+  }
+
+  const { type, id, number } = activeReversalContext;
+  const btn = document.getElementById("btn-reversal-confirm");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Posting Reversal...";
+  }
+
+  const handleResponse = (resStr) => {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Confirm & Post Reversal";
+    }
+    try {
+      const res = JSON.parse(resStr);
+      if (res.success) {
+        showNotification(`Voucher ${number} reversed successfully. Compensating journal entry posted.`, "success");
+        closeModal("modal-reversal-confirm");
+        if (type === "RECEIPT") renderCustomerReceiptsRegister();
+        else if (type === "PAYMENT") renderSupplierPaymentsRegister();
+      } else {
+        showNotification(`Reversal failed: ${res.error || "Permission denied or invalid state"}`, "error");
+      }
+    } catch (e) {
+      console.error("Error executing reversal:", e);
+      showNotification("An error occurred during voucher reversal.", "error");
+    }
+  };
+
+  if (type === "RECEIPT" && window.backend && window.backend.traditional_reverseCustomerReceipt) {
+    window.backend.traditional_reverseCustomerReceipt(id, reason, handleResponse);
+  } else if (type === "PAYMENT" && window.backend && window.backend.traditional_reverseSupplierPayment) {
+    window.backend.traditional_reverseSupplierPayment(id, reason, handleResponse);
+  }
+}
+
+function openVoucherPrintModal(vchData, type) {
+  if (!vchData) return;
+  activePrintContext = { data: vchData, type: type };
+
+  const compName = window.activeCompany ? window.activeCompany.name : "ALPHA BILLING ENTERPRISE";
+  const compAddr = window.activeCompany ? (window.activeCompany.address || "") : "Main Commercial Complex, City";
+  const compGstin = window.activeCompany ? (window.activeCompany.gstin || "") : "27AABCA1234A1Z5";
+
+  setElText("print-company-name", compName);
+  setElText("print-company-address", compAddr);
+  setElText("print-company-gstin", compGstin ? `GSTIN: ${compGstin}` : "");
+
+  setElText("print-voucher-title", type === "RECEIPT" ? "CUSTOMER RECEIPT VOUCHER" : "SUPPLIER PAYMENT VOUCHER");
+  setElText("print-vch-no", vchData.voucher_number || "");
+  setElText("print-vch-date", vchData.receipt_date || vchData.payment_date || "");
+  setElText("print-vch-mode", vchData.payment_method || "");
+  setElText("print-vch-ref", vchData.reference_number || "-");
+  setElText("print-vch-account", vchData.deposit_account_name || vchData.source_account_name || vchData.deposit_account_id || vchData.source_account_id || "");
+  setElText("print-vch-status", vchData.status || "POSTED");
+
+  setElText("print-party-name", vchData.customer_name || vchData.supplier_name || "Party");
+  setElText("print-party-code", vchData.customer_code || vchData.supplier_code || "");
+  setElText("print-party-phone", vchData.customer_phone || vchData.supplier_phone || "-");
+  setElText("print-party-gstin", vchData.customer_gstin || vchData.supplier_gstin || "-");
+
+  const allocTbody = document.getElementById("print-alloc-tbody");
+  if (allocTbody) {
+    allocTbody.innerHTML = "";
+    const allocs = vchData.allocations || [];
+    if (allocs.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="padding: 4px 0;">On-Account / Advance Payment</td>
+        <td style="text-align: right; padding: 4px 0;">${formatMoney(vchData.total_amount)}</td>
+      `;
+      allocTbody.appendChild(tr);
+    } else {
+      allocs.forEach(a => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="padding: 4px 0;">Settlement for Invoice: ${a.invoice_number || a.bill_number || a.invoice_id || a.purchase_voucher_id || "Bill"}</td>
+          <td style="text-align: right; padding: 4px 0;">${formatMoney(a.allocated_amount)}</td>
+        `;
+        allocTbody.appendChild(tr);
+      });
+      if (parseFloat(vchData.unallocated_amount || 0) > 0) {
+        const trAdv = document.createElement("tr");
+        trAdv.innerHTML = `
+          <td style="padding: 4px 0; font-style: italic;">Unallocated Customer Advance</td>
+          <td style="text-align: right; padding: 4px 0;">${formatMoney(vchData.unallocated_amount)}</td>
+        `;
+        allocTbody.appendChild(trAdv);
+      }
+    }
+  }
+
+  setElText("print-total-amount", formatMoney(vchData.total_amount));
+  setElText("print-amount-words", convertNumberToWords(vchData.total_amount));
+  setElText("print-narration", vchData.notes || "None");
+
+  openModal("modal-voucher-print");
+}
+
+function initPaymentAndReceiptModule() {
+  // Navigation & Ribbon buttons
+  const rctBack = document.getElementById("btn-rct-back");
+  const rctClose = document.getElementById("btn-rct-close");
+  if (rctBack) rctBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (rctClose) rctClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const rctListBack = document.getElementById("btn-rct-list-back");
+  const rctListClose = document.getElementById("btn-rct-list-close");
+  if (rctListBack) rctListBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (rctListClose) rctListClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const pmtBack = document.getElementById("btn-pmt-back");
+  const pmtClose = document.getElementById("btn-pmt-close");
+  if (pmtBack) pmtBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (pmtClose) pmtClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const pmtListBack = document.getElementById("btn-pmt-list-back");
+  const pmtListClose = document.getElementById("btn-pmt-list-close");
+  if (pmtListBack) pmtListBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (pmtListClose) pmtListClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const custOutBack = document.getElementById("btn-cust-out-back");
+  const custOutClose = document.getElementById("btn-cust-out-close");
+  if (custOutBack) custOutBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (custOutClose) custOutClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const suppOutBack = document.getElementById("btn-supp-out-back");
+  const suppOutClose = document.getElementById("btn-supp-out-close");
+  if (suppOutBack) suppOutBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (suppOutClose) suppOutClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const reconBack = document.getElementById("btn-recon-back");
+  const reconClose = document.getElementById("btn-recon-close");
+  if (reconBack) reconBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (reconClose) reconClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  // Customer Receipt Action buttons
+  const btnRctAuto = document.getElementById("btn-rct-auto-allocate");
+  if (btnRctAuto) btnRctAuto.addEventListener("click", autoAllocateCustomerReceipt);
+
+  const btnRctClear = document.getElementById("btn-rct-clear-allocate");
+  if (btnRctClear) btnRctClear.addEventListener("click", clearReceiptAllocations);
+
+  const btnRctReset = document.getElementById("btn-rct-reset");
+  if (btnRctReset) btnRctReset.addEventListener("click", resetCustomerReceiptForm);
+
+  const btnRctSave = document.getElementById("btn-rct-save");
+  if (btnRctSave) btnRctSave.addEventListener("click", saveCustomerReceipt);
+
+  const rctCustSelect = document.getElementById("rct-customer-select");
+  if (rctCustSelect) rctCustSelect.addEventListener("change", onCustomerReceiptCustomerChanged);
+
+  const rctMethodSelect = document.getElementById("rct-payment-method");
+  if (rctMethodSelect) {
+    rctMethodSelect.addEventListener("change", (e) => {
+      populateAccountsDropdown("rct-deposit-account", e.target.value);
+    });
+  }
+
+  const rctTotalInp = document.getElementById("rct-total-amount");
+  if (rctTotalInp) rctTotalInp.addEventListener("input", recalculateReceiptSummary);
+
+  // Receipts Register Buttons
+  const btnRctListRef = document.getElementById("btn-rct-list-refresh");
+  if (btnRctListRef) btnRctListRef.addEventListener("click", renderCustomerReceiptsRegister);
+
+  const btnRctListNew = document.getElementById("btn-rct-list-new");
+  if (btnRctListNew) btnRctListNew.addEventListener("click", () => showScreen("view-customer-receipt"));
+
+  const rctSearch = document.getElementById("rct-list-search");
+  if (rctSearch) rctSearch.addEventListener("input", renderCustomerReceiptsRegister);
+
+  const rctStatus = document.getElementById("rct-list-status");
+  if (rctStatus) rctStatus.addEventListener("change", renderCustomerReceiptsRegister);
+
+  // Supplier Payment Action buttons
+  const btnPmtReset = document.getElementById("btn-pmt-reset");
+  if (btnPmtReset) btnPmtReset.addEventListener("click", resetSupplierPaymentForm);
+
+  const btnPmtSave = document.getElementById("btn-pmt-save");
+  if (btnPmtSave) btnPmtSave.addEventListener("click", saveSupplierPayment);
+
+  const pmtSuppSelect = document.getElementById("pmt-supplier-select");
+  if (pmtSuppSelect) pmtSuppSelect.addEventListener("change", onSupplierPaymentSupplierChanged);
+
+  const pmtMethodSelect = document.getElementById("pmt-payment-method");
+  if (pmtMethodSelect) {
+    pmtMethodSelect.addEventListener("change", (e) => {
+      populateAccountsDropdown("pmt-source-account", e.target.value);
+    });
+  }
+
+  const pmtTotalInp = document.getElementById("pmt-total-amount");
+  if (pmtTotalInp) pmtTotalInp.addEventListener("input", recalculatePaymentSummary);
+
+  // Payments Register Buttons
+  const btnPmtListRef = document.getElementById("btn-pmt-list-refresh");
+  if (btnPmtListRef) btnPmtListRef.addEventListener("click", renderSupplierPaymentsRegister);
+
+  const btnPmtListNew = document.getElementById("btn-pmt-list-new");
+  if (btnPmtListNew) btnPmtListNew.addEventListener("click", () => showScreen("view-supplier-payment"));
+
+  const pmtSearch = document.getElementById("pmt-list-search");
+  if (pmtSearch) pmtSearch.addEventListener("input", renderSupplierPaymentsRegister);
+
+  const pmtStatus = document.getElementById("pmt-list-status");
+  if (pmtStatus) pmtStatus.addEventListener("change", renderSupplierPaymentsRegister);
+
+  // Outstandings & Recon Buttons
+  const btnCustOutRef = document.getElementById("btn-cust-out-refresh");
+  if (btnCustOutRef) btnCustOutRef.addEventListener("click", renderCustomerOutstandingView);
+
+  const custOutSearch = document.getElementById("cust-out-search");
+  if (custOutSearch) custOutSearch.addEventListener("input", renderCustomerOutstandingView);
+
+  const btnSuppOutRef = document.getElementById("btn-supp-out-refresh");
+  if (btnSuppOutRef) btnSuppOutRef.addEventListener("click", renderSupplierOutstandingView);
+
+  const suppOutSearch = document.getElementById("supp-out-search");
+  if (suppOutSearch) suppOutSearch.addEventListener("input", renderSupplierOutstandingView);
+
+  const btnReconRun = document.getElementById("btn-recon-run-audit");
+  if (btnReconRun) btnReconRun.addEventListener("click", renderReconciliationDashboard);
+
+  // Modals buttons
+  const btnCloseVchDet = document.getElementById("btn-close-voucher-details");
+  const btnVchDetClose = document.getElementById("btn-vch-det-close");
+  if (btnCloseVchDet) btnCloseVchDet.addEventListener("click", () => closeModal("modal-voucher-details"));
+  if (btnVchDetClose) btnVchDetClose.addEventListener("click", () => closeModal("modal-voucher-details"));
+
+  const btnVchDetPrint = document.getElementById("btn-vch-det-print");
+  if (btnVchDetPrint) {
+    btnVchDetPrint.addEventListener("click", () => {
+      if (activePrintContext) {
+        closeModal("modal-voucher-details");
+        openVoucherPrintModal(activePrintContext.data, activePrintContext.type);
+      }
+    });
+  }
+
+  const btnCloseRev = document.getElementById("btn-close-reversal-modal");
+  const btnRevCancel = document.getElementById("btn-reversal-cancel");
+  if (btnCloseRev) btnCloseRev.addEventListener("click", () => closeModal("modal-reversal-confirm"));
+  if (btnRevCancel) btnRevCancel.addEventListener("click", () => closeModal("modal-reversal-confirm"));
+
+  const btnRevConfirm = document.getElementById("btn-reversal-confirm");
+  if (btnRevConfirm) btnRevConfirm.addEventListener("click", executeVoucherReversal);
+
+  const btnClosePrint = document.getElementById("btn-close-voucher-print");
+  const btnPrintClose = document.getElementById("btn-print-slip-close");
+  if (btnClosePrint) btnClosePrint.addEventListener("click", () => closeModal("modal-voucher-print"));
+  if (btnPrintClose) btnPrintClose.addEventListener("click", () => closeModal("modal-voucher-print"));
+
+  const btnPrintAction = document.getElementById("btn-print-slip-action");
+  if (btnPrintAction) {
+    btnPrintAction.addEventListener("click", () => {
+      window.print();
+    });
+  }
+
+  // Keyboard shortcuts (F2, F5, Esc)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F2") {
+      if (currentScreen === "view-customer-receipt") {
+        e.preventDefault();
+        saveCustomerReceipt();
+      } else if (currentScreen === "view-supplier-payment") {
+        e.preventDefault();
+        saveSupplierPayment();
+      } else if (currentScreen === "view-receipt-list") {
+        e.preventDefault();
+        showScreen("view-customer-receipt");
+      } else if (currentScreen === "view-payment-list") {
+        e.preventDefault();
+        showScreen("view-supplier-payment");
+      }
+    } else if (e.key === "F5") {
+      if (currentScreen === "view-customer-receipt") {
+        e.preventDefault();
+        showScreen("view-receipt-list");
+      } else if (currentScreen === "view-supplier-payment") {
+        e.preventDefault();
+        showScreen("view-payment-list");
+      } else if (currentScreen === "view-receipt-list") {
+        e.preventDefault();
+        renderCustomerReceiptsRegister();
+      } else if (currentScreen === "view-payment-list") {
+        e.preventDefault();
+        renderSupplierPaymentsRegister();
+      } else if (currentScreen === "view-customer-outstanding") {
+        e.preventDefault();
+        renderCustomerOutstandingView();
+      } else if (currentScreen === "view-supplier-outstanding") {
+        e.preventDefault();
+        renderSupplierOutstandingView();
+      } else if (currentScreen === "view-reconciliation-dashboard") {
+        e.preventDefault();
+        renderReconciliationDashboard();
+      }
+    } else if (e.key === "Escape") {
+      const modalDet = document.getElementById("modal-voucher-details");
+      const modalRev = document.getElementById("modal-reversal-confirm");
+      const modalPrt = document.getElementById("modal-voucher-print");
+      if (modalDet && modalDet.classList.contains("show")) {
+        closeModal("modal-voucher-details");
+        return;
+      }
+      if (modalRev && modalRev.classList.contains("show")) {
+        closeModal("modal-reversal-confirm");
+        return;
+      }
+      if (modalPrt && modalPrt.classList.contains("show")) {
+        closeModal("modal-voucher-print");
+        return;
+      }
+      const paymentScreens = [
+        "view-customer-receipt", "view-receipt-list",
+        "view-supplier-payment", "view-payment-list",
+        "view-customer-outstanding", "view-supplier-outstanding",
+        "view-reconciliation-dashboard"
+      ];
+      if (paymentScreens.includes(currentScreen)) {
+        showScreen("view-dashboard");
+      }
+    }
+  });
+}
+
+
 // Global Exports
 window.syncItemPrintName = syncItemPrintName;
 window.resetProductMasterForm = resetProductMasterForm;
@@ -11519,6 +13137,16 @@ window.calcRowAmount = calcRowAmount;
 window.recalculateVoucherTotals = recalculateVoucherTotals;
 window.setupPartyAutocomplete = setupPartyAutocomplete;
 window.renderVchAutocompletePopup = renderVchAutocompletePopup;
+window.initCustomerReceiptScreen = initCustomerReceiptScreen;
+window.renderCustomerReceiptsRegister = renderCustomerReceiptsRegister;
+window.initSupplierPaymentScreen = initSupplierPaymentScreen;
+window.renderSupplierPaymentsRegister = renderSupplierPaymentsRegister;
+window.renderCustomerOutstandingView = renderCustomerOutstandingView;
+window.renderSupplierOutstandingView = renderSupplierOutstandingView;
+window.renderReconciliationDashboard = renderReconciliationDashboard;
+window.openVoucherDetailsModal = openVoucherDetailsModal;
+window.openReversalModal = openReversalModal;
+window.openVoucherPrintModal = openVoucherPrintModal;
 
 setupEnterpriseErpEventListeners();
 setupCompanyAndPlaceholderModalListeners();
@@ -11526,5 +13154,6 @@ setupThreeOptionWorkflowListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
 initBarcodeModule();
+initPaymentAndReceiptModule();
 ZoomController.init();
 showScreen("view-login");

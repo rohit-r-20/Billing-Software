@@ -59,6 +59,9 @@ from services.traditional_recovery_token import (
     verify_recovery_token,
     consume_recovery_token,
 )
+from services.traditional_accounting_service import TraditionalAccountingService
+from services.traditional_payment_service import TraditionalPaymentService
+from services.traditional_financial_reconciliation_service import TraditionalFinancialReconciliationService
 from db.traditional_database import traditional_db_manager
 
 
@@ -86,6 +89,15 @@ class BackendBridge(QObject):
         self._traditional_customer_service = TraditionalCustomerService(traditional_db_manager)
         self._traditional_dashboard_service = TraditionalDashboardService(traditional_db_manager)
         self._traditional_recovery_service = TraditionalRecoveryService(traditional_db_manager)
+        self._traditional_accounting_service = TraditionalAccountingService(traditional_db_manager)
+        self._traditional_payment_service = TraditionalPaymentService(
+            traditional_db_manager, accounting_service=self._traditional_accounting_service
+        )
+        self._traditional_recon_service = TraditionalFinancialReconciliationService(
+            db_manager=traditional_db_manager,
+            accounting_service=self._traditional_accounting_service,
+            payment_service=self._traditional_payment_service,
+        )
         # Register mobile scanner callbacks
         mobile_scanner_service.scan_callback = self._on_mobile_scan
         mobile_scanner_service.status_callback = self._on_mobile_status
@@ -1896,6 +1908,402 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": res})
         except Exception as e:
             logger.error(f"Error in traditional_recoverCompanyAndAdmin: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # =========================================================================
+    # Phase 3.6: Traditional Payment, Receipt, Outstanding & Reconciliation Slots
+    # =========================================================================
+
+    # 31. Peek Next Receipt Voucher Number
+    @pyqtSlot(str, result=str)
+    def traditional_getNextReceiptNumber(self, prefix: str = "RCT") -> str:
+        try:
+            session = self._require_traditional_session()
+            vch = self._traditional_payment_service.peek_next_receipt_number(
+                company_id=session.company_id,
+                branch_id=session.branch_id,
+                prefix=(prefix or "RCT").strip(),
+            )
+            return json.dumps({"success": True, "data": {"voucher_number": vch}})
+        except Exception as e:
+            logger.error(f"Error in traditional_getNextReceiptNumber: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 32. Get Customer Invoices for Receipt Allocation
+    @pyqtSlot(str, str, result=str)
+    def traditional_getCustomerInvoices(self, customer_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            invoices = self._traditional_payment_service.get_customer_invoices_for_receipt(
+                company_id=session.company_id,
+                customer_id=customer_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+                branch_id=session.branch_id,
+            )
+            return json.dumps({"success": True, "data": invoices}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getCustomerInvoices: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 33. Create Customer Receipt (Atomic)
+    @pyqtSlot(str, result=str)
+    def traditional_createCustomerReceipt(self, receipt_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Cashier", "Manager")
+            data = json.loads(receipt_data_json)
+            cust_acc_id = data.pop("customer_account_id", None) or data.pop("customer_id", None)
+            data["company_id"] = session.company_id
+            if not data.get("branch_id") and session.branch_id:
+                data["branch_id"] = session.branch_id
+            data["customer_account_id"] = cust_acc_id
+            data["user_id"] = session.user_id
+            data.pop("created_by", None)
+            res = self._traditional_payment_service.create_customer_receipt(**data)
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_createCustomerReceipt: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 34. Get Customer Receipt Details
+    @pyqtSlot(str, result=str)
+    def traditional_getCustomerReceipt(self, receipt_id: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_customer_receipt_details(
+                company_id=session.company_id,
+                receipt_id=receipt_id.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getCustomerReceipt: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 35. List Customer Receipts
+    @pyqtSlot(str, str, str, str, str, int, int, result=str)
+    def traditional_listCustomerReceipts(
+        self,
+        customer_id: str = "",
+        from_date: str = "",
+        to_date: str = "",
+        status: str = "",
+        search: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_customer_receipts(
+                company_id=session.company_id,
+                customer_id=customer_id.strip() if customer_id else None,
+                from_date=from_date.strip() if from_date else None,
+                to_date=to_date.strip() if to_date else None,
+                status=status.strip() if status else None,
+                search=search.strip() if search else None,
+                limit=limit if limit > 0 else 50,
+                offset=offset if offset >= 0 else 0,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listCustomerReceipts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 36. Reverse Customer Receipt (Controlled Managerial Reversal)
+    @pyqtSlot(str, str, result=str)
+    def traditional_reverseCustomerReceipt(self, receipt_id: str, reversal_reason: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            if not reversal_reason or not reversal_reason.strip():
+                return json.dumps({"success": False, "error": "Reversal reason is mandatory."})
+            res = self._traditional_payment_service.reverse_customer_receipt(
+                company_id=session.company_id,
+                receipt_id=receipt_id.strip(),
+                user_id=session.user_id,
+                reversal_reason=reversal_reason.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reverseCustomerReceipt: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 37. Peek Next Payment Voucher Number
+    @pyqtSlot(str, result=str)
+    def traditional_getNextPaymentNumber(self, prefix: str = "PMT") -> str:
+        try:
+            session = self._require_traditional_session()
+            vch = self._traditional_payment_service.peek_next_payment_number(
+                company_id=session.company_id,
+                branch_id=session.branch_id,
+                prefix=(prefix or "PMT").strip(),
+            )
+            return json.dumps({"success": True, "data": {"voucher_number": vch}})
+        except Exception as e:
+            logger.error(f"Error in traditional_getNextPaymentNumber: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 38. List Suppliers
+    @pyqtSlot(str, bool, result=str)
+    def traditional_listSuppliers(self, search_term: str = "", active_only: bool = True) -> str:
+        try:
+            session = self._require_traditional_session()
+            suppliers = self._traditional_customer_service.list_customers(
+                session.company_id,
+                search_term=search_term.strip() if search_term else None,
+                active_only=active_only,
+                account_type="Creditor",
+            )
+            return json.dumps({"success": True, "data": suppliers})
+        except Exception as e:
+            logger.error(f"Error in traditional_listSuppliers: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 39. Get Supplier Bills for Payment Allocation
+    @pyqtSlot(str, str, result=str)
+    def traditional_getSupplierBills(self, supplier_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            bills = self._traditional_payment_service.get_supplier_bills_for_payment(
+                company_id=session.company_id,
+                supplier_id=supplier_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+                branch_id=session.branch_id,
+            )
+            return json.dumps({"success": True, "data": bills}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getSupplierBills: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 40. Create Supplier Payment (Atomic)
+    @pyqtSlot(str, result=str)
+    def traditional_createSupplierPayment(self, payment_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Cashier", "Manager")
+            data = json.loads(payment_data_json)
+            supp_acc_id = data.pop("supplier_account_id", None) or data.pop("supplier_id", None)
+            source_acc_id = data.pop("source_account_id", None) or data.pop("payment_account_id", None)
+            data["company_id"] = session.company_id
+            if not data.get("branch_id") and session.branch_id:
+                data["branch_id"] = session.branch_id
+            data["supplier_account_id"] = supp_acc_id
+            data["source_account_id"] = source_acc_id
+            data["user_id"] = session.user_id
+            data.pop("created_by", None)
+            res = self._traditional_payment_service.create_supplier_payment(**data)
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_createSupplierPayment: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 41. Get Supplier Payment Details
+    @pyqtSlot(str, result=str)
+    def traditional_getSupplierPayment(self, payment_id: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_supplier_payment_details(
+                company_id=session.company_id,
+                payment_id=payment_id.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getSupplierPayment: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 42. List Supplier Payments
+    @pyqtSlot(str, str, str, str, str, int, int, result=str)
+    def traditional_listSupplierPayments(
+        self,
+        supplier_id: str = "",
+        from_date: str = "",
+        to_date: str = "",
+        status: str = "",
+        search: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_supplier_payments(
+                company_id=session.company_id,
+                supplier_id=supplier_id.strip() if supplier_id else None,
+                from_date=from_date.strip() if from_date else None,
+                to_date=to_date.strip() if to_date else None,
+                status=status.strip() if status else None,
+                search=search.strip() if search else None,
+                limit=limit if limit > 0 else 50,
+                offset=offset if offset >= 0 else 0,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listSupplierPayments: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 43. Reverse Supplier Payment (Controlled Managerial Reversal)
+    @pyqtSlot(str, str, result=str)
+    def traditional_reverseSupplierPayment(self, payment_id: str, reversal_reason: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            if not reversal_reason or not reversal_reason.strip():
+                return json.dumps({"success": False, "error": "Reversal reason is mandatory."})
+            res = self._traditional_payment_service.reverse_supplier_payment(
+                company_id=session.company_id,
+                payment_id=payment_id.strip(),
+                user_id=session.user_id,
+                reversal_reason=reversal_reason.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reverseSupplierPayment: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 44. List Cash and Bank Accounts
+    @pyqtSlot(result=str)
+    def traditional_listCashAndBankAccounts(self) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_cash_and_bank_accounts(session.company_id)
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listCashAndBankAccounts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 45. Customer Outstanding
+    @pyqtSlot(str, str, result=str)
+    def traditional_getCustomerOutstanding(self, customer_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_customer_outstanding(
+                company_id=session.company_id,
+                customer_account_id=customer_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getCustomerOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 46. List All Customers Outstanding (Receivables)
+    @pyqtSlot(str, result=str)
+    def traditional_listCustomersOutstanding(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_customers_outstanding(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listCustomersOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 47. Supplier Outstanding
+    @pyqtSlot(str, str, result=str)
+    def traditional_getSupplierOutstanding(self, supplier_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_supplier_outstanding(
+                company_id=session.company_id,
+                supplier_account_id=supplier_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getSupplierOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 48. List All Suppliers Outstanding (Payables)
+    @pyqtSlot(str, result=str)
+    def traditional_listSuppliersOutstanding(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_suppliers_outstanding(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listSuppliersOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 49. Financial Reconciliation Summary
+    @pyqtSlot(str, result=str)
+    def traditional_getFinancialReconciliationSummary(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.get_financial_reconciliation_summary(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            # Map top-level keys and UI fields
+            verdict = res.get("overall_verdict", "HEALTHY")
+            res["overall_status"] = "BALANCED" if verdict == "HEALTHY" else "MISMATCHED"
+            sub = res.get("subsystems", {})
+            for k, v in sub.items():
+                res[k] = v
+            # Alias journal_audit from journal_integrity if needed
+            if "journal_integrity" in sub and "journal_audit" not in res:
+                res["journal_audit"] = sub["journal_integrity"]
+            # Ensure card fields for UI
+            if "customer_ar" in res:
+                res["customer_ar"]["gl_ar_balance"] = res["customer_ar"].get("total_gl_balance")
+                res["customer_ar"]["subledger_net_receivable"] = res["customer_ar"].get("total_subledger_balance")
+                res["customer_ar"]["discrepancy"] = res["customer_ar"].get("difference")
+            if "supplier_ap" in res:
+                res["supplier_ap"]["gl_ap_balance"] = res["supplier_ap"].get("total_gl_balance")
+                res["supplier_ap"]["subledger_net_payable"] = res["supplier_ap"].get("total_subledger_balance")
+                res["supplier_ap"]["discrepancy"] = res["supplier_ap"].get("difference")
+            if "customer_advances" in res:
+                res["customer_advances"]["unallocated_receipts_advances"] = res["customer_advances"].get("total_unallocated_advances")
+                res["customer_advances"]["discrepancy"] = "0.00"
+            if "supplier_advances" in res:
+                res["supplier_advances"]["unallocated_payments_advances"] = res["supplier_advances"].get("total_unallocated_advances")
+                res["supplier_advances"]["discrepancy"] = "0.00"
+            if "journal_audit" in res:
+                res["journal_audit"]["total_anomalies_count"] = res["journal_audit"].get("total_anomalies", 0)
+
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getFinancialReconciliationSummary: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 50. Reconcile Customer AR
+    @pyqtSlot(str, result=str)
+    def traditional_reconcileCustomerAR(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.reconcile_customer_ar(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reconcileCustomerAR: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 51. Reconcile Supplier AP
+    @pyqtSlot(str, result=str)
+    def traditional_reconcileSupplierAP(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.reconcile_supplier_ap(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reconcileSupplierAP: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 52. Reconcile Cash and Bank
+    @pyqtSlot(str, result=str)
+    def traditional_reconcileCashAndBank(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.reconcile_cash_and_bank(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reconcileCashAndBank: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
 
