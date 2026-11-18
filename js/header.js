@@ -118,7 +118,11 @@ class HeaderManager {
     if (settingsBtn) {
       settingsBtn.innerHTML = window.getLucideIcon("settings", "", 16);
       settingsBtn.addEventListener("click", () => {
-        if (typeof window.openModal === "function") window.openModal("modal-config");
+        if (typeof window.showScreen === "function") {
+          window.showScreen("view-configuration");
+        } else if (typeof window.openModal === "function") {
+          window.openModal("modal-config");
+        }
       });
     }
 
