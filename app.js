@@ -22,6 +22,8 @@ let lastFastBillingScreen = "view-fast-billing";
 let isSavingPosSale = false;
 let currentPrintVchId = null;
 let currentPrintVchData = null;
+let currentPrintVoucherType = "sales_invoice";
+let currentPrintIsReprint = false;
 let printSourceScreen = "view-fast-billing";
 let currentPrintPaperFormat = "thermal-80";
 let currentPrintOrientation = "portrait";
@@ -56,6 +58,14 @@ const viewStockAdjustments = document.getElementById("view-stock-adjustments");
 const viewDayBook = document.getElementById("view-day-book");
 const viewFastBillingHistory = document.getElementById("view-fast-billing-history");
 const viewFastBillingPrint = document.getElementById("view-fast-billing-print");
+const viewCustomerReceipt = document.getElementById("view-customer-receipt");
+const viewReceiptList = document.getElementById("view-receipt-list");
+const viewSupplierPayment = document.getElementById("view-supplier-payment");
+const viewPaymentList = document.getElementById("view-payment-list");
+const viewCustomerOutstanding = document.getElementById("view-customer-outstanding");
+const viewSupplierOutstanding = document.getElementById("view-supplier-outstanding");
+const viewReconciliationDashboard = document.getElementById("view-reconciliation-dashboard");
+const viewConfiguration = document.getElementById("view-configuration");
 
 // Dual Billing Mode & Tabs DOM Elements
 const appTabsBar = document.getElementById("app-tabs-bar");
@@ -625,7 +635,15 @@ function showScreen(screenId) {
     viewSupplierMaster,
     viewStockSummary,
     viewStockAdjustments,
-    viewDayBook
+    viewDayBook,
+    viewCustomerReceipt,
+    viewReceiptList,
+    viewSupplierPayment,
+    viewPaymentList,
+    viewCustomerOutstanding,
+    viewSupplierOutstanding,
+    viewReconciliationDashboard,
+    viewConfiguration
   ];
 
   allViews.forEach((view) => {
@@ -697,7 +715,15 @@ function showScreen(screenId) {
     "view-stock-summary": { title: "Stock Valuation & WAC Summary", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Stock Valuation</strong>" },
     "view-stock-adjustments": { title: "Stock Adjustments & Transfers", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Stock Operations</strong>" },
     "view-day-book": { title: "Financial Day Book & Trial Balance", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Day Book & Trial Balance</strong>" },
+    "view-customer-receipt": { title: "Customer Receipt (Collection)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Customer Receipt</strong>" },
+    "view-receipt-list": { title: "Customer Receipts Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Receipts Register</strong>" },
+    "view-supplier-payment": { title: "Supplier Payment (Disbursement)", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Supplier Payment</strong>" },
+    "view-payment-list": { title: "Supplier Payments Register", bc: "Alpha Billing &rsaquo; Transaction &rsaquo; <strong>Payments Register</strong>" },
+    "view-customer-outstanding": { title: "Accounts Receivable (Customer Outstandings)", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Accounts Receivable</strong>" },
+    "view-supplier-outstanding": { title: "Accounts Payable (Supplier Outstandings)", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Accounts Payable</strong>" },
+    "view-reconciliation-dashboard": { title: "Financial Reconciliation & Audit", bc: "Alpha Billing &rsaquo; Display &rsaquo; <strong>Financial Reconciliation</strong>" },
     "view-companies": { title: "List of Companies", bc: "Alpha Billing &rsaquo; Company &rsaquo; <strong>Switch Company</strong>" },
+    "view-configuration": { title: "Paper & Hardware Configuration", bc: "Anti Matrix &rsaquo; Administration &rsaquo; <strong>Paper Configuration</strong>" },
     "view-login": { title: "Sign In", bc: "Alpha Billing &rsaquo; <strong>Authentication</strong>" }
   };
   if (viewMeta[screenId]) {
@@ -720,7 +746,8 @@ function showScreen(screenId) {
     "view-add-item-master": "btn-nav-add-product",
     "view-add-account-master": "btn-nav-customers",
     "view-account-list": "btn-nav-customers",
-    "view-day-book": "btn-nav-daybook"
+    "view-day-book": "btn-nav-daybook",
+    "view-configuration": "sub-admin-configuration"
   };
   const activeNavId = screenNavMap[screenId];
   document.querySelectorAll(".dash-nav-item, .nav-sub-btn").forEach(item => {
@@ -786,6 +813,24 @@ function showScreen(screenId) {
     initStockAdjustmentsScreen();
   } else if (screenId === "view-day-book") {
     renderDayBookScreen();
+  } else if (screenId === "view-customer-receipt") {
+    initCustomerReceiptScreen();
+  } else if (screenId === "view-receipt-list") {
+    renderCustomerReceiptsRegister();
+  } else if (screenId === "view-supplier-payment") {
+    initSupplierPaymentScreen();
+  } else if (screenId === "view-payment-list") {
+    renderSupplierPaymentsRegister();
+  } else if (screenId === "view-customer-outstanding") {
+    renderCustomerOutstandingView();
+  } else if (screenId === "view-supplier-outstanding") {
+    renderSupplierOutstandingView();
+  } else if (screenId === "view-reconciliation-dashboard") {
+    renderReconciliationDashboard();
+  } else if (screenId === "view-configuration") {
+    if (typeof initPaperConfigScreen === "function") {
+      initPaperConfigScreen();
+    }
   }
 }
 
@@ -975,6 +1020,8 @@ function initLoginModeToggle() {
     btnFast.style.background = "#f8fafc";
     btnFast.style.color = "#475569";
     btnFast.style.borderColor = "#cbd5e1";
+    const btnOpenRecovery = document.getElementById("btn-open-traditional-recovery");
+    if (btnOpenRecovery) btnOpenRecovery.style.display = (companies && companies.length > 0) ? "inline-flex" : "none";
     fetchAndPopulateCompanies();
   };
 
@@ -987,10 +1034,15 @@ function initLoginModeToggle() {
     btnTrad.style.background = "#f8fafc";
     btnTrad.style.color = "#475569";
     btnTrad.style.borderColor = "#cbd5e1";
-    // Never show Traditional setup in Fast Billing mode
+    // Never show Traditional setup or recovery in Fast Billing mode
     const tradSetupContainer = document.getElementById("traditional-setup-container");
     if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    const btnOpenRecovery = document.getElementById("btn-open-traditional-recovery");
+    if (btnOpenRecovery) btnOpenRecovery.style.display = "none";
     closeTraditionalSetupModal();
+    if (typeof closeTraditionalRecoveryModal === "function") {
+      closeTraditionalRecoveryModal();
+    }
     fetchAndPopulateCompanies();
   };
 }
@@ -1000,6 +1052,7 @@ function populateLoginCompanies(isLoading = false) {
   const currentVal = loginCompanySelect.value;
   loginCompanySelect.innerHTML = "";
   const tradSetupContainer = document.getElementById("traditional-setup-container");
+  const btnOpenRecovery = document.getElementById("btn-open-traditional-recovery");
 
   if (isLoading) {
     const opt = document.createElement("option");
@@ -1013,6 +1066,7 @@ function populateLoginCompanies(isLoading = false) {
     if (loginUserInput) loginUserInput.disabled = true;
     if (loginPwdInput) loginPwdInput.disabled = true;
     if (tradSetupContainer) tradSetupContainer.style.display = "none";
+    if (btnOpenRecovery) btnOpenRecovery.style.display = "none";
     return;
   }
 
@@ -1036,11 +1090,15 @@ function populateLoginCompanies(isLoading = false) {
     if (btnLoginSubmit) btnLoginSubmit.disabled = true;
     if (loginUserInput) loginUserInput.disabled = true;
     if (loginPwdInput) loginPwdInput.disabled = true;
+    if (btnOpenRecovery) btnOpenRecovery.style.display = "none";
     return;
   }
 
   // Companies loaded from backend - enable controls
   if (tradSetupContainer) tradSetupContainer.style.display = "none";
+  if (btnOpenRecovery) {
+    btnOpenRecovery.style.display = activeLoginMode === "traditional" ? "inline-flex" : "none";
+  }
   loginCompanySelect.disabled = false;
   if (btnLoginSubmit) btnLoginSubmit.disabled = false;
   if (loginUserInput) loginUserInput.disabled = false;
@@ -1241,6 +1299,231 @@ function initTraditionalSetupListeners() {
   }
 }
 
+// =============================================================
+// TRADITIONAL BILLING COMPANY & ADMINISTRATOR RECOVERY ENGINE
+// =============================================================
+let isSubmittingTraditionalRecovery = false;
+
+function openTraditionalRecoveryModal() {
+  const modal = document.getElementById("modal-traditional-recovery");
+  if (!modal) return;
+  hideTraditionalRecoveryAlert();
+  setTraditionalRecoveryLoading(false);
+
+  const compIdInput = document.getElementById("trad-recovery-company-id");
+  const compNameInput = document.getElementById("trad-recovery-company-name");
+  const compCodeInput = document.getElementById("trad-recovery-company-code");
+  const finYearInput = document.getElementById("trad-recovery-finyear");
+  const gstinInput = document.getElementById("trad-recovery-gstin");
+  const stateInput = document.getElementById("trad-recovery-state");
+  const adminIdInput = document.getElementById("trad-recovery-admin-id");
+  const adminUserInput = document.getElementById("trad-recovery-admin-username");
+  const newPwdInput = document.getElementById("trad-recovery-new-pwd");
+  const confirmPwdInput = document.getElementById("trad-recovery-confirm-pwd");
+
+  if (compIdInput) compIdInput.value = "";
+  if (compNameInput) compNameInput.value = "Loading...";
+  if (compCodeInput) compCodeInput.value = "Loading...";
+  if (finYearInput) finYearInput.value = "";
+  if (gstinInput) gstinInput.value = "";
+  if (stateInput) stateInput.value = "";
+  if (adminIdInput) adminIdInput.value = "";
+  if (adminUserInput) adminUserInput.value = "";
+  if (newPwdInput) newPwdInput.value = "";
+  if (confirmPwdInput) confirmPwdInput.value = "";
+
+  modal.style.display = "flex";
+
+  let selectedCompId = "";
+  if (loginCompanySelect && loginCompanySelect.value && Array.isArray(companies)) {
+    const matched = companies.find((c) => c.code === loginCompanySelect.value);
+    if (matched && matched.id) selectedCompId = matched.id;
+  }
+
+  if (window.backend && typeof window.backend.traditional_getCompanyRecoveryProfile === "function") {
+    window.backend.traditional_getCompanyRecoveryProfile(selectedCompId, (resp) => {
+      try {
+        const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (r && r.success && r.data) {
+          const d = r.data;
+          if (compIdInput) compIdInput.value = d.company_id || "";
+          if (compNameInput) compNameInput.value = d.company_name || "";
+          if (compCodeInput) compCodeInput.value = d.company_code || "";
+          if (finYearInput) finYearInput.value = d.fin_year || "";
+          if (gstinInput) gstinInput.value = d.gstin || "N/A";
+          if (stateInput) stateInput.value = d.state || "N/A";
+          if (adminIdInput) adminIdInput.value = d.admin_user_id || "";
+          if (adminUserInput) adminUserInput.value = d.admin_username || "";
+          if (compNameInput) compNameInput.focus();
+        } else {
+          showTraditionalRecoveryAlert(r && r.error ? r.error : "Failed to load recovery information.");
+        }
+      } catch (e) {
+        showTraditionalRecoveryAlert("Error loading recovery profile: " + e.message);
+      }
+    });
+  } else {
+    // Fallback if backend not ready
+    if (compNameInput) compNameInput.value = "";
+    if (compCodeInput) compCodeInput.value = "";
+  }
+}
+
+function closeTraditionalRecoveryModal() {
+  const modal = document.getElementById("modal-traditional-recovery");
+  if (modal) modal.style.display = "none";
+  hideTraditionalRecoveryAlert();
+  setTraditionalRecoveryLoading(false);
+}
+
+function showTraditionalRecoveryAlert(msg) {
+  const alertBox = document.getElementById("trad-recovery-alert");
+  const alertText = document.getElementById("trad-recovery-alert-text");
+  if (alertBox && alertText) {
+    alertText.textContent = msg;
+    alertBox.style.display = "flex";
+  }
+}
+
+function hideTraditionalRecoveryAlert() {
+  const alertBox = document.getElementById("trad-recovery-alert");
+  if (alertBox) alertBox.style.display = "none";
+}
+
+function setTraditionalRecoveryLoading(isLoading) {
+  isSubmittingTraditionalRecovery = isLoading;
+  const btnSubmit = document.getElementById("btn-submit-traditional-recovery");
+  const btnCancel = document.getElementById("btn-cancel-traditional-recovery");
+  const spinner = document.getElementById("trad-recovery-spinner");
+  const submitText = document.getElementById("trad-recovery-submit-text");
+
+  if (btnSubmit) btnSubmit.disabled = isLoading;
+  if (btnCancel) btnCancel.disabled = isLoading;
+  if (spinner) spinner.style.display = isLoading ? "inline-block" : "none";
+  if (submitText) {
+    submitText.textContent = isLoading ? "Authorizing Recovery..." : "Authorize & Apply Recovery →";
+  }
+}
+
+function handleTraditionalRecoverySubmit() {
+  if (isSubmittingTraditionalRecovery) return;
+
+  const compIdInput = document.getElementById("trad-recovery-company-id");
+  const compNameInput = document.getElementById("trad-recovery-company-name");
+  const compCodeInput = document.getElementById("trad-recovery-company-code");
+  const adminIdInput = document.getElementById("trad-recovery-admin-id");
+  const adminUserInput = document.getElementById("trad-recovery-admin-username");
+  const newPwdInput = document.getElementById("trad-recovery-new-pwd");
+  const confirmPwdInput = document.getElementById("trad-recovery-confirm-pwd");
+
+  const companyId = compIdInput ? compIdInput.value.trim() : "";
+  const companyName = compNameInput ? compNameInput.value.trim() : "";
+  const companyCode = compCodeInput ? compCodeInput.value.trim().toUpperCase() : "";
+  const adminUserId = adminIdInput ? adminIdInput.value.trim() : "";
+  const adminUsername = adminUserInput ? adminUserInput.value.trim().toUpperCase() : "";
+  const newPwd = newPwdInput ? newPwdInput.value : "";
+  const confirmPwd = confirmPwdInput ? confirmPwdInput.value : "";
+
+  hideTraditionalRecoveryAlert();
+
+  if (!companyId) {
+    showTraditionalRecoveryAlert("Target company ID is missing.");
+    return;
+  }
+  if (!companyName) {
+    showTraditionalRecoveryAlert("Please enter a valid company name.");
+    if (compNameInput) compNameInput.focus();
+    return;
+  }
+  if (!companyCode) {
+    showTraditionalRecoveryAlert("Please enter a valid company code.");
+    if (compCodeInput) compCodeInput.focus();
+    return;
+  }
+  if (!adminUsername) {
+    showTraditionalRecoveryAlert("Please enter an Administrator username.");
+    if (adminUserInput) adminUserInput.focus();
+    return;
+  }
+
+  if (newPwd || confirmPwd) {
+    if (newPwd.length < 4) {
+      showTraditionalRecoveryAlert("Password must be at least 4 characters.");
+      if (newPwdInput) newPwdInput.focus();
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      showTraditionalRecoveryAlert("New password and confirmation do not match.");
+      if (confirmPwdInput) confirmPwdInput.focus();
+      return;
+    }
+  }
+
+  const payload = {
+    company_id: companyId,
+    company_name: companyName,
+    company_code: companyCode,
+    admin_user_id: adminUserId || undefined,
+    admin_username: adminUsername,
+    new_password: newPwd || undefined,
+  };
+
+  setTraditionalRecoveryLoading(true);
+
+  if (window.backend && typeof window.backend.traditional_recoverCompanyAndAdmin === "function") {
+    window.backend.traditional_recoverCompanyAndAdmin(JSON.stringify(payload), (resp) => {
+      setTraditionalRecoveryLoading(false);
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res && res.success) {
+          if (res.data && res.data.warning) {
+            showNotification(res.data.warning);
+          } else {
+            showNotification(`Company and Administrator credentials recovered successfully!`);
+          }
+          closeTraditionalRecoveryModal();
+          fetchAndPopulateCompanies();
+          if (loginUserInput) loginUserInput.value = adminUsername;
+          if (loginPwdInput) {
+            loginPwdInput.value = "";
+            loginPwdInput.focus();
+          }
+        } else {
+          const errMsg = (res && res.error) ? res.error : "Recovery operation failed.";
+          showTraditionalRecoveryAlert(errMsg);
+        }
+      } catch (e) {
+        showTraditionalRecoveryAlert("Unexpected response from backend: " + e.message);
+      }
+    });
+  } else {
+    setTraditionalRecoveryLoading(false);
+    showTraditionalRecoveryAlert("Backend recovery service not connected.");
+  }
+}
+
+function initTraditionalRecoveryListeners() {
+  const btnOpen = document.getElementById("btn-open-traditional-recovery");
+  const btnClose = document.getElementById("btn-close-traditional-recovery-modal");
+  const btnCancel = document.getElementById("btn-cancel-traditional-recovery");
+  const formRecovery = document.getElementById("form-traditional-recovery");
+
+  if (btnOpen) btnOpen.onclick = openTraditionalRecoveryModal;
+  if (btnClose) btnClose.onclick = closeTraditionalRecoveryModal;
+  if (btnCancel) btnCancel.onclick = closeTraditionalRecoveryModal;
+  if (formRecovery) {
+    formRecovery.onsubmit = (e) => {
+      e.preventDefault();
+      handleTraditionalRecoverySubmit();
+    };
+  }
+}
+
+window.openTraditionalRecoveryModal = openTraditionalRecoveryModal;
+window.closeTraditionalRecoveryModal = closeTraditionalRecoveryModal;
+window.handleTraditionalRecoverySubmit = handleTraditionalRecoverySubmit;
+window.initTraditionalRecoveryListeners = initTraditionalRecoveryListeners;
+
 function showLoginAlert(msg) {
   if (loginAlert && loginAlertText) {
     loginAlertText.textContent = msg;
@@ -1340,7 +1623,7 @@ function handleMainLoginSubmit() {
     if (activeLoginMode === "traditional") {
       enterCompanyDashboard(activeCompany);
     } else {
-      openBillingModeSelection(activeCompany);
+      openFastBillingPos();
     }
   };
 
@@ -1588,9 +1871,11 @@ function openFastBillingReprint() {
   }
 }
 
-function openFastBillingPrint(vchId, vchData = null, sourceScreen = "view-fast-billing") {
+function openFastBillingPrint(vchId, vchData = null, sourceScreen = "view-fast-billing", voucherType = "sales_invoice", isReprint = false) {
   currentPrintVchId = vchId;
   currentPrintVchData = vchData;
+  currentPrintVoucherType = voucherType || "sales_invoice";
+  currentPrintIsReprint = !!isReprint;
   printSourceScreen = sourceScreen;
   lastFastBillingScreen = "view-fast-billing-print";
 
@@ -1612,10 +1897,24 @@ function openFastBillingPrint(vchId, vchData = null, sourceScreen = "view-fast-b
     }
   }
 
-  // If full details not passed, fetch from backend
+  // If full details not passed, fetch from backend via authoritative Phase 3 bridge
   if (!currentPrintVchData || !currentPrintVchData.items) {
-    const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
-    if (window.backend && window.backend.getVoucherDetails && vchId) {
+    const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "";
+    const mode = activeBillingMode || "traditional";
+    if (window.backend && window.backend.getVoucherPrintDetails && vchId) {
+      window.backend.getVoucherPrintDetails(compId, currentPrintVoucherType, vchId, mode, (resp) => {
+        try {
+          const res = JSON.parse(resp);
+          if (res.success && res.data) {
+            currentPrintVchData = res.data;
+            if (posPrintVchNo) posPrintVchNo.textContent = res.data.vch_no || res.data.voucher_number || "VCH-001";
+            renderInvoicePrintPreview();
+          }
+        } catch (e) {
+          console.error("Error fetching voucher print details:", e);
+        }
+      });
+    } else if (window.backend && window.backend.getVoucherDetails && vchId) {
       window.backend.getVoucherDetails(compId, vchId, (resp) => {
         try {
           const res = JSON.parse(resp);
@@ -1628,7 +1927,7 @@ function openFastBillingPrint(vchId, vchData = null, sourceScreen = "view-fast-b
       });
     }
   } else {
-    if (posPrintVchNo) posPrintVchNo.textContent = currentPrintVchData.vch_no || "POS-001";
+    if (posPrintVchNo) posPrintVchNo.textContent = currentPrintVchData.vch_no || currentPrintVchData.voucher_number || "POS-001";
     renderInvoicePrintPreview();
   }
 
@@ -1660,27 +1959,44 @@ function renderInvoicePrintPreview() {
   };
 
   const format = currentPrintPaperFormat || "thermal-80";
-  posInvoicePreviewSheet.className = `pos-invoice-sheet sheet-${format}`;
+  const orient = currentPrintOrientation || "portrait";
+  posInvoicePreviewSheet.className = `pos-invoice-sheet sheet-${format} orientation-${orient}`;
+  posInvoicePreviewSheet.style.width = "";
+  posInvoicePreviewSheet.style.minHeight = "";
+  posInvoicePreviewSheet.style.maxWidth = "";
 
   if (format === "thermal-80" || format === "thermal-58") {
     renderThermalReceiptPreview(posInvoicePreviewSheet, comp, vch, format);
   } else if (format === "a4" || format === "a5") {
-    renderTaxInvoiceSheetPreview(posInvoicePreviewSheet, comp, vch, format);
+    renderTaxInvoiceSheetPreview(posInvoicePreviewSheet, comp, vch, format, null, null, orient);
   } else {
     // Custom dimensions
-    const w = document.getElementById("custom-paper-width") ? document.getElementById("custom-paper-width").value : "80";
-    posInvoicePreviewSheet.style.width = `${w}mm`;
-    renderThermalReceiptPreview(posInvoicePreviewSheet, comp, vch, "thermal-80");
+    const w = parseFloat(document.getElementById("custom-paper-width") ? document.getElementById("custom-paper-width").value : "80") || 80;
+    const h = parseFloat(document.getElementById("custom-paper-height") ? document.getElementById("custom-paper-height").value : "150") || 150;
+    let sheetW = w;
+    let sheetH = h;
+    if (orient === "landscape") {
+      sheetW = h;
+      sheetH = w;
+    }
+    posInvoicePreviewSheet.style.width = `${sheetW * 3.78}px`;
+    posInvoicePreviewSheet.style.maxWidth = `${sheetW * 3.78}px`;
+    posInvoicePreviewSheet.style.minHeight = `${sheetH * 3.78}px`;
+    if (sheetW <= 85) {
+      renderThermalReceiptPreview(posInvoicePreviewSheet, comp, vch, "thermal-80");
+    } else {
+      renderTaxInvoiceSheetPreview(posInvoicePreviewSheet, comp, vch, "custom", sheetW, sheetH, orient);
+    }
   }
 }
 
 function renderThermalReceiptPreview(container, comp, vch, format) {
   const is58 = format === "thermal-58";
   const items = vch.items || [];
-  const vchNo = vch.vch_no || "POS-001";
+  const vchNo = vch.vch_no || vch.voucher_number || "POS-001";
   const dateStr = vch.vch_date || new Date().toLocaleDateString("en-IN");
   const timeStr = vch.created_at ? vch.created_at.substring(11, 16) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const party = vch.party_name || "CASH";
+  const party = vch.party_name || vch.customer_name || "CASH";
   const subtotal = parseFloat(vch.subtotal || 0).toFixed(2);
   const cgst = parseFloat(vch.cgst_amount || 0).toFixed(2);
   const sgst = parseFloat(vch.sgst_amount || 0).toFixed(2);
@@ -1694,23 +2010,22 @@ function renderThermalReceiptPreview(container, comp, vch, format) {
     const name = it.item_name || it.name || "Item";
     const qty = parseFloat(it.qty || 0);
     const unit = it.unit || "Pcs.";
-    const price = parseFloat(it.price || 0).toFixed(2);
-    const total = parseFloat(it.line_total || it.amount || (qty * price)).toFixed(2);
+    const price = parseFloat(it.price || it.rate || 0).toFixed(2);
+    const total = parseFloat(it.line_total || it.total || it.amount || (qty * price)).toFixed(2);
     if (is58) {
       return `
         <tr>
-          <td colspan="3">${escapeHtml(name)}</td>
+          <td colspan="2" style="padding-top: 3px; font-weight: 700; overflow-wrap: break-word; word-break: break-word;">${escapeHtml(name)}</td>
         </tr>
-        <tr>
-          <td style="padding-left: 8px;">${qty} ${unit}</td>
-          <td style="text-align: right;">@ ₹${price}</td>
-          <td style="text-align: right; font-weight: 700;">₹${total}</td>
+        <tr style="border-bottom: 1px dotted #e2e8f0;">
+          <td style="padding-left: 6px; font-size: 8.5px; color: #475569;">${qty} ${unit} @ ₹${price}</td>
+          <td style="text-align: right; font-weight: 700; font-size: 9.5px;">₹${total}</td>
         </tr>
       `;
     }
     return `
       <tr>
-        <td>${escapeHtml(name)}</td>
+        <td style="overflow-wrap: break-word; word-break: break-word; padding-right: 4px;">${escapeHtml(name)}</td>
         <td style="text-align: center;">${qty} ${unit}</td>
         <td style="text-align: right;">${price}</td>
         <td style="text-align: right; font-weight: 700;">${total}</td>
@@ -1729,11 +2044,11 @@ function renderThermalReceiptPreview(container, comp, vch, format) {
       <div class="t-divider"></div>
       <table class="t-table">
         <thead>
-          ${is58 ? `<tr><th>Item</th><th style="text-align:right;">Qty/Rate</th><th style="text-align:right;">Total</th></tr>` :
-                   `<tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr>`}
+          ${is58 ? `<tr><th style="width: 55%;">Item</th><th style="width: 45%; text-align: right;">Total</th></tr>` :
+                   `<tr><th style="width: 44%;">Item</th><th style="width: 16%; text-align: center;">Qty</th><th style="width: 20%; text-align: right;">Price</th><th style="width: 20%; text-align: right;">Total</th></tr>`}
         </thead>
         <tbody>
-          ${itemsHtml || '<tr><td colspan="4" style="text-align:center; padding:10px;">No items</td></tr>'}
+          ${itemsHtml || '<tr><td colspan="4" style="text-align: center; padding: 10px;">No items</td></tr>'}
         </tbody>
       </table>
       <div class="t-divider"></div>
@@ -1747,20 +2062,21 @@ function renderThermalReceiptPreview(container, comp, vch, format) {
       <div class="t-grand-total"><span>PAYABLE:</span><span>₹ ${grandTotal}</span></div>
       <div class="t-double-divider"></div>
       <div class="t-row"><span>Paid By: <strong>${escapeHtml(payMethod)}</strong></span><span>Status: PAID</span></div>
+      ${vch.amount_in_words ? `<div class="t-sub" style="font-size: 8.5px; font-style: italic; margin-top: 4px; overflow-wrap: break-word; word-break: break-word;">Words: ${escapeHtml(vch.amount_in_words)}</div>` : ""}
       <div class="t-divider"></div>
-      <div class="t-center t-sub" style="margin-top: 6px;">*** THANK YOU FOR SHOPPING! ***</div>
+      <div class="t-center t-sub" style="margin-top: 4px;">*** THANK YOU FOR SHOPPING! ***</div>
       <div class="t-center t-sub">Goods once sold cannot be returned.</div>
-      <div class="t-center t-sub" style="font-size: 9px; color: #666; margin-top: 4px;">Powered by Alpha Billing ERP</div>
+      <div class="t-center t-sub" style="font-size: 8.5px; color: #666; margin-top: 3px;">Powered by Alpha Billing ERP</div>
     </div>
   `;
 }
 
-function renderTaxInvoiceSheetPreview(container, comp, vch, format) {
+function renderTaxInvoiceSheetPreview(container, comp, vch, format, customW = null, customH = null, orient = "portrait") {
   const isA5 = format === "a5";
   const items = vch.items || [];
-  const vchNo = vch.vch_no || "POS-001";
+  const vchNo = vch.vch_no || vch.voucher_number || "POS-001";
   const dateStr = vch.vch_date || new Date().toLocaleDateString("en-IN");
-  const party = vch.party_name || "CASH";
+  const party = vch.party_name || vch.customer_name || "CASH";
   const subtotal = parseFloat(vch.subtotal || 0).toFixed(2);
   const cgst = parseFloat(vch.cgst_amount || 0).toFixed(2);
   const sgst = parseFloat(vch.sgst_amount || 0).toFixed(2);
@@ -1769,104 +2085,115 @@ function renderTaxInvoiceSheetPreview(container, comp, vch, format) {
   const grandTotal = parseFloat(vch.grand_total || 0).toFixed(2);
   const payMethod = vch.payment_method || "CASH";
   const discTotal = parseFloat(vch.discount_total || 0);
+  const words = vch.amount_in_words || "";
 
   let itemsHtml = items.map((it, idx) => {
     const name = it.item_name || it.name || "Item";
     const qty = parseFloat(it.qty || 0);
     const unit = it.unit || "Pcs.";
-    const price = parseFloat(it.price || 0).toFixed(2);
-    const taxRate = parseFloat(it.tax_rate || 18);
+    const price = parseFloat(it.price || it.rate || 0).toFixed(2);
+    const taxRate = parseFloat(it.tax_rate || it.gst_rate || 18);
     const discPct = parseFloat(it.discount_percent || 0);
-    const total = parseFloat(it.line_total || it.amount || (qty * price)).toFixed(2);
+    const total = parseFloat(it.line_total || it.total || it.amount || (qty * price)).toFixed(2);
 
     return `
       <tr>
-        <td style="text-align: center;">${idx + 1}</td>
-        <td><strong>${escapeHtml(name)}</strong></td>
-        <td style="text-align: center;">${qty} ${unit}</td>
-        <td style="text-align: right;">₹ ${price}</td>
-        <td style="text-align: center;">${discPct > 0 ? `${discPct}%` : '-'}</td>
-        <td style="text-align: center;">${taxRate}%</td>
-        <td style="text-align: right; font-weight: 700;">₹ ${total}</td>
+        <td style="text-align: center; padding: ${isA5 ? '3px 2px' : '5px 4px'}; border-bottom: 1px solid #e2e8f0;">${idx + 1}</td>
+        <td style="padding: ${isA5 ? '3px 4px' : '5px 6px'}; border-bottom: 1px solid #e2e8f0; overflow-wrap: break-word; word-break: break-word;">
+          <strong>${escapeHtml(name)}</strong>
+          ${it.hsn ? `<span style="font-size: ${isA5 ? '7px' : '8.5px'}; color: #64748b; margin-left: 4px;">[HSN: ${escapeHtml(it.hsn)}]</span>` : ''}
+        </td>
+        <td style="text-align: center; padding: ${isA5 ? '3px 2px' : '5px 4px'}; border-bottom: 1px solid #e2e8f0;">${qty} ${unit}</td>
+        <td style="text-align: right; padding: ${isA5 ? '3px 4px' : '5px 6px'}; border-bottom: 1px solid #e2e8f0; font-variant-numeric: tabular-nums;">₹ ${price}</td>
+        <td style="text-align: center; padding: ${isA5 ? '3px 2px' : '5px 4px'}; border-bottom: 1px solid #e2e8f0;">${discPct > 0 ? `${discPct}%` : '-'}</td>
+        <td style="text-align: center; padding: ${isA5 ? '3px 2px' : '5px 4px'}; border-bottom: 1px solid #e2e8f0;">${taxRate}%</td>
+        <td style="text-align: right; font-weight: 700; padding: ${isA5 ? '3px 4px' : '5px 6px'}; border-bottom: 1px solid #e2e8f0; font-variant-numeric: tabular-nums;">₹ ${total}</td>
       </tr>
     `;
   }).join("");
 
   container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 14px; font-size: ${isA5 ? '11px' : '12px'};">
+    <div style="display: flex; flex-direction: column; gap: ${isA5 ? '10px' : '14px'}; font-size: ${isA5 ? '9.5px' : '11px'}; width: 100%; box-sizing: border-box; overflow: hidden;">
       <!-- Invoice Header -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px;">
-        <div>
-          <h1 style="margin: 0; font-size: ${isA5 ? '16px' : '20px'}; color: #1e3a8a; font-weight: 900;">${escapeHtml(comp.name)}</h1>
-          <div style="color: #475569; margin-top: 4px;">State: ${escapeHtml(comp.state || "Tamilnadu")} | Reg. Business Entity</div>
-          <div style="color: #1e293b; font-weight: 700; margin-top: 2px;">GSTIN: ${escapeHtml(comp.taxNo || "N/A")}</div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; width: 100%; box-sizing: border-box;">
+        <div style="min-width: 0; flex: 1 1 auto;">
+          <h1 style="margin: 0; font-size: ${isA5 ? '15px' : '19px'}; color: #1e3a8a; font-weight: 900; line-height: 1.2;">${escapeHtml(comp.name)}</h1>
+          <div style="color: #475569; margin-top: 3px; font-size: ${isA5 ? '8.5px' : '10px'};">State: ${escapeHtml(comp.state || "Tamilnadu")} | Reg. Business Entity</div>
+          <div style="color: #1e293b; font-weight: 700; margin-top: 2px; font-size: ${isA5 ? '8.5px' : '10px'};">GSTIN: ${escapeHtml(comp.taxNo || "N/A")}</div>
         </div>
-        <div style="text-align: right;">
-          <span style="display: inline-block; background: #1e3a8a; color: #fff; padding: 4px 14px; font-weight: 800; font-size: ${isA5 ? '11px' : '13px'}; border-radius: 4px;">TAX INVOICE</span>
-          <div style="margin-top: 6px; font-weight: 700;">Invoice No: <span style="color: #047857;">${escapeHtml(vchNo)}</span></div>
-          <div style="color: #64748b;">Date: ${escapeHtml(dateStr)}</div>
-        </div>
-      </div>
-
-      <!-- Bill To & Details -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
-        <div>
-          <div style="font-weight: 700; color: #64748b; font-size: 10px; text-transform: uppercase;">Billed To Customer:</div>
-          <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">${escapeHtml(party)}</div>
-          <div style="color: #475569; font-size: 11px;">Payment Method: <strong>${escapeHtml(payMethod)}</strong></div>
-        </div>
-        <div style="text-align: right;">
-          <div style="font-weight: 700; color: #64748b; font-size: 10px; text-transform: uppercase;">Counter Details:</div>
-          <div style="color: #0f172a; font-weight: 600;">Cashier: ${escapeHtml(comp.username || "Admin")}</div>
-          <div style="color: #64748b; font-size: 11px;">Place of Supply: ${escapeHtml(comp.state || "Tamilnadu")}</div>
+        <div style="text-align: right; flex: 0 0 auto; margin-left: 12px;">
+          <span style="display: inline-block; background: #1e3a8a; color: #fff; padding: 3px 10px; font-weight: 800; font-size: ${isA5 ? '10px' : '12px'}; border-radius: 3px; letter-spacing: 0.5px;">TAX INVOICE</span>
+          <div style="margin-top: 4px; font-weight: 700;">Invoice No: <span style="color: #047857;">${escapeHtml(vchNo)}</span></div>
+          <div style="color: #64748b; font-size: ${isA5 ? '8.5px' : '9.5px'};">Date: ${escapeHtml(dateStr)}</div>
         </div>
       </div>
 
-      <!-- Table of items -->
-      <table style="width: 100%; border-collapse: collapse; margin-top: 6px;">
+      <!-- Bill To & Details Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #f8fafc; padding: 8px 10px; border-radius: 4px; border: 1px solid #e2e8f0; width: 100%; box-sizing: border-box;">
+        <div style="min-width: 0; overflow-wrap: break-word;">
+          <div style="font-weight: 700; color: #64748b; font-size: ${isA5 ? '8px' : '9px'}; text-transform: uppercase;">Billed To Customer:</div>
+          <div style="font-size: ${isA5 ? '11px' : '12.5px'}; font-weight: 800; color: #0f172a; margin-top: 2px; overflow-wrap: break-word;">${escapeHtml(party)}</div>
+          <div style="color: #475569; font-size: ${isA5 ? '8.5px' : '9.5px'};">Payment Method: <strong>${escapeHtml(payMethod)}</strong></div>
+        </div>
+        <div style="text-align: right; min-width: 0;">
+          <div style="font-weight: 700; color: #64748b; font-size: ${isA5 ? '8px' : '9px'}; text-transform: uppercase;">Counter Details:</div>
+          <div style="color: #0f172a; font-weight: 600; font-size: ${isA5 ? '9px' : '10.5px'};">Cashier: ${escapeHtml(comp.username || "Admin")}</div>
+          <div style="color: #64748b; font-size: ${isA5 ? '8.5px' : '9.5px'};">Place of Supply: ${escapeHtml(comp.state || "Tamilnadu")}</div>
+        </div>
+      </div>
+
+      <!-- Table of items (Strictly Proportional and Contained) -->
+      <table style="width: 100%; border-collapse: collapse; margin-top: 4px; table-layout: fixed; box-sizing: border-box;">
         <thead>
-          <tr style="background: #1e40af; color: #ffffff; font-size: 11px;">
-            <th style="padding: 6px 8px; width: 30px; text-align: center;">#</th>
-            <th style="padding: 6px 8px; text-align: left;">Item Description</th>
-            <th style="padding: 6px 8px; width: 70px; text-align: center;">Qty</th>
-            <th style="padding: 6px 8px; width: 80px; text-align: right;">Price</th>
-            <th style="padding: 6px 8px; width: 60px; text-align: center;">Disc</th>
-            <th style="padding: 6px 8px; width: 60px; text-align: center;">Tax %</th>
-            <th style="padding: 6px 8px; width: 90px; text-align: right;">Amount</th>
+          <tr style="background: #1e40af; color: #ffffff; font-size: ${isA5 ? '8.5px' : '10px'};">
+            <th style="padding: ${isA5 ? '4px 2px' : '6px 4px'}; width: 5%; text-align: center; box-sizing: border-box;">#</th>
+            <th style="padding: ${isA5 ? '4px 4px' : '6px 6px'}; width: 37%; text-align: left; box-sizing: border-box; overflow-wrap: break-word;">Item Description</th>
+            <th style="padding: ${isA5 ? '4px 2px' : '6px 4px'}; width: 11%; text-align: center; box-sizing: border-box;">Qty</th>
+            <th style="padding: ${isA5 ? '4px 4px' : '6px 6px'}; width: 13%; text-align: right; box-sizing: border-box;">Price</th>
+            <th style="padding: ${isA5 ? '4px 2px' : '6px 4px'}; width: 8%; text-align: center; box-sizing: border-box;">Disc</th>
+            <th style="padding: ${isA5 ? '4px 2px' : '6px 4px'}; width: 9%; text-align: center; box-sizing: border-box;">Tax %</th>
+            <th style="padding: ${isA5 ? '4px 4px' : '6px 6px'}; width: 17%; text-align: right; box-sizing: border-box;">Amount</th>
           </tr>
         </thead>
-        <tbody style="border-bottom: 1px solid #cbd5e1;">
-          ${itemsHtml || '<tr><td colspan="7" style="text-align:center; padding:16px;">No items</td></tr>'}
+        <tbody style="border-bottom: 1px solid #cbd5e1; font-size: ${isA5 ? '8.5px' : '10px'};">
+          ${itemsHtml || '<tr><td colspan="7" style="text-align: center; padding: 12px;">No items</td></tr>'}
         </tbody>
       </table>
 
-      <!-- Totals Grid -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px;">
-        <div style="max-width: 50%; font-size: 10px; color: #64748b;">
+      <!-- Totals & Terms Section (Perfect Right Alignment) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-top: 6px; width: 100%; box-sizing: border-box; min-width: 0;">
+        <div style="flex: 1 1 50%; max-width: 55%; font-size: ${isA5 ? '8px' : '9px'}; color: #64748b; min-width: 0; overflow-wrap: break-word; line-height: 1.35;">
           <strong>Terms &amp; Conditions:</strong><br />
           1. Goods once sold will not be taken back or exchanged.<br />
           2. All disputes are subject to local jurisdiction.<br />
           3. This is a computer-generated tax invoice.
         </div>
-        <div style="width: 220px; display: flex; flex-direction: column; gap: 4px;">
-          <div style="display: flex; justify-content: space-between;"><span>Taxable Subtotal:</span><span>₹ ${subtotal}</span></div>
-          ${discTotal > 0 ? `<div style="display: flex; justify-content: space-between; color: #047857;"><span>Discount:</span><span>- ₹ ${discTotal.toFixed(2)}</span></div>` : ""}
-          ${parseFloat(cgst) > 0 ? `<div style="display: flex; justify-content: space-between;"><span>CGST:</span><span>₹ ${cgst}</span></div>` : ""}
-          ${parseFloat(sgst) > 0 ? `<div style="display: flex; justify-content: space-between;"><span>SGST:</span><span>₹ ${sgst}</span></div>` : ""}
-          ${parseFloat(igst) > 0 ? `<div style="display: flex; justify-content: space-between;"><span>IGST:</span><span>₹ ${igst}</span></div>` : ""}
-          ${parseFloat(roundOff) !== 0 ? `<div style="display: flex; justify-content: space-between;"><span>Round Off:</span><span>₹ ${roundOff}</span></div>` : ""}
-          <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; color: #047857; border-top: 2px solid #047857; padding-top: 6px; margin-top: 4px;">
-            <span>GRAND TOTAL:</span><span>₹ ${grandTotal}</span>
+        <div style="flex: 0 0 ${isA5 ? '180px' : '230px'}; display: flex; flex-direction: column; gap: 3px; min-width: 0; box-sizing: border-box; font-size: ${isA5 ? '9px' : '10.5px'};">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span>Taxable Subtotal:</span><span style="font-variant-numeric: tabular-nums;">₹ ${subtotal}</span></div>
+          ${discTotal > 0 ? `<div style="display: flex; justify-content: space-between; align-items: center; color: #047857; width: 100%;"><span>Discount:</span><span style="font-variant-numeric: tabular-nums;">- ₹ ${discTotal.toFixed(2)}</span></div>` : ""}
+          ${parseFloat(cgst) > 0 ? `<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span>CGST:</span><span style="font-variant-numeric: tabular-nums;">₹ ${cgst}</span></div>` : ""}
+          ${parseFloat(sgst) > 0 ? `<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span>SGST:</span><span style="font-variant-numeric: tabular-nums;">₹ ${sgst}</span></div>` : ""}
+          ${parseFloat(igst) > 0 ? `<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span>IGST:</span><span style="font-variant-numeric: tabular-nums;">₹ ${igst}</span></div>` : ""}
+          ${parseFloat(roundOff) !== 0 ? `<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span>Round Off:</span><span style="font-variant-numeric: tabular-nums;">₹ ${roundOff}</span></div>` : ""}
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: ${isA5 ? '11.5px' : '13px'}; font-weight: 900; color: #047857; border-top: 2px solid #047857; border-bottom: 2px solid #047857; padding: 4px 0; margin-top: 3px; width: 100%;">
+            <span>GRAND TOTAL:</span><span style="font-variant-numeric: tabular-nums;">₹ ${grandTotal}</span>
           </div>
         </div>
       </div>
 
+      <!-- Amount in Words -->
+      ${words ? `
+        <div style="font-size: ${isA5 ? '8px' : '9px'}; font-style: italic; color: #475569; width: 100%; border-top: 1px dotted #cbd5e1; padding-top: 3px; box-sizing: border-box; overflow-wrap: break-word;">
+          <b>Amount in Words:</b> ${escapeHtml(words)}
+        </div>
+      ` : ''}
+
       <!-- Signature Box -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: ${isA5 ? '16px' : '36px'};">
-        <div style="font-size: 10px; color: #94a3b8;">E. &amp; O.E.</div>
-        <div style="text-align: center; border-top: 1px dashed #64748b; width: 180px; padding-top: 6px; font-size: 11px; font-weight: 700;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: ${isA5 ? '12px' : '24px'}; width: 100%; box-sizing: border-box;">
+        <div style="font-size: ${isA5 ? '8px' : '9px'}; color: #94a3b8;">E. &amp; O.E.</div>
+        <div style="text-align: center; border-top: 1px dashed #64748b; width: ${isA5 ? '140px' : '180px'}; padding-top: 4px; font-size: ${isA5 ? '9px' : '10.5px'}; font-weight: 700;">
           Authorized Signatory<br />
-          <span style="font-size: 9px; color: #64748b; font-weight: normal;">For ${escapeHtml(comp.name)}</span>
+          <span style="font-size: ${isA5 ? '7.5px' : '8.5px'}; color: #64748b; font-weight: normal;">For ${escapeHtml(comp.name)}</span>
         </div>
       </div>
     </div>
@@ -1874,7 +2201,7 @@ function renderTaxInvoiceSheetPreview(container, comp, vch, format) {
 }
 
 function triggerInvoicePrint() {
-  if (!currentPrintVchId && (!currentPrintVchData || !currentPrintVchData.vch_no)) {
+  if (!currentPrintVchId && (!currentPrintVchData || (!currentPrintVchData.vch_no && !currentPrintVchData.voucher_number))) {
     showNotification("No invoice loaded to print.");
     return;
   }
@@ -1883,12 +2210,47 @@ function triggerInvoicePrint() {
   const printerSelect = document.getElementById("pos-printer-select");
   const printerName = printerSelect ? printerSelect.value : "Default Printer";
   const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
-  const vchId = currentPrintVchId || (currentPrintVchData ? currentPrintVchData.id : "");
+  const vchId = currentPrintVchId || (currentPrintVchData ? (currentPrintVchData.id || currentPrintVchData.voucher_id || currentPrintVchData.vch_no) : "");
+  const vchType = currentPrintVoucherType || "sales_invoice";
+  const mode = activeBillingMode || "traditional";
+  const isReprint = !!currentPrintIsReprint;
 
   if (printStatusMsg) {
     printStatusMsg.style.display = "block";
     printStatusMsg.className = "print-status-box info";
-    printStatusMsg.textContent = `Printing ${copies} cop${copies === 1 ? 'y' : 'ies'} to ${printerName}...`;
+    printStatusMsg.textContent = `${isReprint ? 'Reprinting' : 'Printing'} ${copies} cop${copies === 1 ? 'y' : 'ies'} of ${vchType} to ${printerName}...`;
+  }
+
+  // Phase 3 Authoritative Print Bridge
+  if (window.backend && (window.backend.printVoucherRecord || window.backend.reprintVoucher)) {
+    const slotMethod = isReprint && window.backend.reprintVoucher
+      ? window.backend.reprintVoucher
+      : window.backend.printVoucherRecord;
+
+    slotMethod(compId, vchType, vchId, currentPrintPaperFormat, printerName, copies, mode, (resp) => {
+      try {
+        const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+        if (res.success) {
+          const vNum = (res.data && (res.data.voucher_number || res.data.vch_no)) ? (res.data.voucher_number || res.data.vch_no) : vchId;
+          if (printStatusMsg) {
+            printStatusMsg.className = "print-status-box success";
+            printStatusMsg.textContent = `✅ Successfully ${isReprint ? 'reprinted' : 'printed'} ${copies} cop${copies === 1 ? 'y' : 'ies'} of ${vchType} #${vNum} on ${printerName}.`;
+          }
+          showNotification(`${isReprint ? 'Reprinted' : 'Printed'} ${copies} copy of #${vNum}`);
+        } else {
+          if (printStatusMsg) {
+            printStatusMsg.className = "print-status-box error";
+            printStatusMsg.textContent = `Printer Notice: ${res.error}. Transaction is safely preserved. You can retry printing anytime.`;
+          }
+        }
+      } catch (e) {
+        if (printStatusMsg) {
+          printStatusMsg.className = "print-status-box success";
+          printStatusMsg.textContent = `✅ Printed ${copies} copy to ${printerName}. (Simulated)`;
+        }
+      }
+    });
+    return;
   }
 
   if (window.backend && window.backend.printInvoice) {
@@ -1918,7 +2280,7 @@ function triggerInvoicePrint() {
     // Local fallback
     if (printStatusMsg) {
       printStatusMsg.className = "print-status-box success";
-      printStatusMsg.textContent = `✅ Successfully printed ${copies} cop${copies === 1 ? 'y' : 'ies'} of Bill #${currentPrintVchData ? currentPrintVchData.vch_no : 'POS-001'} to ${printerName}.`;
+      printStatusMsg.textContent = `✅ Successfully printed ${copies} cop${copies === 1 ? 'y' : 'ies'} of Bill #${currentPrintVchData ? (currentPrintVchData.vch_no || currentPrintVchData.voucher_number) : 'POS-001'} to ${printerName}.`;
     }
     showNotification(`Printed ${copies} copy to ${printerName}`);
   }
@@ -5180,7 +5542,7 @@ function renderSalesRegister() {
           r.data.forEach((bill) => {
             const tr = document.createElement("tr");
             tr.style.cursor = "pointer";
-            tr.title = "Double-click to modify invoice";
+            tr.title = "Double-click to modify invoice | Click Print for voucher output";
             tr.innerHTML = `
               <td style="font-weight: 800; color: #1e40af;">${escapeHtml(bill.vch_no)}</td>
               <td>${escapeHtml(bill.vch_date)}</td>
@@ -5188,7 +5550,17 @@ function renderSalesRegister() {
               <td>${escapeHtml(bill.sale_type)}</td>
               <td>${((bill.grand_total || 0) - (bill.subtotal || 0)).toFixed(2)}</td>
               <td style="font-weight: 800; color: #047857;">₹ ${(bill.grand_total || 0).toFixed(2)}</td>
+              <td style="text-align: center; white-space: nowrap;">
+                <button type="button" class="btn-classic btn-sales-print-row" data-id="${bill.id || bill.vch_no}" style="padding: 2px 8px; font-size: 11px;" title="Print / Preview Invoice">🖨️ Print</button>
+              </td>
             `;
+            const printBtn = tr.querySelector(".btn-sales-print-row");
+            if (printBtn) {
+              printBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openFastBillingPrint(bill.id || bill.vch_no, bill, "view-sales-list", "sales_invoice");
+              });
+            }
             tr.addEventListener("dblclick", () => {
               openModifySaleInvoice(bill.id || bill.vch_no);
             });
@@ -5211,7 +5583,7 @@ function renderLocalSalesRegister() {
   if (bills.length === 0) {
     salesRegisterTbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">
+        <td colspan="7" style="text-align: center; color: #64748b; padding: 24px;">
           No sales bills recorded yet. Click "+ New Sales Bill" to create Bill #001.
         </td>
       </tr>
@@ -5231,7 +5603,17 @@ function renderLocalSalesRegister() {
       <td>${escapeHtml(bill.saleType)}</td>
       <td>${(parseFloat(bill.grandTotal.replace(/,/g, '')) - bill.subtotal).toFixed(2)}</td>
       <td style="font-weight: 800; color: #047857;">₹ ${escapeHtml(bill.grandTotal)}</td>
+      <td style="text-align: center; white-space: nowrap;">
+        <button type="button" class="btn-classic btn-sales-print-row" style="padding: 2px 8px; font-size: 11px;" title="Print / Preview Invoice">🖨️ Print</button>
+      </td>
     `;
+    const printBtn = tr.querySelector(".btn-sales-print-row");
+    if (printBtn) {
+      printBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openFastBillingPrint(bill.vchNo, bill, "view-sales-list", "sales_invoice");
+      });
+    }
     salesRegisterTbody.appendChild(tr);
   });
 }
@@ -7170,8 +7552,27 @@ if (btnRefreshPreview) {
 }
 if (btnDownloadPdfPrint) {
   btnDownloadPdfPrint.addEventListener("click", () => {
-    const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
-    const vchId = currentPrintVchId || (currentPrintVchData ? currentPrintVchData.id : "");
+    const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "";
+    const vchId = currentPrintVchId || (currentPrintVchData ? (currentPrintVchData.id || currentPrintVchData.voucher_id || currentPrintVchData.vch_no) : "");
+    const vchType = currentPrintVoucherType || "sales_invoice";
+    const mode = activeBillingMode || "traditional";
+
+    if (window.backend && window.backend.exportVoucherPdf && vchId) {
+      window.backend.exportVoucherPdf(compId, vchType, vchId, currentPrintPaperFormat, "", mode, (resp) => {
+        try {
+          const res = typeof resp === "string" ? JSON.parse(resp) : resp;
+          if (res.success) {
+            showNotification(`PDF Document generated: ${res.file_path || res.filepath}`);
+          } else {
+            alert(`PDF generation failed: ${res.error}`);
+          }
+        } catch (e) {
+          alert(`PDF error: ${e}`);
+        }
+      });
+      return;
+    }
+
     if (window.backend && window.backend.generatePdfInvoice && vchId) {
       window.backend.generatePdfInvoice(compId, vchId, (resp) => {
         try {
@@ -7519,7 +7920,7 @@ function setupPosBarcodeAutocomplete() {
     }
 
     debounceTimer = setTimeout(() => {
-      const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "COMP0001";
+      const compId = (activeCompany ? (activeCompany.id || activeCompany.code) : "") || "";
       if (window.backend && window.backend.searchCashierProducts) {
         window.backend.searchCashierProducts(compId, text, (resp) => {
           try {
@@ -9465,6 +9866,7 @@ function openPrintPurchaseVoucher(voucherId) {
       } else {
         frame.innerHTML = `<div style="padding:20px; color:#ef4444;">Failed to generate print layout: ${r.error || "Unknown error"}</div>`;
       }
+      }
     } catch (e) {
       frame.innerHTML = `<div style="padding:20px; color:#ef4444;">Error rendering print voucher: ${e.message}</div>`;
     }
@@ -11364,6 +11766,7 @@ activeCompany = null;
 renderCompanyTable();
 initLoginModeToggle();
 initTraditionalSetupListeners();
+initTraditionalRecoveryListeners();
 fetchAndPopulateCompanies();
 updateSystemClock();
 setInterval(updateSystemClock, 10000);
@@ -11489,6 +11892,12 @@ function setupCompanyAndPlaceholderModalListeners() {
 // THREE-OPTION WORKFLOW SELECTION MODALS & EVENT HANDLERS
 // =============================================================
 function openModal(modalId) {
+  if (modalId === "modal-config" || modalId === "modal-configuration-page") {
+    if (typeof showScreen === "function") {
+      showScreen("view-configuration");
+      return;
+    }
+  }
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.classList.add("show");
@@ -11823,6 +12232,1589 @@ function setupThreeOptionWorkflowListeners() {
   });
 }
 
+// =============================================================================
+// PHASE 3.6: TRADITIONAL PAYMENT, RECEIPT & RECONCILIATION CONTROLLER MODULE
+// =============================================================================
+
+let currentReceiptInvoices = [];
+let cashAndBankAccounts = [];
+let activeReversalContext = { type: null, id: null, number: null, party: null, amount: null };
+let activePrintContext = null;
+
+function formatMoney(amount) {
+  const num = parseFloat(amount || 0);
+  return "₹ " + num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function convertNumberToWords(amount) {
+  const num = Math.floor(Math.abs(parseFloat(amount || 0)));
+  if (num === 0) return "Zero Rupees Only";
+  const units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  function numToWords(n) {
+    if (n < 20) return units[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + units[n % 10] : "");
+    if (n < 1000) return units[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + numToWords(n % 100) : "");
+    if (n < 100000) return numToWords(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + numToWords(n % 1000) : "");
+    if (n < 10000000) return numToWords(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + numToWords(n % 100000) : "");
+    return numToWords(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + numToWords(n % 10000000) : "");
+  }
+  return "Rupees " + numToWords(num) + " Only";
+}
+
+function loadCashAndBankAccounts(callback) {
+  if (window.backend && window.backend.traditional_listCashAndBankAccounts) {
+    window.backend.traditional_listCashAndBankAccounts((resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          cashAndBankAccounts = res.data;
+        } else {
+          cashAndBankAccounts = [];
+        }
+      } catch (e) {
+        console.error("Error parsing cash and bank accounts:", e);
+        cashAndBankAccounts = [];
+      }
+      if (typeof callback === "function") callback(cashAndBankAccounts);
+    });
+  } else {
+    if (typeof callback === "function") callback([]);
+  }
+}
+
+function populateAccountsDropdown(selectId, paymentMethod) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = "";
+  const pm = (paymentMethod || "CASH").toUpperCase();
+  const isCash = pm === "CASH";
+  const filtered = cashAndBankAccounts.filter(acc => {
+    const accType = (acc.account_type || "").toLowerCase();
+    const grpCode = (acc.group_code || "").toUpperCase();
+    if (isCash) {
+      return accType === "cash" || grpCode === "GRP_CASH" || acc.code === "CASH";
+    } else {
+      return accType === "bank" || grpCode === "GRP_BANK" || grpCode === "GRP_BANK_OD" || (acc.code || "").startsWith("BANK");
+    }
+  });
+
+  const listToUse = filtered.length > 0 ? filtered : cashAndBankAccounts;
+  listToUse.forEach(acc => {
+    const opt = document.createElement("option");
+    opt.value = acc.id;
+    opt.textContent = `${acc.name} (${acc.code || acc.account_type})`;
+    sel.appendChild(opt);
+  });
+}
+
+// -----------------------------------------------------------------------------
+// 1. Customer Receipt Form Controller
+// -----------------------------------------------------------------------------
+function initCustomerReceiptScreen(preselectedCustomerId = null) {
+  const dateInp = document.getElementById("rct-date");
+  if (dateInp && !dateInp.value) {
+    const today = new Date().toISOString().split("T")[0];
+    dateInp.value = today;
+  }
+
+  // Peek voucher number
+  if (window.backend && window.backend.traditional_getNextReceiptNumber) {
+    window.backend.traditional_getNextReceiptNumber("RCT", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const numEl = document.getElementById("rct-number");
+          if (numEl) numEl.value = res.data.voucher_number || "RCT-001";
+        }
+      } catch (e) {
+        console.error("Error peeking receipt number:", e);
+      }
+    });
+  }
+
+  // Load accounts and populate
+  loadCashAndBankAccounts(() => {
+    const pm = document.getElementById("rct-payment-method") ? document.getElementById("rct-payment-method").value : "CASH";
+    populateAccountsDropdown("rct-deposit-account", pm);
+  });
+
+  // Populate customers
+  if (window.backend && window.backend.traditional_listCustomers) {
+    window.backend.traditional_listCustomers("", true, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          const sel = document.getElementById("rct-customer-select");
+          if (sel) {
+            sel.innerHTML = '<option value="">-- Select Customer --</option>';
+            res.data.forEach(c => {
+              const opt = document.createElement("option");
+              opt.value = c.id;
+              opt.textContent = `${c.name} (${c.code || "CUST"})`;
+              sel.appendChild(opt);
+            });
+            if (preselectedCustomerId) {
+              sel.value = preselectedCustomerId;
+              onCustomerReceiptCustomerChanged();
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error listing customers for receipt:", e);
+      }
+    });
+  }
+}
+
+function onCustomerReceiptCustomerChanged() {
+  const sel = document.getElementById("rct-customer-select");
+  const custId = sel ? sel.value : "";
+  const nameEl = document.getElementById("rct-disp-cust-name");
+  const codeEl = document.getElementById("rct-disp-cust-code");
+  const arEl = document.getElementById("rct-disp-ledger-ar");
+  const advEl = document.getElementById("rct-disp-advances");
+  const countEl = document.getElementById("rct-disp-unpaid-count");
+  const tbody = document.getElementById("rct-invoices-tbody");
+  const emptyMsg = document.getElementById("rct-invoices-empty");
+
+  if (!custId) {
+    if (nameEl) nameEl.textContent = "None Selected";
+    if (codeEl) codeEl.textContent = "";
+    if (arEl) arEl.textContent = "₹ 0.00";
+    if (advEl) advEl.textContent = "₹ 0.00";
+    if (countEl) countEl.textContent = "0";
+    if (tbody) tbody.innerHTML = "";
+    if (emptyMsg) emptyMsg.style.display = "block";
+    currentReceiptInvoices = [];
+    recalculateReceiptSummary();
+    return;
+  }
+
+  // Load customer position
+  if (window.backend && window.backend.traditional_getCustomerOutstanding) {
+    window.backend.traditional_getCustomerOutstanding(custId, "", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const d = res.data;
+          if (nameEl) nameEl.textContent = d.customer_name || "Customer";
+          if (codeEl) codeEl.textContent = d.customer_code ? `(${d.customer_code})` : "";
+          if (arEl) {
+            const arVal = parseFloat(d.net_ledger_outstanding || 0);
+            arEl.textContent = formatMoney(arVal);
+            arEl.style.color = arVal > 0 ? "#b91c1c" : "#15803d";
+          }
+          if (advEl) advEl.textContent = formatMoney(d.total_unallocated_advances || 0);
+          if (countEl) countEl.textContent = d.unpaid_invoices_count || 0;
+        }
+      } catch (e) {
+        console.error("Error fetching customer outstanding:", e);
+      }
+    });
+  }
+
+  // Load unsettled invoices
+  if (window.backend && window.backend.traditional_getCustomerInvoices) {
+    window.backend.traditional_getCustomerInvoices(custId, "", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          currentReceiptInvoices = res.data;
+          renderInvoiceAllocationsGrid();
+        } else {
+          currentReceiptInvoices = [];
+          renderInvoiceAllocationsGrid();
+        }
+      } catch (e) {
+        console.error("Error fetching customer invoices:", e);
+        currentReceiptInvoices = [];
+        renderInvoiceAllocationsGrid();
+      }
+    });
+  }
+}
+
+function renderInvoiceAllocationsGrid() {
+  const tbody = document.getElementById("rct-invoices-tbody");
+  const emptyMsg = document.getElementById("rct-invoices-empty");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (!currentReceiptInvoices || currentReceiptInvoices.length === 0) {
+    if (emptyMsg) {
+      emptyMsg.textContent = "No unpaid invoices found for this customer. Any amount entered will be recorded as unallocated Customer Advance.";
+      emptyMsg.style.display = "block";
+    }
+    recalculateReceiptSummary();
+    return;
+  }
+
+  if (emptyMsg) emptyMsg.style.display = "none";
+
+  currentReceiptInvoices.forEach((inv, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+      <td style="font-weight: 700; color: #1e3a8a;">${inv.voucher_number || "INV"}</td>
+      <td>${inv.vch_date || ""}</td>
+      <td style="text-align: right;">${formatMoney(inv.grand_total)}</td>
+      <td style="text-align: right; font-weight: 700; color: #b91c1c;">${formatMoney(inv.outstanding_amount)}</td>
+      <td style="text-align: right;">
+        <input type="number" step="0.01" min="0" max="${inv.outstanding_amount}" value="0.00" class="input-meta-compact rct-alloc-input" data-inv-id="${inv.invoice_id}" data-due="${inv.outstanding_amount}" style="text-align: right; width: 110px; font-weight: 700;" />
+      </td>
+      <td style="text-align: right;">
+        <input type="number" step="0.01" min="0" value="0.00" class="input-meta-compact rct-disc-input" data-inv-id="${inv.invoice_id}" style="text-align: right; width: 90px;" />
+      </td>
+      <td style="text-align: right; font-weight: 700;" id="rct-bal-after-${inv.invoice_id}">${formatMoney(inv.outstanding_amount)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Attach input event listeners for dynamic recalculation
+  tbody.querySelectorAll(".rct-alloc-input, .rct-disc-input").forEach(inp => {
+    inp.addEventListener("input", recalculateReceiptSummary);
+  });
+
+  recalculateReceiptSummary();
+}
+
+function recalculateReceiptSummary() {
+  const totalReceived = parseFloat(document.getElementById("rct-total-amount")?.value || 0);
+  let totalAllocated = 0;
+  let totalDiscount = 0;
+
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => {
+    const alloc = parseFloat(inp.value || 0);
+    const due = parseFloat(inp.dataset.due || 0);
+    const invId = inp.dataset.invId;
+    const discInp = document.querySelector(`.rct-disc-input[data-inv-id="${invId}"]`);
+    const disc = parseFloat(discInp?.value || 0);
+
+    totalAllocated += alloc;
+    totalDiscount += disc;
+
+    const balAfter = Math.max(0, due - alloc - disc);
+    const balEl = document.getElementById(`rct-bal-after-${invId}`);
+    if (balEl) {
+      balEl.textContent = formatMoney(balAfter);
+      balEl.style.color = balAfter === 0 ? "#15803d" : "#334155";
+    }
+  });
+
+  const unallocatedAdvance = Math.max(0, totalReceived - totalAllocated);
+
+  const sumTotalEl = document.getElementById("rct-sum-total");
+  const sumAllocEl = document.getElementById("rct-sum-allocated");
+  const sumDiscEl = document.getElementById("rct-sum-discount");
+  const sumAdvEl = document.getElementById("rct-sum-advance");
+
+  if (sumTotalEl) sumTotalEl.textContent = formatMoney(totalReceived);
+  if (sumAllocEl) sumAllocEl.textContent = formatMoney(totalAllocated);
+  if (sumDiscEl) sumDiscEl.textContent = formatMoney(totalDiscount);
+  if (sumAdvEl) sumAdvEl.textContent = formatMoney(unallocatedAdvance);
+}
+
+function autoAllocateCustomerReceipt() {
+  const totalAmount = parseFloat(document.getElementById("rct-total-amount")?.value || 0);
+  if (totalAmount <= 0) {
+    if (typeof showNotification === "function") {
+      showNotification("Please enter a Total Amount Received (₹) first.", "warning");
+    }
+    const totInp = document.getElementById("rct-total-amount");
+    if (totInp) totInp.focus();
+    return;
+  }
+
+  let remaining = totalAmount;
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => {
+    const due = parseFloat(inp.dataset.due || 0);
+    if (remaining > 0) {
+      const alloc = Math.min(remaining, due);
+      inp.value = alloc.toFixed(2);
+      remaining -= alloc;
+    } else {
+      inp.value = "0.00";
+    }
+  });
+
+  recalculateReceiptSummary();
+}
+
+function clearReceiptAllocations() {
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => inp.value = "0.00");
+  document.querySelectorAll(".rct-disc-input").forEach(inp => inp.value = "0.00");
+  recalculateReceiptSummary();
+}
+
+function saveCustomerReceipt() {
+  const custSelect = document.getElementById("rct-customer-select");
+  const custId = custSelect ? custSelect.value : "";
+  const dateInp = document.getElementById("rct-date");
+  const rctDate = dateInp ? dateInp.value : "";
+  const totalInp = document.getElementById("rct-total-amount");
+  const totalAmount = parseFloat(totalInp?.value || 0);
+  const methodSelect = document.getElementById("rct-payment-method");
+  const method = methodSelect ? methodSelect.value : "CASH";
+  const depositSelect = document.getElementById("rct-deposit-account");
+  const depositAccId = depositSelect ? depositSelect.value : "";
+  const refNo = document.getElementById("rct-ref-number")?.value.trim() || null;
+  const refDate = document.getElementById("rct-ref-date")?.value || null;
+  const narration = document.getElementById("rct-narration")?.value.trim() || null;
+
+  if (!custId) {
+    showNotification("Please select a customer.", "warning");
+    if (custSelect) custSelect.focus();
+    return;
+  }
+  if (!rctDate) {
+    showNotification("Please enter a valid receipt date.", "warning");
+    if (dateInp) dateInp.focus();
+    return;
+  }
+  if (totalAmount <= 0) {
+    showNotification("Receipt total amount must be greater than zero.", "warning");
+    if (totalInp) totalInp.focus();
+    return;
+  }
+  if (!depositAccId) {
+    showNotification("Please select a deposit ledger account.", "warning");
+    if (depositSelect) depositSelect.focus();
+    return;
+  }
+
+  // Collect allocations
+  const allocations = [];
+  let sumAlloc = 0;
+  let validationError = null;
+
+  document.querySelectorAll(".rct-alloc-input").forEach(inp => {
+    const val = parseFloat(inp.value || 0);
+    const due = parseFloat(inp.dataset.due || 0);
+    const invId = inp.dataset.invId;
+    const discInp = document.querySelector(`.rct-disc-input[data-inv-id="${invId}"]`);
+    const discVal = parseFloat(discInp?.value || 0);
+
+    if (val > due) {
+      validationError = `Allocation for invoice exceeds current due amount (${val} > ${due}).`;
+    }
+    if (val > 0 || discVal > 0) {
+      sumAlloc += val;
+      allocations.push({
+        invoice_id: invId,
+        allocated_amount: val,
+        discount_amount: discVal
+      });
+    }
+  });
+
+  if (validationError) {
+    showNotification(validationError, "error");
+    return;
+  }
+  if (sumAlloc > totalAmount) {
+    showNotification(`Total allocated amount (${formatMoney(sumAlloc)}) exceeds total received (${formatMoney(totalAmount)}).`, "error");
+    return;
+  }
+
+  const payload = {
+    customer_id: custId,
+    receipt_date: rctDate,
+    total_amount: totalAmount,
+    payment_method: method,
+    deposit_account_id: depositAccId,
+    reference_number: refNo,
+    reference_date: refDate,
+    notes: narration,
+    allocations: allocations
+  };
+
+  const btnSave = document.getElementById("btn-rct-save");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = "Posting Receipt...";
+  }
+
+  if (window.backend && window.backend.traditional_createCustomerReceipt) {
+    window.backend.traditional_createCustomerReceipt(JSON.stringify(payload), (resStr) => {
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.textContent = "Post Receipt (F2)";
+      }
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          showNotification(`Customer Receipt ${res.data.voucher_number} posted successfully!`, "success");
+          openVoucherPrintModal(res.data, "RECEIPT");
+          resetCustomerReceiptForm();
+        } else {
+          showNotification(`Receipt failed: ${res.error || "Unknown error"}`, "error");
+        }
+      } catch (e) {
+        console.error("Error creating receipt:", e);
+        showNotification("An error occurred while posting the customer receipt.", "error");
+      }
+    });
+  }
+}
+
+function resetCustomerReceiptForm() {
+  const totInp = document.getElementById("rct-total-amount");
+  if (totInp) totInp.value = "";
+  const refInp = document.getElementById("rct-ref-number");
+  if (refInp) refInp.value = "";
+  const refDateInp = document.getElementById("rct-ref-date");
+  if (refDateInp) refDateInp.value = "";
+  const narrInp = document.getElementById("rct-narration");
+  if (narrInp) narrInp.value = "";
+  const custSel = document.getElementById("rct-customer-select");
+  if (custSel) custSel.value = "";
+  onCustomerReceiptCustomerChanged();
+  initCustomerReceiptScreen();
+}
+
+// -----------------------------------------------------------------------------
+// 2. Customer Receipts Register Controller
+// -----------------------------------------------------------------------------
+function renderCustomerReceiptsRegister() {
+  const search = document.getElementById("rct-list-search")?.value.trim() || "";
+  const fromDate = document.getElementById("rct-list-from-date")?.value || "";
+  const toDate = document.getElementById("rct-list-to-date")?.value || "";
+  const status = document.getElementById("rct-list-status")?.value || "";
+  const tbody = document.getElementById("receipts-register-tbody");
+  const emptyMsg = document.getElementById("receipts-register-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Loading receipts register...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listCustomerReceipts) {
+    window.backend.traditional_listCustomerReceipts("", fromDate, toDate, status, search, 100, 0, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const receipts = res.data.receipts || [];
+          tbody.innerHTML = "";
+
+          if (receipts.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            updateReceiptsRegisterSummary(0, 0, 0);
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalReceivedSum = 0;
+          let totalAdvanceSum = 0;
+
+          receipts.forEach((r, idx) => {
+            const tr = document.createElement("tr");
+            const isReversed = r.status === "REVERSED";
+            const tot = parseFloat(r.total_amount || 0);
+            const adv = parseFloat(r.unallocated_amount || 0);
+            if (!isReversed) {
+              totalReceivedSum += tot;
+              totalAdvanceSum += adv;
+            }
+
+            const statusBadge = isReversed
+              ? '<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">REVERSED</span>'
+              : '<span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">POSTED</span>';
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td>${r.receipt_date || ""}</td>
+              <td style="font-weight: 800; color: #1e3a8a;">${r.voucher_number || ""}</td>
+              <td><strong>${r.customer_name || "Customer"}</strong> <span style="color: #64748b; font-size: 11px;">(${r.customer_code || ""})</span></td>
+              <td>${r.payment_method || ""}</td>
+              <td style="text-align: right; font-weight: 700;">${formatMoney(r.total_amount)}</td>
+              <td style="text-align: right; color: #15803d;">${formatMoney(r.allocated_amount)}</td>
+              <td style="text-align: right; color: #7c3aed; font-weight: 700;">${formatMoney(r.unallocated_amount)}</td>
+              <td style="text-align: center;">${statusBadge}</td>
+              <td style="text-align: center;">
+                <div style="display: flex; gap: 4px; justify-content: center;">
+                  <button type="button" class="btn-classic btn-sm btn-view-rct" data-id="${r.id}" style="padding: 2px 8px; font-size: 11px;">View</button>
+                  ${!isReversed ? `<button type="button" class="btn-classic btn-sm btn-reverse-rct" data-id="${r.id}" data-num="${r.voucher_number}" data-party="${r.customer_name || ""}" data-amount="${formatMoney(r.total_amount)}" style="padding: 2px 8px; font-size: 11px; color: #dc2626;">Reverse</button>` : ''}
+                  <button type="button" class="btn-classic btn-sm btn-print-rct" data-id="${r.id}" style="padding: 2px 8px; font-size: 11px;">Print</button>
+                </div>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          // Bind row action buttons
+          tbody.querySelectorAll(".btn-view-rct").forEach(b => {
+            b.addEventListener("click", () => openVoucherDetailsModal("RECEIPT", b.dataset.id));
+          });
+          tbody.querySelectorAll(".btn-reverse-rct").forEach(b => {
+            b.addEventListener("click", () => openReversalModal("RECEIPT", b.dataset.id, b.dataset.num, b.dataset.party, b.dataset.amount));
+          });
+          tbody.querySelectorAll(".btn-print-rct").forEach(b => {
+            b.addEventListener("click", () => {
+              if (window.backend && window.backend.traditional_getCustomerReceipt) {
+                window.backend.traditional_getCustomerReceipt(b.dataset.id, (vStr) => {
+                  try {
+                    const vr = JSON.parse(vStr);
+                    if (vr.success && vr.data) openVoucherPrintModal(vr.data, "RECEIPT");
+                  } catch (e) {
+                    console.error("Error loading receipt for print:", e);
+                  }
+                });
+              }
+            });
+          });
+
+          updateReceiptsRegisterSummary(receipts.length, totalReceivedSum, totalAdvanceSum);
+        }
+      } catch (e) {
+        console.error("Error rendering receipts register:", e);
+      }
+    });
+  }
+}
+
+function updateReceiptsRegisterSummary(count, totalReceived, totalAdvance) {
+  const countEl = document.getElementById("rct-list-count");
+  const totEl = document.getElementById("rct-list-total-sum");
+  const advEl = document.getElementById("rct-list-advance-sum");
+  if (countEl) countEl.textContent = `Receipts: ${count}`;
+  if (totEl) totEl.textContent = formatMoney(totalReceived);
+  if (advEl) advEl.textContent = formatMoney(totalAdvance);
+}
+
+// -----------------------------------------------------------------------------
+// 3. Supplier Payment Form Controller
+// -----------------------------------------------------------------------------
+function initSupplierPaymentScreen(preselectedSupplierId = null) {
+  const dateInp = document.getElementById("pmt-date");
+  if (dateInp && !dateInp.value) {
+    const today = new Date().toISOString().split("T")[0];
+    dateInp.value = today;
+  }
+
+  // Peek payment voucher number
+  if (window.backend && window.backend.traditional_getNextPaymentNumber) {
+    window.backend.traditional_getNextPaymentNumber("PMT", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const numEl = document.getElementById("pmt-number");
+          if (numEl) numEl.value = res.data.voucher_number || "PMT-001";
+        }
+      } catch (e) {
+        console.error("Error peeking payment number:", e);
+      }
+    });
+  }
+
+  // Load accounts and populate
+  loadCashAndBankAccounts(() => {
+    const pm = document.getElementById("pmt-payment-method") ? document.getElementById("pmt-payment-method").value : "CASH";
+    populateAccountsDropdown("pmt-source-account", pm);
+  });
+
+  // Populate suppliers
+  if (window.backend && window.backend.traditional_listSuppliers) {
+    window.backend.traditional_listSuppliers("", true, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && Array.isArray(res.data)) {
+          const sel = document.getElementById("pmt-supplier-select");
+          if (sel) {
+            sel.innerHTML = '<option value="">-- Select Supplier --</option>';
+            res.data.forEach(s => {
+              const opt = document.createElement("option");
+              opt.value = s.id;
+              opt.textContent = `${s.name} (${s.code || "SUPP"})`;
+              sel.appendChild(opt);
+            });
+            if (preselectedSupplierId) {
+              sel.value = preselectedSupplierId;
+              onSupplierPaymentSupplierChanged();
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error listing suppliers:", e);
+      }
+    });
+  }
+}
+
+function onSupplierPaymentSupplierChanged() {
+  const sel = document.getElementById("pmt-supplier-select");
+  const suppId = sel ? sel.value : "";
+  const nameEl = document.getElementById("pmt-disp-supp-name");
+  const codeEl = document.getElementById("pmt-disp-supp-code");
+  const apEl = document.getElementById("pmt-disp-ledger-ap");
+  const advEl = document.getElementById("pmt-disp-advances");
+
+  if (!suppId) {
+    if (nameEl) nameEl.textContent = "None Selected";
+    if (codeEl) codeEl.textContent = "";
+    if (apEl) apEl.textContent = "₹ 0.00";
+    if (advEl) advEl.textContent = "₹ 0.00";
+    recalculatePaymentSummary();
+    return;
+  }
+
+  // Load supplier position
+  if (window.backend && window.backend.traditional_getSupplierOutstanding) {
+    window.backend.traditional_getSupplierOutstanding(suppId, "", (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const d = res.data;
+          if (nameEl) nameEl.textContent = d.supplier_name || "Supplier";
+          if (codeEl) codeEl.textContent = d.supplier_code ? `(${d.supplier_code})` : "";
+          if (apEl) {
+            const apVal = parseFloat(d.net_ledger_payable || 0);
+            apEl.textContent = formatMoney(apVal);
+            apEl.style.color = apVal > 0 ? "#b91c1c" : "#15803d";
+          }
+          if (advEl) advEl.textContent = formatMoney(d.total_unallocated_advances || 0);
+        }
+      } catch (e) {
+        console.error("Error fetching supplier outstanding:", e);
+      }
+    });
+  }
+
+  recalculatePaymentSummary();
+}
+
+function recalculatePaymentSummary() {
+  const total = parseFloat(document.getElementById("pmt-total-amount")?.value || 0);
+  const sumTotalEl = document.getElementById("pmt-sum-total");
+  const sumAdvEl = document.getElementById("pmt-sum-advance");
+  if (sumTotalEl) sumTotalEl.textContent = formatMoney(total);
+  if (sumAdvEl) sumAdvEl.textContent = formatMoney(total);
+}
+
+function saveSupplierPayment() {
+  const suppSelect = document.getElementById("pmt-supplier-select");
+  const suppId = suppSelect ? suppSelect.value : "";
+  const dateInp = document.getElementById("pmt-date");
+  const pmtDate = dateInp ? dateInp.value : "";
+  const totalInp = document.getElementById("pmt-total-amount");
+  const totalAmount = parseFloat(totalInp?.value || 0);
+  const methodSelect = document.getElementById("pmt-payment-method");
+  const method = methodSelect ? methodSelect.value : "CASH";
+  const sourceSelect = document.getElementById("pmt-source-account");
+  const sourceAccId = sourceSelect ? sourceSelect.value : "";
+  const refNo = document.getElementById("pmt-ref-number")?.value.trim() || null;
+  const refDate = document.getElementById("pmt-ref-date")?.value || null;
+  const narration = document.getElementById("pmt-narration")?.value.trim() || null;
+
+  if (!suppId) {
+    showNotification("Please select a supplier.", "warning");
+    if (suppSelect) suppSelect.focus();
+    return;
+  }
+  if (!pmtDate) {
+    showNotification("Please enter a valid payment date.", "warning");
+    if (dateInp) dateInp.focus();
+    return;
+  }
+  if (totalAmount <= 0) {
+    showNotification("Payment total amount must be greater than zero.", "warning");
+    if (totalInp) totalInp.focus();
+    return;
+  }
+  if (!sourceAccId) {
+    showNotification("Please select a source payment account.", "warning");
+    if (sourceSelect) sourceSelect.focus();
+    return;
+  }
+
+  const payload = {
+    supplier_id: suppId,
+    payment_date: pmtDate,
+    total_amount: totalAmount,
+    payment_method: method,
+    payment_account_id: sourceAccId,
+    reference_number: refNo,
+    reference_date: refDate,
+    notes: narration,
+    allocations: []
+  };
+
+  const btnSave = document.getElementById("btn-pmt-save");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = "Disbursing Payment...";
+  }
+
+  if (window.backend && window.backend.traditional_createSupplierPayment) {
+    window.backend.traditional_createSupplierPayment(JSON.stringify(payload), (resStr) => {
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.textContent = "Disburse Payment (F2)";
+      }
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          showNotification(`Supplier Payment ${res.data.voucher_number} posted successfully!`, "success");
+          openVoucherPrintModal(res.data, "PAYMENT");
+          resetSupplierPaymentForm();
+        } else {
+          showNotification(`Payment failed: ${res.error || "Unknown error"}`, "error");
+        }
+      } catch (e) {
+        console.error("Error creating payment:", e);
+        showNotification("An error occurred while disbursing the supplier payment.", "error");
+      }
+    });
+  }
+}
+
+function resetSupplierPaymentForm() {
+  const totInp = document.getElementById("pmt-total-amount");
+  if (totInp) totInp.value = "";
+  const refInp = document.getElementById("pmt-ref-number");
+  if (refInp) refInp.value = "";
+  const refDateInp = document.getElementById("pmt-ref-date");
+  if (refDateInp) refDateInp.value = "";
+  const narrInp = document.getElementById("pmt-narration");
+  if (narrInp) narrInp.value = "";
+  const suppSel = document.getElementById("pmt-supplier-select");
+  if (suppSel) suppSel.value = "";
+  onSupplierPaymentSupplierChanged();
+  initSupplierPaymentScreen();
+}
+
+// -----------------------------------------------------------------------------
+// 4. Supplier Payments Register Controller
+// -----------------------------------------------------------------------------
+function renderSupplierPaymentsRegister() {
+  const search = document.getElementById("pmt-list-search")?.value.trim() || "";
+  const fromDate = document.getElementById("pmt-list-from-date")?.value || "";
+  const toDate = document.getElementById("pmt-list-to-date")?.value || "";
+  const status = document.getElementById("pmt-list-status")?.value || "";
+  const tbody = document.getElementById("payments-register-tbody");
+  const emptyMsg = document.getElementById("payments-register-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Loading payments register...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listSupplierPayments) {
+    window.backend.traditional_listSupplierPayments("", fromDate, toDate, status, search, 100, 0, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const payments = res.data.payments || [];
+          tbody.innerHTML = "";
+
+          if (payments.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            updatePaymentsRegisterSummary(0, 0, 0);
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalDisbursedSum = 0;
+          let totalAdvanceSum = 0;
+
+          payments.forEach((p, idx) => {
+            const tr = document.createElement("tr");
+            const isReversed = p.status === "REVERSED";
+            const tot = parseFloat(p.total_amount || 0);
+            const adv = parseFloat(p.unallocated_amount || 0);
+            if (!isReversed) {
+              totalDisbursedSum += tot;
+              totalAdvanceSum += adv;
+            }
+
+            const statusBadge = isReversed
+              ? '<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">REVERSED</span>'
+              : '<span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px;">POSTED</span>';
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td>${p.payment_date || ""}</td>
+              <td style="font-weight: 800; color: #1e3a8a;">${p.voucher_number || ""}</td>
+              <td><strong>${p.supplier_name || "Supplier"}</strong> <span style="color: #64748b; font-size: 11px;">(${p.supplier_code || ""})</span></td>
+              <td>${p.payment_method || ""}</td>
+              <td style="text-align: right; font-weight: 700; color: #b91c1c;">${formatMoney(p.total_amount)}</td>
+              <td style="text-align: right;">${formatMoney(p.allocated_amount)}</td>
+              <td style="text-align: right; color: #7c3aed; font-weight: 700;">${formatMoney(p.unallocated_amount)}</td>
+              <td style="text-align: center;">${statusBadge}</td>
+              <td style="text-align: center;">
+                <div style="display: flex; gap: 4px; justify-content: center;">
+                  <button type="button" class="btn-classic btn-sm btn-view-pmt" data-id="${p.id}" style="padding: 2px 8px; font-size: 11px;">View</button>
+                  ${!isReversed ? `<button type="button" class="btn-classic btn-sm btn-reverse-pmt" data-id="${p.id}" data-num="${p.voucher_number}" data-party="${p.supplier_name || ""}" data-amount="${formatMoney(p.total_amount)}" style="padding: 2px 8px; font-size: 11px; color: #dc2626;">Reverse</button>` : ''}
+                  <button type="button" class="btn-classic btn-sm btn-print-pmt" data-id="${p.id}" style="padding: 2px 8px; font-size: 11px;">Print</button>
+                </div>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tbody.querySelectorAll(".btn-view-pmt").forEach(b => {
+            b.addEventListener("click", () => openVoucherDetailsModal("PAYMENT", b.dataset.id));
+          });
+          tbody.querySelectorAll(".btn-reverse-pmt").forEach(b => {
+            b.addEventListener("click", () => openReversalModal("PAYMENT", b.dataset.id, b.dataset.num, b.dataset.party, b.dataset.amount));
+          });
+          tbody.querySelectorAll(".btn-print-pmt").forEach(b => {
+            b.addEventListener("click", () => {
+              if (window.backend && window.backend.traditional_getSupplierPayment) {
+                window.backend.traditional_getSupplierPayment(b.dataset.id, (vStr) => {
+                  try {
+                    const vr = JSON.parse(vStr);
+                    if (vr.success && vr.data) openVoucherPrintModal(vr.data, "PAYMENT");
+                  } catch (e) {
+                    console.error("Error loading payment for print:", e);
+                  }
+                });
+              }
+            });
+          });
+
+          updatePaymentsRegisterSummary(payments.length, totalDisbursedSum, totalAdvanceSum);
+        }
+      } catch (e) {
+        console.error("Error rendering payments register:", e);
+      }
+    });
+  }
+}
+
+function updatePaymentsRegisterSummary(count, totalDisbursed, totalAdvance) {
+  const countEl = document.getElementById("pmt-list-count");
+  const totEl = document.getElementById("pmt-list-total-sum");
+  const advEl = document.getElementById("pmt-list-advance-sum");
+  if (countEl) countEl.textContent = `Payments: ${count}`;
+  if (totEl) totEl.textContent = formatMoney(totalDisbursed);
+  if (advEl) advEl.textContent = formatMoney(totalAdvance);
+}
+
+// -----------------------------------------------------------------------------
+// 5. Customer Outstanding View (Accounts Receivable)
+// -----------------------------------------------------------------------------
+function renderCustomerOutstandingView() {
+  const asOfDate = document.getElementById("cust-out-as-of-date")?.value || "";
+  const search = (document.getElementById("cust-out-search")?.value || "").toLowerCase().trim();
+  const tbody = document.getElementById("cust-out-tbody");
+  const emptyMsg = document.getElementById("cust-out-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Calculating accounts receivable...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listCustomersOutstanding) {
+    window.backend.traditional_listCustomersOutstanding(asOfDate, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          let customers = res.data.customers || [];
+          if (search) {
+            customers = customers.filter(c =>
+              (c.customer_name || "").toLowerCase().includes(search) ||
+              (c.customer_code || "").toLowerCase().includes(search) ||
+              (c.phone || "").toLowerCase().includes(search) ||
+              (c.gstin || "").toLowerCase().includes(search)
+            );
+          }
+
+          tbody.innerHTML = "";
+          if (customers.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            const cntEl = document.getElementById("cust-out-count");
+            const totEl = document.getElementById("cust-out-total-sum");
+            if (cntEl) cntEl.textContent = "Total Customers: 0";
+            if (totEl) totEl.textContent = "₹ 0.00";
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalAR = 0;
+
+          customers.forEach((c, idx) => {
+            const tr = document.createElement("tr");
+            const outAmt = parseFloat(c.outstanding_amount || 0);
+            totalAR += outAmt;
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #1e3a8a;">${c.customer_code || ""}</td>
+              <td><strong>${c.customer_name || "Customer"}</strong></td>
+              <td>${c.phone || "-"}</td>
+              <td>${c.gstin || "-"}</td>
+              <td style="text-align: right;">${formatMoney(c.total_billed)}</td>
+              <td style="text-align: right; color: #15803d;">${formatMoney(c.total_paid)}</td>
+              <td style="text-align: right; font-weight: 800; color: ${outAmt > 0 ? '#b91c1c' : '#15803d'};">${formatMoney(outAmt)}</td>
+              <td style="text-align: center; font-weight: 700;">${c.balance_type || "Dr"}</td>
+              <td style="text-align: center;">
+                <button type="button" class="btn-classic btn-sm btn-cust-out-rct" data-id="${c.customer_id}" style="padding: 2px 8px; font-size: 11px; background: #15803d; color: #fff; font-weight: 700;">Receive</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tbody.querySelectorAll(".btn-cust-out-rct").forEach(b => {
+            b.addEventListener("click", () => {
+              showScreen("view-customer-receipt");
+              initCustomerReceiptScreen(b.dataset.id);
+            });
+          });
+
+          const cntEl = document.getElementById("cust-out-count");
+          const totEl = document.getElementById("cust-out-total-sum");
+          if (cntEl) cntEl.textContent = `Total Customers: ${customers.length}`;
+          if (totEl) totEl.textContent = formatMoney(totalAR);
+        }
+      } catch (e) {
+        console.error("Error rendering customer outstandings:", e);
+      }
+    });
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 6. Supplier Outstanding View (Accounts Payable)
+// -----------------------------------------------------------------------------
+function renderSupplierOutstandingView() {
+  const asOfDate = document.getElementById("supp-out-as-of-date")?.value || "";
+  const search = (document.getElementById("supp-out-search")?.value || "").toLowerCase().trim();
+  const tbody = document.getElementById("supp-out-tbody");
+  const emptyMsg = document.getElementById("supp-out-empty");
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">Calculating accounts payable...</td></tr>';
+
+  if (window.backend && window.backend.traditional_listSuppliersOutstanding) {
+    window.backend.traditional_listSuppliersOutstanding(asOfDate, (resStr) => {
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          let suppliers = res.data.suppliers || [];
+          if (search) {
+            suppliers = suppliers.filter(s =>
+              (s.supplier_name || "").toLowerCase().includes(search) ||
+              (s.supplier_code || "").toLowerCase().includes(search) ||
+              (s.phone || "").toLowerCase().includes(search) ||
+              (s.gstin || "").toLowerCase().includes(search)
+            );
+          }
+
+          tbody.innerHTML = "";
+          if (suppliers.length === 0) {
+            if (emptyMsg) emptyMsg.style.display = "block";
+            const cntEl = document.getElementById("supp-out-count");
+            const totEl = document.getElementById("supp-out-total-sum");
+            if (cntEl) cntEl.textContent = "Total Suppliers: 0";
+            if (totEl) totEl.textContent = "₹ 0.00";
+            return;
+          }
+
+          if (emptyMsg) emptyMsg.style.display = "none";
+          let totalAP = 0;
+
+          suppliers.forEach((s, idx) => {
+            const tr = document.createElement("tr");
+            const outAmt = parseFloat(s.outstanding_amount || 0);
+            totalAP += outAmt;
+
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #78350f;">${s.supplier_code || ""}</td>
+              <td><strong>${s.supplier_name || "Supplier"}</strong></td>
+              <td>${s.phone || "-"}</td>
+              <td>${s.gstin || "-"}</td>
+              <td style="text-align: right;">${formatMoney(s.total_purchases)}</td>
+              <td style="text-align: right; color: #15803d;">${formatMoney(s.total_paid)}</td>
+              <td style="text-align: right; font-weight: 800; color: ${outAmt > 0 ? '#b91c1c' : '#15803d'};">${formatMoney(outAmt)}</td>
+              <td style="text-align: center; font-weight: 700;">${s.balance_type || "Cr"}</td>
+              <td style="text-align: center;">
+                <button type="button" class="btn-classic btn-sm btn-supp-out-pmt" data-id="${s.supplier_id}" style="padding: 2px 8px; font-size: 11px; background: #b91c1c; color: #fff; font-weight: 700;">Pay</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tbody.querySelectorAll(".btn-supp-out-pmt").forEach(b => {
+            b.addEventListener("click", () => {
+              showScreen("view-supplier-payment");
+              initSupplierPaymentScreen(b.dataset.id);
+            });
+          });
+
+          const cntEl = document.getElementById("supp-out-count");
+          const totEl = document.getElementById("supp-out-total-sum");
+          if (cntEl) cntEl.textContent = `Total Suppliers: ${suppliers.length}`;
+          if (totEl) totEl.textContent = formatMoney(totalAP);
+        }
+      } catch (e) {
+        console.error("Error rendering supplier outstandings:", e);
+      }
+    });
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 7. Financial Reconciliation Dashboard Controller
+// -----------------------------------------------------------------------------
+function renderReconciliationDashboard() {
+  const asOfDate = document.getElementById("recon-as-of-date")?.value || "";
+  const runBtn = document.getElementById("btn-recon-run-audit");
+  if (runBtn) {
+    runBtn.disabled = true;
+    runBtn.textContent = "Auditing Subledgers...";
+  }
+
+  if (window.backend && window.backend.traditional_getFinancialReconciliationSummary) {
+    window.backend.traditional_getFinancialReconciliationSummary(asOfDate, (resStr) => {
+      if (runBtn) {
+        runBtn.disabled = false;
+        runBtn.textContent = "Run Full Financial Audit";
+      }
+      try {
+        const res = JSON.parse(resStr);
+        if (res.success && res.data) {
+          const d = res.data;
+          const timeEl = document.getElementById("recon-last-audit-time");
+          if (timeEl) timeEl.textContent = `Last audited: ${new Date().toLocaleTimeString()} (${d.as_of_date || "Today"})`;
+
+          // Executive Banner
+          const isBalanced = d.overall_status === "BALANCED";
+          const bannerEl = document.getElementById("recon-executive-banner");
+          const badgeEl = document.getElementById("recon-executive-badge");
+          const titleEl = document.getElementById("recon-executive-title");
+          const descEl = document.getElementById("recon-executive-desc");
+          const scoreEl = document.getElementById("recon-executive-score");
+
+          if (badgeEl) {
+            badgeEl.textContent = d.overall_status || "BALANCED";
+            badgeEl.style.background = isBalanced ? "#15803d" : "#dc2626";
+          }
+          if (bannerEl) {
+            bannerEl.style.background = isBalanced ? "#f0fdf4" : "#fef2f2";
+            bannerEl.style.borderColor = isBalanced ? "#86efac" : "#fecaca";
+          }
+          if (titleEl) {
+            titleEl.textContent = isBalanced ? "Books & Subledgers Perfectly Balanced" : "Subledger Discrepancies Detected";
+          }
+          if (descEl) {
+            descEl.textContent = isBalanced
+              ? "All customer AR, supplier AP, cash/bank liquid movements and double-entry journals are 100% reconciled."
+              : "Audit diagnostic has identified variance between General Ledger balances and transactional subledgers.";
+          }
+          if (scoreEl) {
+            scoreEl.textContent = d.health_score || (isBalanced ? "100%" : "85%");
+            scoreEl.style.color = isBalanced ? "#15803d" : "#dc2626";
+          }
+
+          // Card 1: AR
+          const ar = d.customer_ar || {};
+          setReconCardStatus("recon-ar-status", ar.status);
+          setElText("recon-ar-gl", formatMoney(ar.gl_ar_balance));
+          setElText("recon-ar-sub", formatMoney(ar.subledger_net_receivable));
+          setElText("recon-ar-diff", formatMoney(ar.discrepancy));
+
+          // Card 2: AP
+          const ap = d.supplier_ap || {};
+          setReconCardStatus("recon-ap-status", ap.status);
+          setElText("recon-ap-gl", formatMoney(ap.gl_ap_balance));
+          setElText("recon-ap-sub", formatMoney(ap.subledger_net_payable));
+          setElText("recon-ap-diff", formatMoney(ap.discrepancy));
+
+          // Card 3: Cash & Bank
+          const cb = d.cash_and_bank || {};
+          setReconCardStatus("recon-cb-status", cb.status);
+          setElText("recon-cb-gl", formatMoney(cb.total_liquid_gl_balance));
+          setElText("recon-cb-sub", formatMoney(cb.total_net_voucher_movement));
+          setElText("recon-cb-diff", formatMoney(cb.discrepancy));
+
+          // Card 4: Customer Advances
+          const ca = d.customer_advances || {};
+          setReconCardStatus("recon-adv-cust-status", ca.status);
+          setElText("recon-adv-cust-vch", formatMoney(ca.unallocated_receipts_advances));
+          setElText("recon-adv-cust-gl", formatMoney(ca.gl_advance_liability_balance));
+          setElText("recon-adv-cust-diff", formatMoney(ca.discrepancy));
+
+          // Card 5: Supplier Advances
+          const sa = d.supplier_advances || {};
+          setReconCardStatus("recon-adv-supp-status", sa.status);
+          setElText("recon-adv-supp-vch", formatMoney(sa.unallocated_payments_advances));
+          setElText("recon-adv-supp-gl", formatMoney(sa.gl_advance_asset_balance));
+          setElText("recon-adv-supp-diff", formatMoney(sa.discrepancy));
+
+          // Card 6: Journal Integrity
+          const aud = d.journal_audit || {};
+          setReconCardStatus("recon-audit-status", aud.status === "CLEAN" ? "CLEAN" : "ANOMALIES");
+          setElText("recon-audit-orphan", aud.orphan_journals_count || "0");
+          setElText("recon-audit-unbalanced", aud.unbalanced_lines_count || "0");
+          setElText("recon-audit-total", aud.total_anomalies_count || "0");
+        }
+      } catch (e) {
+        console.error("Error rendering reconciliation summary:", e);
+      }
+    });
+  }
+}
+
+function setReconCardStatus(elementId, status) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const isOk = status === "BALANCED" || status === "CLEAN";
+  el.textContent = status || "UNKNOWN";
+  el.style.background = isOk ? "#dcfce7" : "#fee2e2";
+  el.style.color = isOk ? "#15803d" : "#dc2626";
+}
+
+function setElText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+}
+
+// -----------------------------------------------------------------------------
+// 8. Modals Controller (Details, Reversals, Print)
+// -----------------------------------------------------------------------------
+function openVoucherDetailsModal(type, voucherId) {
+  const modal = document.getElementById("modal-voucher-details");
+  if (!modal) return;
+
+  const titleBadge = document.getElementById("vch-detail-type-badge");
+  const titleEl = document.getElementById("vch-detail-title");
+  if (titleBadge) {
+    titleBadge.textContent = type;
+    titleBadge.style.background = type === "RECEIPT" ? "#1e3a8a" : "#b91c1c";
+  }
+
+  const numEl = document.getElementById("vch-det-num");
+  const dateEl = document.getElementById("vch-det-date");
+  const partyEl = document.getElementById("vch-det-party");
+  const methEl = document.getElementById("vch-det-method");
+  const accEl = document.getElementById("vch-det-account");
+  const refEl = document.getElementById("vch-det-ref");
+  const statEl = document.getElementById("vch-det-status");
+  const userEl = document.getElementById("vch-det-user");
+  const totEl = document.getElementById("vch-det-total");
+  const allocEl = document.getElementById("vch-det-allocated");
+  const advEl = document.getElementById("vch-det-advance");
+  const discEl = document.getElementById("vch-det-discount");
+  const revAlert = document.getElementById("vch-det-reversal-alert");
+  const revReason = document.getElementById("vch-det-reversal-reason");
+  const tbody = document.getElementById("vch-det-alloc-tbody");
+  const emptyAlloc = document.getElementById("vch-det-alloc-empty");
+
+  const cb = (resStr) => {
+    try {
+      const res = JSON.parse(resStr);
+      if (res.success && res.data) {
+        const d = res.data;
+        activePrintContext = { data: d, type: type };
+        if (titleEl) titleEl.textContent = `Voucher Details: ${d.voucher_number || ""}`;
+        if (numEl) numEl.textContent = d.voucher_number || "";
+        if (dateEl) dateEl.textContent = d.receipt_date || d.payment_date || "";
+        if (partyEl) partyEl.textContent = d.customer_name || d.supplier_name || "Party";
+        if (methEl) methEl.textContent = d.payment_method || "";
+        if (accEl) accEl.textContent = d.deposit_account_name || d.source_account_name || d.deposit_account_id || d.source_account_id || "";
+        if (refEl) refEl.textContent = d.reference_number || "-";
+        if (statEl) {
+          const isRev = d.status === "REVERSED";
+          statEl.textContent = d.status || "POSTED";
+          statEl.style.background = isRev ? "#fee2e2" : "#dcfce7";
+          statEl.style.color = isRev ? "#991b1b" : "#15803d";
+        }
+        if (userEl) userEl.textContent = d.created_by || "Administrator";
+        if (totEl) totEl.textContent = formatMoney(d.total_amount);
+        if (allocEl) allocEl.textContent = formatMoney(d.allocated_amount);
+        if (advEl) advEl.textContent = formatMoney(d.unallocated_amount);
+        if (discEl) discEl.textContent = formatMoney(d.discount_amount);
+
+        if (d.status === "REVERSED") {
+          if (revAlert) revAlert.style.display = "block";
+          if (revReason) revReason.textContent = d.reversal_reason || "Reversed by authorized user.";
+        } else {
+          if (revAlert) revAlert.style.display = "none";
+        }
+
+        if (tbody) tbody.innerHTML = "";
+        const allocs = d.allocations || [];
+        if (allocs.length === 0) {
+          if (emptyAlloc) emptyAlloc.style.display = "block";
+        } else {
+          if (emptyAlloc) emptyAlloc.style.display = "none";
+          allocs.forEach((a, idx) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #1e3a8a;">${a.invoice_number || a.bill_number || a.invoice_id || a.purchase_voucher_id || "Bill"}</td>
+              <td style="text-align: right; font-weight: 700;">${formatMoney(a.allocated_amount)}</td>
+              <td style="text-align: right; color: #b45309;">${formatMoney(a.discount_amount)}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+
+        openModal("modal-voucher-details");
+      }
+    } catch (e) {
+      console.error("Error loading voucher details:", e);
+    }
+  };
+
+  if (type === "RECEIPT" && window.backend && window.backend.traditional_getCustomerReceipt) {
+    window.backend.traditional_getCustomerReceipt(voucherId, cb);
+  } else if (type === "PAYMENT" && window.backend && window.backend.traditional_getSupplierPayment) {
+    window.backend.traditional_getSupplierPayment(voucherId, cb);
+  }
+}
+
+function openReversalModal(type, voucherId, voucherNumber, partyName, amount) {
+  activeReversalContext = { type, id: voucherId, number: voucherNumber, party: partyName, amount };
+  const numEl = document.getElementById("reversal-vch-num");
+  const partyEl = document.getElementById("reversal-party-name");
+  const amtEl = document.getElementById("reversal-amount");
+  const reasonInp = document.getElementById("reversal-reason-input");
+
+  if (numEl) numEl.textContent = voucherNumber;
+  if (partyEl) partyEl.textContent = partyName;
+  if (amtEl) amtEl.textContent = amount;
+  if (reasonInp) {
+    reasonInp.value = "";
+    setTimeout(() => reasonInp.focus(), 50);
+  }
+
+  openModal("modal-reversal-confirm");
+}
+
+function executeVoucherReversal() {
+  const reasonInp = document.getElementById("reversal-reason-input");
+  const reason = reasonInp ? reasonInp.value.trim() : "";
+  if (!reason) {
+    showNotification("Reversal reason is mandatory for double-entry audit compliance.", "warning");
+    if (reasonInp) reasonInp.focus();
+    return;
+  }
+
+  const { type, id, number } = activeReversalContext;
+  const btn = document.getElementById("btn-reversal-confirm");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Posting Reversal...";
+  }
+
+  const handleResponse = (resStr) => {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Confirm & Post Reversal";
+    }
+    try {
+      const res = JSON.parse(resStr);
+      if (res.success) {
+        showNotification(`Voucher ${number} reversed successfully. Compensating journal entry posted.`, "success");
+        closeModal("modal-reversal-confirm");
+        if (type === "RECEIPT") renderCustomerReceiptsRegister();
+        else if (type === "PAYMENT") renderSupplierPaymentsRegister();
+      } else {
+        showNotification(`Reversal failed: ${res.error || "Permission denied or invalid state"}`, "error");
+      }
+    } catch (e) {
+      console.error("Error executing reversal:", e);
+      showNotification("An error occurred during voucher reversal.", "error");
+    }
+  };
+
+  if (type === "RECEIPT" && window.backend && window.backend.traditional_reverseCustomerReceipt) {
+    window.backend.traditional_reverseCustomerReceipt(id, reason, handleResponse);
+  } else if (type === "PAYMENT" && window.backend && window.backend.traditional_reverseSupplierPayment) {
+    window.backend.traditional_reverseSupplierPayment(id, reason, handleResponse);
+  }
+}
+
+function openVoucherPrintModal(vchData, type) {
+  if (!vchData) return;
+  activePrintContext = { data: vchData, type: type };
+
+  const compName = window.activeCompany ? window.activeCompany.name : "ALPHA BILLING ENTERPRISE";
+  const compAddr = window.activeCompany ? (window.activeCompany.address || "") : "Main Commercial Complex, City";
+  const compGstin = window.activeCompany ? (window.activeCompany.gstin || "") : "27AABCA1234A1Z5";
+
+  setElText("print-company-name", compName);
+  setElText("print-company-address", compAddr);
+  setElText("print-company-gstin", compGstin ? `GSTIN: ${compGstin}` : "");
+
+  setElText("print-voucher-title", type === "RECEIPT" ? "CUSTOMER RECEIPT VOUCHER" : "SUPPLIER PAYMENT VOUCHER");
+  setElText("print-vch-no", vchData.voucher_number || "");
+  setElText("print-vch-date", vchData.receipt_date || vchData.payment_date || "");
+  setElText("print-vch-mode", vchData.payment_method || "");
+  setElText("print-vch-ref", vchData.reference_number || "-");
+  setElText("print-vch-account", vchData.deposit_account_name || vchData.source_account_name || vchData.deposit_account_id || vchData.source_account_id || "");
+  setElText("print-vch-status", vchData.status || "POSTED");
+
+  setElText("print-party-name", vchData.customer_name || vchData.supplier_name || "Party");
+  setElText("print-party-code", vchData.customer_code || vchData.supplier_code || "");
+  setElText("print-party-phone", vchData.customer_phone || vchData.supplier_phone || "-");
+  setElText("print-party-gstin", vchData.customer_gstin || vchData.supplier_gstin || "-");
+
+  const allocTbody = document.getElementById("print-alloc-tbody");
+  if (allocTbody) {
+    allocTbody.innerHTML = "";
+    const allocs = vchData.allocations || [];
+    if (allocs.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="padding: 4px 0;">On-Account / Advance Payment</td>
+        <td style="text-align: right; padding: 4px 0;">${formatMoney(vchData.total_amount)}</td>
+      `;
+      allocTbody.appendChild(tr);
+    } else {
+      allocs.forEach(a => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="padding: 4px 0;">Settlement for Invoice: ${a.invoice_number || a.bill_number || a.invoice_id || a.purchase_voucher_id || "Bill"}</td>
+          <td style="text-align: right; padding: 4px 0;">${formatMoney(a.allocated_amount)}</td>
+        `;
+        allocTbody.appendChild(tr);
+      });
+      if (parseFloat(vchData.unallocated_amount || 0) > 0) {
+        const trAdv = document.createElement("tr");
+        trAdv.innerHTML = `
+          <td style="padding: 4px 0; font-style: italic;">Unallocated Customer Advance</td>
+          <td style="text-align: right; padding: 4px 0;">${formatMoney(vchData.unallocated_amount)}</td>
+        `;
+        allocTbody.appendChild(trAdv);
+      }
+    }
+  }
+
+  setElText("print-total-amount", formatMoney(vchData.total_amount));
+  setElText("print-amount-words", convertNumberToWords(vchData.total_amount));
+  setElText("print-narration", vchData.notes || "None");
+
+  openModal("modal-voucher-print");
+}
+
+function initPaymentAndReceiptModule() {
+  // Navigation & Ribbon buttons
+  const rctBack = document.getElementById("btn-rct-back");
+  const rctClose = document.getElementById("btn-rct-close");
+  if (rctBack) rctBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (rctClose) rctClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const rctListBack = document.getElementById("btn-rct-list-back");
+  const rctListClose = document.getElementById("btn-rct-list-close");
+  if (rctListBack) rctListBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (rctListClose) rctListClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const pmtBack = document.getElementById("btn-pmt-back");
+  const pmtClose = document.getElementById("btn-pmt-close");
+  if (pmtBack) pmtBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (pmtClose) pmtClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const pmtListBack = document.getElementById("btn-pmt-list-back");
+  const pmtListClose = document.getElementById("btn-pmt-list-close");
+  if (pmtListBack) pmtListBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (pmtListClose) pmtListClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const custOutBack = document.getElementById("btn-cust-out-back");
+  const custOutClose = document.getElementById("btn-cust-out-close");
+  if (custOutBack) custOutBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (custOutClose) custOutClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const suppOutBack = document.getElementById("btn-supp-out-back");
+  const suppOutClose = document.getElementById("btn-supp-out-close");
+  if (suppOutBack) suppOutBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (suppOutClose) suppOutClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  const reconBack = document.getElementById("btn-recon-back");
+  const reconClose = document.getElementById("btn-recon-close");
+  if (reconBack) reconBack.addEventListener("click", () => showScreen("view-dashboard"));
+  if (reconClose) reconClose.addEventListener("click", () => showScreen("view-dashboard"));
+
+  // Customer Receipt Action buttons
+  const btnRctAuto = document.getElementById("btn-rct-auto-allocate");
+  if (btnRctAuto) btnRctAuto.addEventListener("click", autoAllocateCustomerReceipt);
+
+  const btnRctClear = document.getElementById("btn-rct-clear-allocate");
+  if (btnRctClear) btnRctClear.addEventListener("click", clearReceiptAllocations);
+
+  const btnRctReset = document.getElementById("btn-rct-reset");
+  if (btnRctReset) btnRctReset.addEventListener("click", resetCustomerReceiptForm);
+
+  const btnRctSave = document.getElementById("btn-rct-save");
+  if (btnRctSave) btnRctSave.addEventListener("click", saveCustomerReceipt);
+
+  const rctCustSelect = document.getElementById("rct-customer-select");
+  if (rctCustSelect) rctCustSelect.addEventListener("change", onCustomerReceiptCustomerChanged);
+
+  const rctMethodSelect = document.getElementById("rct-payment-method");
+  if (rctMethodSelect) {
+    rctMethodSelect.addEventListener("change", (e) => {
+      populateAccountsDropdown("rct-deposit-account", e.target.value);
+    });
+  }
+
+  const rctTotalInp = document.getElementById("rct-total-amount");
+  if (rctTotalInp) rctTotalInp.addEventListener("input", recalculateReceiptSummary);
+
+  // Receipts Register Buttons
+  const btnRctListRef = document.getElementById("btn-rct-list-refresh");
+  if (btnRctListRef) btnRctListRef.addEventListener("click", renderCustomerReceiptsRegister);
+
+  const btnRctListNew = document.getElementById("btn-rct-list-new");
+  if (btnRctListNew) btnRctListNew.addEventListener("click", () => showScreen("view-customer-receipt"));
+
+  const rctSearch = document.getElementById("rct-list-search");
+  if (rctSearch) rctSearch.addEventListener("input", renderCustomerReceiptsRegister);
+
+  const rctStatus = document.getElementById("rct-list-status");
+  if (rctStatus) rctStatus.addEventListener("change", renderCustomerReceiptsRegister);
+
+  // Supplier Payment Action buttons
+  const btnPmtReset = document.getElementById("btn-pmt-reset");
+  if (btnPmtReset) btnPmtReset.addEventListener("click", resetSupplierPaymentForm);
+
+  const btnPmtSave = document.getElementById("btn-pmt-save");
+  if (btnPmtSave) btnPmtSave.addEventListener("click", saveSupplierPayment);
+
+  const pmtSuppSelect = document.getElementById("pmt-supplier-select");
+  if (pmtSuppSelect) pmtSuppSelect.addEventListener("change", onSupplierPaymentSupplierChanged);
+
+  const pmtMethodSelect = document.getElementById("pmt-payment-method");
+  if (pmtMethodSelect) {
+    pmtMethodSelect.addEventListener("change", (e) => {
+      populateAccountsDropdown("pmt-source-account", e.target.value);
+    });
+  }
+
+  const pmtTotalInp = document.getElementById("pmt-total-amount");
+  if (pmtTotalInp) pmtTotalInp.addEventListener("input", recalculatePaymentSummary);
+
+  // Payments Register Buttons
+  const btnPmtListRef = document.getElementById("btn-pmt-list-refresh");
+  if (btnPmtListRef) btnPmtListRef.addEventListener("click", renderSupplierPaymentsRegister);
+
+  const btnPmtListNew = document.getElementById("btn-pmt-list-new");
+  if (btnPmtListNew) btnPmtListNew.addEventListener("click", () => showScreen("view-supplier-payment"));
+
+  const pmtSearch = document.getElementById("pmt-list-search");
+  if (pmtSearch) pmtSearch.addEventListener("input", renderSupplierPaymentsRegister);
+
+  const pmtStatus = document.getElementById("pmt-list-status");
+  if (pmtStatus) pmtStatus.addEventListener("change", renderSupplierPaymentsRegister);
+
+  // Outstandings & Recon Buttons
+  const btnCustOutRef = document.getElementById("btn-cust-out-refresh");
+  if (btnCustOutRef) btnCustOutRef.addEventListener("click", renderCustomerOutstandingView);
+
+  const custOutSearch = document.getElementById("cust-out-search");
+  if (custOutSearch) custOutSearch.addEventListener("input", renderCustomerOutstandingView);
+
+  const btnSuppOutRef = document.getElementById("btn-supp-out-refresh");
+  if (btnSuppOutRef) btnSuppOutRef.addEventListener("click", renderSupplierOutstandingView);
+
+  const suppOutSearch = document.getElementById("supp-out-search");
+  if (suppOutSearch) suppOutSearch.addEventListener("input", renderSupplierOutstandingView);
+
+  const btnReconRun = document.getElementById("btn-recon-run-audit");
+  if (btnReconRun) btnReconRun.addEventListener("click", renderReconciliationDashboard);
+
+  // Modals buttons
+  const btnCloseVchDet = document.getElementById("btn-close-voucher-details");
+  const btnVchDetClose = document.getElementById("btn-vch-det-close");
+  if (btnCloseVchDet) btnCloseVchDet.addEventListener("click", () => closeModal("modal-voucher-details"));
+  if (btnVchDetClose) btnVchDetClose.addEventListener("click", () => closeModal("modal-voucher-details"));
+
+  const btnVchDetPrint = document.getElementById("btn-vch-det-print");
+  if (btnVchDetPrint) {
+    btnVchDetPrint.addEventListener("click", () => {
+      if (activePrintContext) {
+        closeModal("modal-voucher-details");
+        openVoucherPrintModal(activePrintContext.data, activePrintContext.type);
+      }
+    });
+  }
+
+  const btnCloseRev = document.getElementById("btn-close-reversal-modal");
+  const btnRevCancel = document.getElementById("btn-reversal-cancel");
+  if (btnCloseRev) btnCloseRev.addEventListener("click", () => closeModal("modal-reversal-confirm"));
+  if (btnRevCancel) btnRevCancel.addEventListener("click", () => closeModal("modal-reversal-confirm"));
+
+  const btnRevConfirm = document.getElementById("btn-reversal-confirm");
+  if (btnRevConfirm) btnRevConfirm.addEventListener("click", executeVoucherReversal);
+
+  const btnClosePrint = document.getElementById("btn-close-voucher-print");
+  const btnPrintClose = document.getElementById("btn-print-slip-close");
+  if (btnClosePrint) btnClosePrint.addEventListener("click", () => closeModal("modal-voucher-print"));
+  if (btnPrintClose) btnPrintClose.addEventListener("click", () => closeModal("modal-voucher-print"));
+
+  const btnPrintAction = document.getElementById("btn-print-slip-action");
+  if (btnPrintAction) {
+    btnPrintAction.addEventListener("click", () => {
+      window.print();
+    });
+  }
+
+  // Keyboard shortcuts (F2, F5, Esc)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F2") {
+      if (currentScreen === "view-customer-receipt") {
+        e.preventDefault();
+        saveCustomerReceipt();
+      } else if (currentScreen === "view-supplier-payment") {
+        e.preventDefault();
+        saveSupplierPayment();
+      } else if (currentScreen === "view-receipt-list") {
+        e.preventDefault();
+        showScreen("view-customer-receipt");
+      } else if (currentScreen === "view-payment-list") {
+        e.preventDefault();
+        showScreen("view-supplier-payment");
+      }
+    } else if (e.key === "F5") {
+      if (currentScreen === "view-customer-receipt") {
+        e.preventDefault();
+        showScreen("view-receipt-list");
+      } else if (currentScreen === "view-supplier-payment") {
+        e.preventDefault();
+        showScreen("view-payment-list");
+      } else if (currentScreen === "view-receipt-list") {
+        e.preventDefault();
+        renderCustomerReceiptsRegister();
+      } else if (currentScreen === "view-payment-list") {
+        e.preventDefault();
+        renderSupplierPaymentsRegister();
+      } else if (currentScreen === "view-customer-outstanding") {
+        e.preventDefault();
+        renderCustomerOutstandingView();
+      } else if (currentScreen === "view-supplier-outstanding") {
+        e.preventDefault();
+        renderSupplierOutstandingView();
+      } else if (currentScreen === "view-reconciliation-dashboard") {
+        e.preventDefault();
+        renderReconciliationDashboard();
+      }
+    } else if (e.key === "Escape") {
+      const modalDet = document.getElementById("modal-voucher-details");
+      const modalRev = document.getElementById("modal-reversal-confirm");
+      const modalPrt = document.getElementById("modal-voucher-print");
+      if (modalDet && modalDet.classList.contains("show")) {
+        closeModal("modal-voucher-details");
+        return;
+      }
+      if (modalRev && modalRev.classList.contains("show")) {
+        closeModal("modal-reversal-confirm");
+        return;
+      }
+      if (modalPrt && modalPrt.classList.contains("show")) {
+        closeModal("modal-voucher-print");
+        return;
+      }
+      const paymentScreens = [
+        "view-customer-receipt", "view-receipt-list",
+        "view-supplier-payment", "view-payment-list",
+        "view-customer-outstanding", "view-supplier-outstanding",
+        "view-reconciliation-dashboard"
+      ];
+      if (paymentScreens.includes(currentScreen)) {
+        showScreen("view-dashboard");
+      }
+    }
+  });
+}
+
+
 // Global Exports
 window.syncItemPrintName = syncItemPrintName;
 window.resetProductMasterForm = resetProductMasterForm;
@@ -11847,6 +13839,16 @@ window.calcRowAmount = calcRowAmount;
 window.recalculateVoucherTotals = recalculateVoucherTotals;
 window.setupPartyAutocomplete = setupPartyAutocomplete;
 window.renderVchAutocompletePopup = renderVchAutocompletePopup;
+window.initCustomerReceiptScreen = initCustomerReceiptScreen;
+window.renderCustomerReceiptsRegister = renderCustomerReceiptsRegister;
+window.initSupplierPaymentScreen = initSupplierPaymentScreen;
+window.renderSupplierPaymentsRegister = renderSupplierPaymentsRegister;
+window.renderCustomerOutstandingView = renderCustomerOutstandingView;
+window.renderSupplierOutstandingView = renderSupplierOutstandingView;
+window.renderReconciliationDashboard = renderReconciliationDashboard;
+window.openVoucherDetailsModal = openVoucherDetailsModal;
+window.openReversalModal = openReversalModal;
+window.openVoucherPrintModal = openVoucherPrintModal;
 
 setupEnterpriseErpEventListeners();
 setupCompanyAndPlaceholderModalListeners();
@@ -11854,5 +13856,2984 @@ setupThreeOptionWorkflowListeners();
 setupSidebarAndDashboardNav();
 initCascadingSubmenuPositioning();
 initBarcodeModule();
+initPaymentAndReceiptModule();
+ZoomController.init();
+
+// =============================================================
+// PHASE 1: PAPER CONFIGURATION MODULE
+// =============================================================
+const PaperConfigModule = {
+  currentFormat: "a4",
+  isDirty: false,
+  printers: [],
+  configs: {
+    a4: null,
+    a5: null,
+    thermal: null
+  },
+
+  init() {
+    this.setupEventListeners();
+  },
+
+  setupEventListeners() {
+    // Top Ribbon Actions
+    const btnSave = document.getElementById("btn-config-save");
+    if (btnSave) btnSave.addEventListener("click", () => this.saveConfiguration());
+
+    const btnReset = document.getElementById("btn-config-reset-default");
+    if (btnReset) btnReset.addEventListener("click", () => this.resetToDefault());
+
+    const btnTestPrint = document.getElementById("btn-config-test-print");
+    if (btnTestPrint) btnTestPrint.addEventListener("click", () => this.testPrint());
+
+    const btnRefreshPrinters = document.getElementById("btn-config-refresh-printers");
+    if (btnRefreshPrinters) btnRefreshPrinters.addEventListener("click", () => this.refreshPrinters(true));
+
+    const btnBack = document.getElementById("btn-config-back");
+    if (btnBack) btnBack.addEventListener("click", () => this.handleNavigateAway("view-dashboard"));
+
+    const btnClose = document.getElementById("btn-config-close");
+    if (btnClose) btnClose.addEventListener("click", () => this.handleNavigateAway("view-dashboard"));
+
+    // Category Sidebar Navigation
+    const catItems = document.querySelectorAll(".config-category-item");
+    catItems.forEach(item => {
+      item.addEventListener("click", () => {
+        if (item.classList.contains("disabled")) {
+          showNotification("This module is scheduled for subsequent phases.", "info");
+          return;
+        }
+        const cat = item.dataset.category;
+        catItems.forEach(c => c.classList.toggle("active", c === item));
+        const panePaper = document.getElementById("pane-paper-config");
+        const paneBillLayout = document.getElementById("pane-bill-layout-config");
+        const paneVchNum = document.getElementById("pane-voucher-numbering-config");
+        const paneGstTax = document.getElementById("pane-gst-tax-config");
+        const paneInventory = document.getElementById("pane-inventory-config");
+
+        if (cat === "inventory") {
+          if (panePaper) panePaper.style.display = "none";
+          if (paneBillLayout) paneBillLayout.style.display = "none";
+          if (paneVchNum) paneVchNum.style.display = "none";
+          if (paneGstTax) paneGstTax.style.display = "none";
+          if (paneInventory) paneInventory.style.display = "flex";
+          if (window.InventoryConfigModule) {
+            window.InventoryConfigModule.initScreen();
+          }
+        } else if (cat === "gst-tax") {
+          if (panePaper) panePaper.style.display = "none";
+          if (paneBillLayout) paneBillLayout.style.display = "none";
+          if (paneVchNum) paneVchNum.style.display = "none";
+          if (paneInventory) paneInventory.style.display = "none";
+          if (paneGstTax) paneGstTax.style.display = "flex";
+          if (window.GstTaxConfigModule) {
+            window.GstTaxConfigModule.initScreen();
+          }
+        } else if (cat === "voucher-numbering") {
+          if (panePaper) panePaper.style.display = "none";
+          if (paneBillLayout) paneBillLayout.style.display = "none";
+          if (paneGstTax) paneGstTax.style.display = "none";
+          if (paneInventory) paneInventory.style.display = "none";
+          if (paneVchNum) paneVchNum.style.display = "flex";
+          if (window.VoucherNumberingConfigModule) {
+            window.VoucherNumberingConfigModule.initScreen();
+          }
+        } else if (cat === "bill-layout") {
+          if (panePaper) panePaper.style.display = "none";
+          if (paneVchNum) paneVchNum.style.display = "none";
+          if (paneGstTax) paneGstTax.style.display = "none";
+          if (paneInventory) paneInventory.style.display = "none";
+          if (paneBillLayout) paneBillLayout.style.display = "flex";
+          if (window.BillLayoutConfigModule) {
+            window.BillLayoutConfigModule.initScreen();
+          }
+        } else if (cat === "paper") {
+          if (paneBillLayout) paneBillLayout.style.display = "none";
+          if (paneVchNum) paneVchNum.style.display = "none";
+          if (paneGstTax) paneGstTax.style.display = "none";
+          if (paneInventory) paneInventory.style.display = "none";
+          if (panePaper) panePaper.style.display = "flex";
+          PaperConfigModule.initScreen();
+        }
+      });
+    });
+
+    // Format Tab Switchers
+    const formatTabs = document.querySelectorAll(".btn-format-tab");
+    formatTabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        const fmt = tab.dataset.format;
+        if (fmt && fmt !== this.currentFormat) {
+          this.switchFormat(fmt);
+        }
+      });
+    });
+
+    // A4 Orientation
+    const btnA4Portrait = document.getElementById("btn-a4-orient-portrait");
+    const btnA4Landscape = document.getElementById("btn-a4-orient-landscape");
+    if (btnA4Portrait && btnA4Landscape) {
+      btnA4Portrait.addEventListener("click", () => {
+        btnA4Portrait.classList.add("active");
+        btnA4Landscape.classList.remove("active");
+        const h = document.getElementById("cfg-a4-orientation");
+        if (h) h.value = "portrait";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+      btnA4Landscape.addEventListener("click", () => {
+        btnA4Landscape.classList.add("active");
+        btnA4Portrait.classList.remove("active");
+        const h = document.getElementById("cfg-a4-orientation");
+        if (h) h.value = "landscape";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+    }
+
+    // A5 Orientation
+    const btnA5Portrait = document.getElementById("btn-a5-orient-portrait");
+    const btnA5Landscape = document.getElementById("btn-a5-orient-landscape");
+    if (btnA5Portrait && btnA5Landscape) {
+      btnA5Portrait.addEventListener("click", () => {
+        btnA5Portrait.classList.add("active");
+        btnA5Landscape.classList.remove("active");
+        const h = document.getElementById("cfg-a5-orientation");
+        if (h) h.value = "portrait";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+      btnA5Landscape.addEventListener("click", () => {
+        btnA5Landscape.classList.add("active");
+        btnA5Portrait.classList.remove("active");
+        const h = document.getElementById("cfg-a5-orientation");
+        if (h) h.value = "landscape";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+    }
+
+    // Thermal Width Selectors (80mm, 58mm, Custom)
+    const btnTh80 = document.getElementById("btn-thermal-80");
+    const btnTh58 = document.getElementById("btn-thermal-58");
+    const btnThCustom = document.getElementById("btn-thermal-custom");
+    const customWrap = document.getElementById("cfg-thermal-custom-width-wrap");
+    const thWidthTypeInput = document.getElementById("cfg-thermal-width-type");
+    const thPrintableInput = document.getElementById("cfg-thermal-printable-width");
+    const thFontInput = document.getElementById("cfg-thermal-font-size");
+
+    if (btnTh80 && btnTh58 && btnThCustom) {
+      btnTh80.addEventListener("click", () => {
+        btnTh80.classList.add("active");
+        btnTh58.classList.remove("active");
+        btnThCustom.classList.remove("active");
+        if (customWrap) customWrap.style.display = "none";
+        if (thWidthTypeInput) thWidthTypeInput.value = "80mm";
+        if (thPrintableInput) thPrintableInput.value = "72";
+        if (thFontInput) thFontInput.value = "10";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+
+      btnTh58.addEventListener("click", () => {
+        btnTh58.classList.add("active");
+        btnTh80.classList.remove("active");
+        btnThCustom.classList.remove("active");
+        if (customWrap) customWrap.style.display = "none";
+        if (thWidthTypeInput) thWidthTypeInput.value = "58mm";
+        if (thPrintableInput) thPrintableInput.value = "48";
+        if (thFontInput) thFontInput.value = "9";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+
+      btnThCustom.addEventListener("click", () => {
+        btnThCustom.classList.add("active");
+        btnTh80.classList.remove("active");
+        btnTh58.classList.remove("active");
+        if (customWrap) customWrap.style.display = "flex";
+        if (thWidthTypeInput) thWidthTypeInput.value = "custom";
+        const customW = parseFloat(document.getElementById("cfg-thermal-width")?.value || "80");
+        if (thPrintableInput) thPrintableInput.value = Math.max(10, customW - 8);
+        this.markDirty();
+        this.updateLivePreview();
+      });
+    }
+
+    // Thermal Alignment Buttons
+    const alignBtns = document.querySelectorAll(".btn-align");
+    const thAlignInput = document.getElementById("cfg-thermal-alignment");
+    alignBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        alignBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        if (thAlignInput) thAlignInput.value = btn.dataset.align || "left";
+        this.markDirty();
+        this.updateLivePreview();
+      });
+    });
+
+    // Attach real-time input change listeners to all form controls in #form-paper-config
+    const form = document.getElementById("form-paper-config");
+    if (form) {
+      form.addEventListener("input", () => {
+        this.markDirty();
+        this.updateLivePreview();
+      });
+      form.addEventListener("change", () => {
+        this.markDirty();
+        this.updateLivePreview();
+      });
+    }
+  },
+
+  handleNavigateAway(targetScreen) {
+    if (this.isDirty) {
+      if (!confirm("You have unsaved changes in Paper Configuration. Do you want to discard them?")) {
+        return;
+      }
+    }
+    this.isDirty = false;
+    showScreen(targetScreen);
+  },
+
+  markDirty() {
+    this.isDirty = true;
+    const badge = document.getElementById("config-unsaved-badge");
+    if (badge) badge.style.display = "inline-flex";
+    const statusPill = document.getElementById("config-persistence-indicator");
+    if (statusPill) {
+      statusPill.textContent = "○ Unsaved Changes";
+      statusPill.style.color = "#d97706";
+      statusPill.style.background = "#fef3c7";
+    }
+  },
+
+  clearDirty() {
+    this.isDirty = false;
+    const badge = document.getElementById("config-unsaved-badge");
+    if (badge) badge.style.display = "none";
+    const statusPill = document.getElementById("config-persistence-indicator");
+    if (statusPill) {
+      statusPill.textContent = "● Database Synced";
+      statusPill.style.color = "#15803d";
+      statusPill.style.background = "#dcfce7";
+    }
+  },
+
+  showStatus(msg, type = "success") {
+    const el = document.getElementById("config-status-msg");
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = "inline-block";
+    el.style.color = type === "error" ? "#dc2626" : (type === "info" ? "#0284c7" : "#16a34a");
+    setTimeout(() => {
+      el.style.display = "none";
+    }, 4500);
+    if (typeof showToast === "function") showToast(msg);
+  },
+
+  initScreen() {
+    const compBadge = document.getElementById("config-company-badge");
+    if (compBadge) {
+      compBadge.textContent = activeCompany ? activeCompany.name : "ANTI MATRIX";
+    }
+
+    const modeBadge = document.getElementById("config-mode-badge");
+    if (modeBadge) {
+      modeBadge.textContent = activeBillingMode === "fast_billing" ? "Fast Billing (Cashier)" : "Traditional Billing";
+    }
+
+    this.refreshPrinters(false, () => {
+      this.loadConfiguration(this.currentFormat);
+    });
+  },
+
+  refreshPrinters(showNotification = false, callback = null) {
+    if (window.backend && window.backend.getAvailablePrintersWithCapabilities) {
+      window.backend.getAvailablePrintersWithCapabilities((respStr) => {
+        try {
+          const resp = JSON.parse(respStr);
+          if (resp && resp.success) {
+            this.printers = resp.data || [];
+            this.populatePrinterDropdowns(this.printers, resp.default_printer);
+            if (showNotification) this.showStatus("Printers refreshed from system.");
+          }
+        } catch (e) {
+          console.error("Error parsing printers:", e);
+        }
+        if (callback) callback();
+      });
+    } else if (window.backend && window.backend.getAvailablePrinters) {
+      window.backend.getAvailablePrinters((respStr) => {
+        try {
+          const resp = JSON.parse(respStr);
+          if (resp && resp.success) {
+            const list = (resp.data || []).map(p => typeof p === "string" ? { name: p, is_default: false } : p);
+            this.printers = list;
+            this.populatePrinterDropdowns(list, "");
+            if (showNotification) this.showStatus("Printers refreshed.");
+          }
+        } catch (e) {
+          console.error("Error parsing fallback printers:", e);
+        }
+        if (callback) callback();
+      });
+    } else {
+      if (callback) callback();
+    }
+  },
+
+  populatePrinterDropdowns(printers, defaultPrinterName) {
+    const selects = [
+      document.getElementById("cfg-a4-printer"),
+      document.getElementById("cfg-a5-printer"),
+      document.getElementById("cfg-thermal-printer")
+    ];
+
+    selects.forEach(sel => {
+      if (!sel) return;
+      const currentVal = sel.value;
+      sel.innerHTML = `<option value="">System Default Printer (${defaultPrinterName || "None"})</option>`;
+      printers.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.name;
+        opt.textContent = p.name + (p.is_default ? " [Default]" : "") + (p.is_thermal ? " (Thermal)" : "");
+        sel.appendChild(opt);
+      });
+      if (currentVal) sel.value = currentVal;
+    });
+  },
+
+  switchFormat(newFormat) {
+    if (this.isDirty) {
+      if (!confirm(`You have unsaved changes in ${this.currentFormat.toUpperCase()} Paper Configuration. Discard changes and switch?`)) {
+        return;
+      }
+    }
+
+    this.currentFormat = newFormat;
+
+    // Switch tab buttons
+    document.querySelectorAll(".btn-format-tab").forEach(tab => {
+      tab.classList.toggle("active", tab.dataset.format === newFormat);
+      tab.setAttribute("aria-selected", tab.dataset.format === newFormat ? "true" : "false");
+    });
+
+    // Switch form panels
+    document.querySelectorAll(".paper-panel").forEach(panel => {
+      const match = panel.dataset.panelFormat === newFormat;
+      panel.style.display = match ? "flex" : "none";
+      panel.classList.toggle("active", match);
+    });
+
+    const formatBadge = document.getElementById("config-format-badge");
+    if (formatBadge) {
+      const names = { a4: "Active: A4 Paper", a5: "Active: A5 Paper", thermal: "Active: Thermal Paper" };
+      formatBadge.textContent = names[newFormat] || "Active: Paper";
+    }
+
+    this.loadConfiguration(newFormat);
+  },
+
+  loadConfiguration(format) {
+    const mode = activeBillingMode === "fast_billing" ? "fast_billing" : "traditional";
+    if (window.backend && window.backend.getPaperConfig) {
+      window.backend.getPaperConfig(format, mode, (respStr) => {
+        try {
+          const resp = JSON.parse(respStr);
+          if (resp && resp.success) {
+            this.configs[format] = resp.data;
+            this.populateForm(format, resp.data);
+            this.updateLivePreview();
+            this.clearDirty();
+          } else {
+            this.showStatus("Error loading configuration: " + (resp ? resp.error : "Unknown"), "error");
+          }
+        } catch (e) {
+          console.error("Error parsing paper config:", e);
+        }
+      });
+    }
+  },
+
+  populateForm(format, cfg) {
+    if (!cfg) return;
+
+    if (format === "a4") {
+      const elWidth = document.getElementById("cfg-a4-width");
+      const elHeight = document.getElementById("cfg-a4-height");
+      const elOrient = document.getElementById("cfg-a4-orientation");
+      const btnPort = document.getElementById("btn-a4-orient-portrait");
+      const btnLand = document.getElementById("btn-a4-orient-landscape");
+      const elScale = document.getElementById("cfg-a4-scaling");
+      const elTop = document.getElementById("cfg-a4-margin-top");
+      const elBottom = document.getElementById("cfg-a4-margin-bottom");
+      const elLeft = document.getElementById("cfg-a4-margin-left");
+      const elRight = document.getElementById("cfg-a4-margin-right");
+      const elHSpace = document.getElementById("cfg-a4-header-spacing");
+      const elFSpace = document.getElementById("cfg-a4-footer-spacing");
+      const elPrinter = document.getElementById("cfg-a4-printer");
+      const elPageNo = document.getElementById("cfg-a4-page-numbering");
+
+      if (elWidth) elWidth.value = cfg.width_mm ?? 210;
+      if (elHeight) elHeight.value = cfg.height_mm ?? 297;
+      const orient = (cfg.orientation || "portrait").toLowerCase();
+      if (elOrient) elOrient.value = orient;
+      if (btnPort) btnPort.classList.toggle("active", orient === "portrait");
+      if (btnLand) btnLand.classList.toggle("active", orient === "landscape");
+      if (elScale) elScale.value = cfg.print_scaling ?? 100;
+      if (elTop) elTop.value = cfg.margin_top_mm ?? 10;
+      if (elBottom) elBottom.value = cfg.margin_bottom_mm ?? 10;
+      if (elLeft) elLeft.value = cfg.margin_left_mm ?? 10;
+      if (elRight) elRight.value = cfg.margin_right_mm ?? 10;
+      if (elHSpace) elHSpace.value = cfg.header_spacing_mm ?? 5;
+      if (elFSpace) elFSpace.value = cfg.footer_spacing_mm ?? 5;
+      if (elPrinter && cfg.default_printer) elPrinter.value = cfg.default_printer;
+      if (elPageNo) elPageNo.checked = cfg.page_numbering !== false;
+
+    } else if (format === "a5") {
+      const elWidth = document.getElementById("cfg-a5-width");
+      const elHeight = document.getElementById("cfg-a5-height");
+      const elOrient = document.getElementById("cfg-a5-orientation");
+      const btnPort = document.getElementById("btn-a5-orient-portrait");
+      const btnLand = document.getElementById("btn-a5-orient-landscape");
+      const elScale = document.getElementById("cfg-a5-scaling");
+      const elTop = document.getElementById("cfg-a5-margin-top");
+      const elBottom = document.getElementById("cfg-a5-margin-bottom");
+      const elLeft = document.getElementById("cfg-a5-margin-left");
+      const elRight = document.getElementById("cfg-a5-margin-right");
+      const elHSpace = document.getElementById("cfg-a5-header-spacing");
+      const elFSpace = document.getElementById("cfg-a5-footer-spacing");
+      const elPrinter = document.getElementById("cfg-a5-printer");
+      const elPageNo = document.getElementById("cfg-a5-page-numbering");
+
+      if (elWidth) elWidth.value = cfg.width_mm ?? 148;
+      if (elHeight) elHeight.value = cfg.height_mm ?? 210;
+      const orient = (cfg.orientation || "portrait").toLowerCase();
+      if (elOrient) elOrient.value = orient;
+      if (btnPort) btnPort.classList.toggle("active", orient === "portrait");
+      if (btnLand) btnLand.classList.toggle("active", orient === "landscape");
+      if (elScale) elScale.value = cfg.print_scaling ?? 100;
+      if (elTop) elTop.value = cfg.margin_top_mm ?? 8;
+      if (elBottom) elBottom.value = cfg.margin_bottom_mm ?? 8;
+      if (elLeft) elLeft.value = cfg.margin_left_mm ?? 8;
+      if (elRight) elRight.value = cfg.margin_right_mm ?? 8;
+      if (elHSpace) elHSpace.value = cfg.header_spacing_mm ?? 4;
+      if (elFSpace) elFSpace.value = cfg.footer_spacing_mm ?? 4;
+      if (elPrinter && cfg.default_printer) elPrinter.value = cfg.default_printer;
+      if (elPageNo) elPageNo.checked = cfg.page_numbering !== false;
+
+    } else if (format === "thermal") {
+      const wType = (cfg.thermal_paper_width_type || "80mm").toLowerCase();
+      const elWidthType = document.getElementById("cfg-thermal-width-type");
+      if (elWidthType) elWidthType.value = wType;
+
+      const btn80 = document.getElementById("btn-thermal-80");
+      const btn58 = document.getElementById("btn-thermal-58");
+      const btnCustom = document.getElementById("btn-thermal-custom");
+      const wrapCustom = document.getElementById("cfg-thermal-custom-width-wrap");
+
+      if (btn80) btn80.classList.toggle("active", wType === "80mm");
+      if (btn58) btn58.classList.toggle("active", wType === "58mm");
+      if (btnCustom) btnCustom.classList.toggle("active", wType === "custom");
+      if (wrapCustom) wrapCustom.style.display = wType === "custom" ? "flex" : "none";
+
+      const elWidth = document.getElementById("cfg-thermal-width");
+      const elPrintable = document.getElementById("cfg-thermal-printable-width");
+      const elLeft = document.getElementById("cfg-thermal-margin-left");
+      const elRight = document.getElementById("cfg-thermal-margin-right");
+      const elTop = document.getElementById("cfg-thermal-margin-top");
+      const elBottom = document.getElementById("cfg-thermal-margin-bottom");
+      const elPrinter = document.getElementById("cfg-thermal-printer");
+      const elFontSize = document.getElementById("cfg-thermal-font-size");
+      const elLineSpacing = document.getElementById("cfg-thermal-line-spacing");
+      const elAlign = document.getElementById("cfg-thermal-alignment");
+      const elDensity = document.getElementById("cfg-thermal-density");
+      const elAutoCut = document.getElementById("cfg-thermal-auto-cut");
+
+      if (elWidth) elWidth.value = cfg.width_mm ?? 80;
+      if (elPrintable) elPrintable.value = cfg.printable_width_mm ?? (wType === "58mm" ? 48 : 72);
+      if (elLeft) elLeft.value = cfg.margin_left_mm ?? 2;
+      if (elRight) elRight.value = cfg.margin_right_mm ?? 2;
+      if (elTop) elTop.value = cfg.margin_top_mm ?? 4;
+      if (elBottom) elBottom.value = cfg.margin_bottom_mm ?? 4;
+      if (elPrinter && cfg.default_printer) elPrinter.value = cfg.default_printer;
+      if (elFontSize) elFontSize.value = cfg.font_size ?? (wType === "58mm" ? 9 : 10);
+      if (elLineSpacing) elLineSpacing.value = String(cfg.line_spacing ?? 1.2);
+      if (elDensity) elDensity.value = cfg.print_density ?? "Normal";
+      if (elAutoCut) elAutoCut.checked = cfg.auto_cut !== false;
+
+      const align = (cfg.char_alignment || "left").toLowerCase();
+      if (elAlign) elAlign.value = align;
+      document.querySelectorAll(".btn-align").forEach(b => {
+        b.classList.toggle("active", b.dataset.align === align);
+      });
+    }
+  },
+
+  readCurrentFormValues() {
+    const fmt = this.currentFormat;
+    if (fmt === "a4") {
+      return {
+        paper_format: "a4",
+        width_mm: parseFloat(document.getElementById("cfg-a4-width")?.value || 210),
+        height_mm: parseFloat(document.getElementById("cfg-a4-height")?.value || 297),
+        orientation: document.getElementById("cfg-a4-orientation")?.value || "portrait",
+        print_scaling: parseInt(document.getElementById("cfg-a4-scaling")?.value || 100, 10),
+        margin_top_mm: parseFloat(document.getElementById("cfg-a4-margin-top")?.value || 10),
+        margin_bottom_mm: parseFloat(document.getElementById("cfg-a4-margin-bottom")?.value || 10),
+        margin_left_mm: parseFloat(document.getElementById("cfg-a4-margin-left")?.value || 10),
+        margin_right_mm: parseFloat(document.getElementById("cfg-a4-margin-right")?.value || 10),
+        header_spacing_mm: parseFloat(document.getElementById("cfg-a4-header-spacing")?.value || 5),
+        footer_spacing_mm: parseFloat(document.getElementById("cfg-a4-footer-spacing")?.value || 5),
+        default_printer: document.getElementById("cfg-a4-printer")?.value || "",
+        page_numbering: document.getElementById("cfg-a4-page-numbering")?.checked !== false
+      };
+    } else if (fmt === "a5") {
+      return {
+        paper_format: "a5",
+        width_mm: parseFloat(document.getElementById("cfg-a5-width")?.value || 148),
+        height_mm: parseFloat(document.getElementById("cfg-a5-height")?.value || 210),
+        orientation: document.getElementById("cfg-a5-orientation")?.value || "portrait",
+        print_scaling: parseInt(document.getElementById("cfg-a5-scaling")?.value || 100, 10),
+        margin_top_mm: parseFloat(document.getElementById("cfg-a5-margin-top")?.value || 8),
+        margin_bottom_mm: parseFloat(document.getElementById("cfg-a5-margin-bottom")?.value || 8),
+        margin_left_mm: parseFloat(document.getElementById("cfg-a5-margin-left")?.value || 8),
+        margin_right_mm: parseFloat(document.getElementById("cfg-a5-margin-right")?.value || 8),
+        header_spacing_mm: parseFloat(document.getElementById("cfg-a5-header-spacing")?.value || 4),
+        footer_spacing_mm: parseFloat(document.getElementById("cfg-a5-footer-spacing")?.value || 4),
+        default_printer: document.getElementById("cfg-a5-printer")?.value || "",
+        page_numbering: document.getElementById("cfg-a5-page-numbering")?.checked !== false
+      };
+    } else {
+      const wType = document.getElementById("cfg-thermal-width-type")?.value || "80mm";
+      let w = 80;
+      if (wType === "58mm") w = 58;
+      else if (wType === "custom") {
+        w = parseFloat(document.getElementById("cfg-thermal-width")?.value || 80);
+      }
+      return {
+        paper_format: "thermal",
+        thermal_paper_width_type: wType,
+        width_mm: w,
+        height_mm: null,
+        printable_width_mm: parseFloat(document.getElementById("cfg-thermal-printable-width")?.value || (w - 8)),
+        margin_top_mm: parseFloat(document.getElementById("cfg-thermal-margin-top")?.value || 4),
+        margin_bottom_mm: parseFloat(document.getElementById("cfg-thermal-margin-bottom")?.value || 4),
+        margin_left_mm: parseFloat(document.getElementById("cfg-thermal-margin-left")?.value || 2),
+        margin_right_mm: parseFloat(document.getElementById("cfg-thermal-margin-right")?.value || 2),
+        default_printer: document.getElementById("cfg-thermal-printer")?.value || "",
+        font_size: parseInt(document.getElementById("cfg-thermal-font-size")?.value || 10, 10),
+        line_spacing: parseFloat(document.getElementById("cfg-thermal-line-spacing")?.value || 1.2),
+        char_alignment: document.getElementById("cfg-thermal-alignment")?.value || "left",
+        print_density: document.getElementById("cfg-thermal-density")?.value || "Normal",
+        auto_cut: document.getElementById("cfg-thermal-auto-cut")?.checked !== false
+      };
+    }
+  },
+
+  validateCurrentForm(data) {
+    if (this.currentFormat === "a4") {
+      if (isNaN(data.width_mm) || data.width_mm < 100 || data.width_mm > 350) {
+        return { valid: false, error: "A4 width must be between 100 mm and 350 mm." };
+      }
+      if (isNaN(data.height_mm) || data.height_mm < 100 || data.height_mm > 500) {
+        return { valid: false, error: "A4 height must be between 100 mm and 500 mm." };
+      }
+      if (data.margin_left_mm + data.margin_right_mm >= data.width_mm) {
+        return { valid: false, error: "Total horizontal margins must be less than paper width." };
+      }
+      if (data.margin_top_mm + data.margin_bottom_mm >= data.height_mm) {
+        return { valid: false, error: "Total vertical margins must be less than paper height." };
+      }
+    } else if (this.currentFormat === "a5") {
+      if (isNaN(data.width_mm) || data.width_mm < 80 || data.width_mm > 250) {
+        return { valid: false, error: "A5 width must be between 80 mm and 250 mm." };
+      }
+      if (isNaN(data.height_mm) || data.height_mm < 100 || data.height_mm > 350) {
+        return { valid: false, error: "A5 height must be between 100 mm and 350 mm." };
+      }
+      if (data.margin_left_mm + data.margin_right_mm >= data.width_mm) {
+        return { valid: false, error: "Total horizontal margins must be less than paper width." };
+      }
+      if (data.margin_top_mm + data.margin_bottom_mm >= data.height_mm) {
+        return { valid: false, error: "Total vertical margins must be less than paper height." };
+      }
+    } else if (this.currentFormat === "thermal") {
+      if (data.thermal_paper_width_type === "custom") {
+        if (isNaN(data.width_mm) || data.width_mm < 30 || data.width_mm > 120) {
+          return { valid: false, error: "Custom thermal width must be between 30 mm and 120 mm." };
+        }
+      }
+      const maxPrintable = data.width_mm - data.margin_left_mm - data.margin_right_mm;
+      if (data.margin_left_mm + data.margin_right_mm >= data.width_mm) {
+        return { valid: false, error: "Thermal margins must be less than total paper width." };
+      }
+      if (data.printable_width_mm <= 0 || data.printable_width_mm > maxPrintable) {
+        return { valid: false, error: `Printable width (${data.printable_width_mm}mm) cannot exceed available area (${maxPrintable}mm).` };
+      }
+    }
+    return { valid: true };
+  },
+
+  saveConfiguration() {
+    const data = this.readCurrentFormValues();
+    const validation = this.validateCurrentForm(data);
+    if (!validation.valid) {
+      this.showStatus("Validation Error: " + validation.error, "error");
+      return;
+    }
+
+    const mode = activeBillingMode === "fast_billing" ? "fast_billing" : "traditional";
+    if (window.backend && window.backend.savePaperConfig) {
+      window.backend.savePaperConfig(this.currentFormat, JSON.stringify(data), mode, (respStr) => {
+        try {
+          const resp = JSON.parse(respStr);
+          if (resp && resp.success) {
+            this.configs[this.currentFormat] = resp.data;
+            this.clearDirty();
+            this.showStatus(`${this.currentFormat.toUpperCase()} Paper Configuration saved successfully to database!`, "success");
+          } else {
+            this.showStatus("Failed to save: " + (resp ? resp.error : "Unknown error"), "error");
+          }
+        } catch (e) {
+          console.error("Error saving paper config:", e);
+          this.showStatus("Save error: " + e.message, "error");
+        }
+      });
+    }
+  },
+
+  resetToDefault() {
+    if (!confirm(`Restore factory default specifications for ${this.currentFormat.toUpperCase()} paper format?`)) {
+      return;
+    }
+
+    const mode = activeBillingMode === "fast_billing" ? "fast_billing" : "traditional";
+    if (window.backend && window.backend.resetPaperConfig) {
+      window.backend.resetPaperConfig(this.currentFormat, mode, (respStr) => {
+        try {
+          const resp = JSON.parse(respStr);
+          if (resp && resp.success) {
+            this.configs[this.currentFormat] = resp.data;
+            this.populateForm(this.currentFormat, resp.data);
+            this.updateLivePreview();
+            this.clearDirty();
+            this.showStatus(`${this.currentFormat.toUpperCase()} restored to factory defaults.`, "info");
+          } else {
+            this.showStatus("Reset failed: " + (resp ? resp.error : "Unknown error"), "error");
+          }
+        } catch (e) {
+          console.error("Error resetting paper config:", e);
+        }
+      });
+    }
+  },
+
+  testPrint() {
+    const data = this.readCurrentFormValues();
+    const validation = this.validateCurrentForm(data);
+    if (!validation.valid) {
+      this.showStatus("Validation Error: " + validation.error, "error");
+      return;
+    }
+
+    const printer = data.default_printer || "";
+    this.showStatus(`Sending test print to ${printer || 'System Default'}...`, "info");
+
+    if (window.backend && window.backend.testPrintPaper) {
+      window.backend.testPrintPaper(printer, this.currentFormat, JSON.stringify(data), (respStr) => {
+        try {
+          const resp = JSON.parse(respStr);
+          if (resp && resp.success) {
+            if (resp.format === "thermal") {
+              alert(`=== TEST RECEIPT PRINT PREVIEW ===\n\n${resp.receipt_text}\n\n[Status: SUCCESS]`);
+              this.showStatus("Thermal test receipt formatted and validated successfully!");
+            } else {
+              this.showStatus(`${resp.format.toUpperCase()} test print PDF generated: ${resp.file_path}`, "success");
+            }
+          } else {
+            this.showStatus("Test print failed: " + (resp ? resp.error : "Unknown error"), "error");
+          }
+        } catch (e) {
+          console.error("Error running test print:", e);
+        }
+      });
+    }
+  },
+
+  updateLivePreview() {
+    const data = this.readCurrentFormValues();
+    const fmt = this.currentFormat;
+
+    const sheetWrapper = document.getElementById("sheet-preview-wrapper");
+    const thermalWrapper = document.getElementById("thermal-receipt-wrapper");
+    const previewTitle = document.getElementById("preview-header-title");
+    const previewDims = document.getElementById("preview-meta-dimensions");
+    const previewMargins = document.getElementById("preview-meta-margins");
+
+    if (fmt === "a4" || fmt === "a5") {
+      if (sheetWrapper) sheetWrapper.style.display = "flex";
+      if (thermalWrapper) thermalWrapper.style.display = "none";
+
+      const isA4 = fmt === "a4";
+      const orient = data.orientation || "portrait";
+      const isLandscape = orient === "landscape";
+
+      if (previewTitle) previewTitle.textContent = `Live Preview • ${fmt.toUpperCase()} ${orient.toUpperCase()}`;
+      if (previewDims) previewDims.textContent = `${data.width_mm} × ${data.height_mm} mm`;
+      if (previewMargins) previewMargins.textContent = `M: T${data.margin_top_mm}, B${data.margin_bottom_mm}, L${data.margin_left_mm}, R${data.margin_right_mm} mm`;
+
+      const paperEl = document.getElementById("sheet-paper-element");
+      const marginBox = document.getElementById("sheet-margin-box");
+
+      let baseW = isA4 ? 280 : 220;
+      let baseH = isA4 ? 396 : 312;
+      if (isLandscape) {
+        const temp = baseW;
+        baseW = baseH;
+        baseH = temp;
+      }
+
+      if (paperEl) {
+        paperEl.style.width = `${baseW}px`;
+        paperEl.style.height = `${baseH}px`;
+      }
+
+      if (marginBox) {
+        const pTop = Math.max(2, Math.round((data.margin_top_mm / data.height_mm) * baseH));
+        const pBottom = Math.max(2, Math.round((data.margin_bottom_mm / data.height_mm) * baseH));
+        const pLeft = Math.max(2, Math.round((data.margin_left_mm / data.width_mm) * baseW));
+        const pRight = Math.max(2, Math.round((data.margin_right_mm / data.width_mm) * baseW));
+        marginBox.style.padding = `${pTop}px ${pRight}px ${pBottom}px ${pLeft}px`;
+      }
+
+      const docTypeLbl = document.getElementById("sheet-doc-type");
+      if (docTypeLbl) docTypeLbl.textContent = `NEUTRAL TEST LAYOUT • ${fmt.toUpperCase()}`;
+
+      const fmtLbl = document.getElementById("sheet-preview-fmt-lbl");
+      if (fmtLbl) fmtLbl.textContent = `${fmt.toUpperCase()} (${data.width_mm}×${data.height_mm} mm)`;
+
+      const orientLbl = document.getElementById("sheet-preview-orient-lbl");
+      if (orientLbl) orientLbl.textContent = orient.toUpperCase();
+
+      const scaleLbl = document.getElementById("sheet-scale-lbl");
+      if (scaleLbl) scaleLbl.textContent = `${data.print_scaling}%`;
+
+      const printWLbl = document.getElementById("sheet-print-w-lbl");
+      if (printWLbl) printWLbl.textContent = `${Math.max(0, data.width_mm - data.margin_left_mm - data.margin_right_mm).toFixed(1)} mm`;
+
+      const printHLbl = document.getElementById("sheet-print-h-lbl");
+      if (printHLbl) printHLbl.textContent = `${Math.max(0, data.height_mm - data.margin_top_mm - data.margin_bottom_mm).toFixed(1)} mm`;
+
+      const pageNoLbl = document.getElementById("sheet-preview-page-no");
+      const sampleItems = document.getElementById("thermal-sample-items");
+      if (sampleItems) {
+        sampleItems.style.textAlign = data.char_alignment || "left";
+      }
+
+      const headline = document.getElementById("thermal-width-headline");
+      if (headline) headline.textContent = `THERMAL RECEIPT PREVIEW (${w}mm)`;
+
+      const wLbl = document.getElementById("thermal-w-lbl");
+      if (wLbl) wLbl.textContent = `${w} mm (${data.thermal_paper_width_type || "80mm"})`;
+
+      const pwLbl = document.getElementById("thermal-pw-lbl");
+      if (pwLbl) pwLbl.textContent = `${data.printable_width_mm} mm`;
+
+      const densityLbl = document.getElementById("thermal-density-lbl");
+      if (densityLbl) {
+        densityLbl.textContent = `Density: ${data.print_density || 'Normal'} • Font: ${data.font_size || 10}pt • Align: ${(data.char_alignment || 'left').toUpperCase()}`;
+      }
+
+      const cutIndicator = document.getElementById("thermal-cut-indicator");
+      if (cutIndicator) {
+        cutIndicator.style.display = data.auto_cut !== false ? "block" : "none";
+      }
+    }
+  }
+};
+
+// =============================================================
+// PHASE 2: BILL LAYOUT CONFIGURATION MODULE
+// =============================================================
+const BillLayoutConfigModule = {
+  currentVoucherType: "sales_invoice",
+  currentPreviewFmt: "a4",
+  currentPreviewZoom: 80,
+  currentPreviewOrientation: "portrait",
+  isDirty: false,
+  companyDetails: null,
+  paperConfig: null,
+  configs: {
+    sales_invoice: null,
+    sales_return: null,
+    purchase_invoice: null,
+    purchase_return: null
+  },
+
+  init() {
+    this.setupEventListeners();
+  },
+
+  setupEventListeners() {
+    // Voucher Type Tabs
+    const vchTabs = document.querySelectorAll(".btn-vch-tab");
+    vchTabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        const vt = tab.dataset.voucher;
+        if (vt && vt !== this.currentVoucherType) {
+          this.switchVoucherType(vt);
+        }
+      });
+    });
+
+    // Accordions Toggle
+    const accHeaders = document.querySelectorAll(".layout-acc-header");
+    accHeaders.forEach(hdr => {
+      hdr.addEventListener("click", () => {
+        const card = hdr.closest(".layout-acc-card");
+        if (card) {
+          card.classList.toggle("collapsed");
+        }
+      });
+    });
+
+    // Action Buttons
+    const btnSave = document.getElementById("btn-layout-save");
+    if (btnSave) btnSave.addEventListener("click", () => this.saveLayout());
+
+    const btnResetAction = document.getElementById("btn-layout-reset-action");
+    if (btnResetAction) {
+      btnResetAction.addEventListener("click", () => {
+        const selSec = document.getElementById("sel-layout-reset-section");
+        const sec = selSec ? selSec.value : "";
+        this.resetLayout(sec);
+      });
+    }
+
+    // Duplicate Layout Modal
+    const btnDuplicate = document.getElementById("btn-layout-duplicate");
+    const modalDup = document.getElementById("modal-duplicate-layout");
+    const btnCloseDup = document.getElementById("btn-close-dup-modal");
+    const btnCancelDup = document.getElementById("btn-cancel-dup-layout");
+    const btnConfirmDup = document.getElementById("btn-confirm-dup-layout");
+    const dispTargetVch = document.getElementById("disp-dup-target-vch");
+
+    if (btnDuplicate) {
+      btnDuplicate.addEventListener("click", () => {
+        if (dispTargetVch) {
+          const titles = {
+            sales_invoice: "Sales Invoice",
+            sales_return: "Sales Return",
+            purchase_invoice: "Purchase Invoice",
+            purchase_return: "Purchase Return"
+          };
+          dispTargetVch.value = titles[this.currentVoucherType] || this.currentVoucherType;
+        }
+        if (modalDup) modalDup.style.display = "flex";
+      });
+    }
+    const closeDupModal = () => { if (modalDup) modalDup.style.display = "none"; };
+    if (btnCloseDup) btnCloseDup.addEventListener("click", closeDupModal);
+    if (btnCancelDup) btnCancelDup.addEventListener("click", closeDupModal);
+    if (btnConfirmDup) {
+      btnConfirmDup.addEventListener("click", () => {
+        const selSource = document.getElementById("sel-dup-source-vch");
+        const sourceVch = selSource ? selSource.value : "sales_invoice";
+        this.duplicateFrom(sourceVch);
+        closeDupModal();
+      });
+    }
+
+    // Logo Upload & Remove
+    const fileLogo = document.getElementById("file-hdr-logo");
+    const btnUploadLogo = document.getElementById("btn-hdr-upload-logo");
+    const btnRemoveLogo = document.getElementById("btn-hdr-remove-logo");
+    const imgLogoThumb = document.getElementById("img-hdr-logo-thumb");
+    const chkLogo = document.getElementById("chk-hdr-logo");
+    const wrapLogoProps = document.getElementById("wrap-hdr-logo-props");
+
+    if (btnUploadLogo && fileLogo) {
+      btnUploadLogo.addEventListener("click", () => fileLogo.click());
+      fileLogo.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (loadEvt) => {
+            const dataUrl = loadEvt.target.result;
+            if (imgLogoThumb) imgLogoThumb.src = dataUrl;
+            if (wrapLogoProps) wrapLogoProps.style.display = "flex";
+            if (btnRemoveLogo) btnRemoveLogo.style.display = "inline-block";
+            if (chkLogo) chkLogo.checked = true;
+            this.handleInputChange();
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+
+    if (btnRemoveLogo) {
+      btnRemoveLogo.addEventListener("click", () => {
+        if (imgLogoThumb) imgLogoThumb.src = "";
+        if (wrapLogoProps) wrapLogoProps.style.display = "none";
+        btnRemoveLogo.style.display = "none";
+        if (chkLogo) chkLogo.checked = false;
+        if (fileLogo) fileLogo.value = "";
+        this.handleInputChange();
+      });
+    }
+
+    if (chkLogo) {
+      chkLogo.addEventListener("change", () => {
+        if (wrapLogoProps) {
+          wrapLogoProps.style.display = chkLogo.checked ? "flex" : "none";
+        }
+        this.handleInputChange();
+      });
+    }
+
+    // Preview Format Switcher
+    const prevFmtBtns = [
+      document.getElementById("btn-prev-fmt-a4"),
+      document.getElementById("btn-prev-fmt-a5"),
+      document.getElementById("btn-prev-fmt-thermal")
+    ];
+    prevFmtBtns.forEach(btn => {
+      if (btn) {
+        btn.addEventListener("click", () => {
+          const fmt = btn.dataset.fmt;
+          if (fmt && fmt !== this.currentPreviewFmt) {
+            this.currentPreviewFmt = fmt;
+            prevFmtBtns.forEach(b => { if (b) b.classList.toggle("active", b === btn); });
+            this.loadPaperConfig(fmt);
+          }
+        });
+      }
+    });
+
+    // Preview Orientation
+    const selOrient = document.getElementById("sel-prev-orientation");
+    if (selOrient) {
+      selOrient.addEventListener("change", () => {
+        this.currentPreviewOrientation = selOrient.value;
+        this.updateLivePreview();
+      });
+    }
+
+    // Preview Zoom
+    const btnZoomIn = document.getElementById("btn-prev-zoom-in");
+    const btnZoomOut = document.getElementById("btn-prev-zoom-out");
+    const lblZoom = document.getElementById("prev-zoom-lvl");
+    if (btnZoomIn) {
+      btnZoomIn.addEventListener("click", () => {
+        this.currentPreviewZoom = Math.min(150, this.currentPreviewZoom + 10);
+        if (lblZoom) lblZoom.textContent = `${this.currentPreviewZoom}%`;
+        this.updateLivePreview();
+      });
+    }
+    if (btnZoomOut) {
+      btnZoomOut.addEventListener("click", () => {
+        this.currentPreviewZoom = Math.max(40, this.currentPreviewZoom - 10);
+        if (lblZoom) lblZoom.textContent = `${this.currentPreviewZoom}%`;
+        this.updateLivePreview();
+      });
+    }
+
+    // Test Print Sample
+    const btnPrintSample = document.getElementById("btn-layout-print-sample");
+    if (btnPrintSample) {
+      btnPrintSample.addEventListener("click", () => this.testPrintInvoice());
+    }
+
+    // Realtime Change Listeners on Controls
+    const formInputs = document.querySelectorAll(
+      "#pane-bill-layout-config input, #pane-bill-layout-config select, #pane-bill-layout-config textarea"
+    );
+    formInputs.forEach(input => {
+      if (input.id !== "file-hdr-logo" && !input.id.startsWith("sel-prev-") && !input.id.startsWith("btn-prev-")) {
+        input.addEventListener("input", () => this.handleInputChange());
+        input.addEventListener("change", () => this.handleInputChange());
+      }
+    });
+  },
+
+  handleInputChange() {
+    this.isDirty = true;
+    const persistInd = document.getElementById("layout-persistence-indicator");
+    if (persistInd) {
+      persistInd.textContent = "● Unsaved Changes";
+      persistInd.style.color = "#f59e0b";
+      persistInd.style.borderColor = "#f59e0b";
+    }
+    this.updateLivePreview();
+  },
+
+  initScreen() {
+    this.loadCompanyDetails();
+    this.loadPaperConfig(this.currentPreviewFmt);
+    this.loadLayoutConfig(this.currentVoucherType);
+  },
+
+  loadCompanyDetails() {
+    try {
+      const mode = activeBillingMode || "traditional";
+      if (window.backendBridge && typeof window.backendBridge.getCompanyDetailsForBillLayout === "function") {
+        const raw = window.backendBridge.getCompanyDetailsForBillLayout(mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.companyDetails = res.data;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load company details for bill layout:", e);
+    }
+    if (!this.companyDetails) {
+      this.companyDetails = {
+        company_name: "ANTI MATRIX COMMERCIAL BILLING",
+        gstin: "33AAAPL1234F1Z1",
+        state: "Tamil Nadu (33)",
+        address: "Main Business Complex, Market Road",
+        phone: "+91 98765 43210",
+        email: "billing@antimatrix.local",
+        website: "www.antimatrix.local"
+      };
+    }
+  },
+
+  loadPaperConfig(fmt) {
+    try {
+      const mode = activeBillingMode || "traditional";
+      if (window.backendBridge && typeof window.backendBridge.getPaperConfig === "function") {
+        const raw = window.backendBridge.getPaperConfig(fmt, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.paperConfig = res.data;
+          if (this.paperConfig.orientation) {
+            this.currentPreviewOrientation = this.paperConfig.orientation;
+            const selOrient = document.getElementById("sel-prev-orientation");
+            if (selOrient) selOrient.value = this.paperConfig.orientation;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load paper config for bill layout preview:", e);
+    }
+    if (!this.paperConfig) {
+      this.paperConfig = {
+        paper_format: fmt,
+        width_mm: fmt === "a5" ? 148.0 : (fmt === "thermal" ? 80.0 : 210.0),
+        height_mm: fmt === "a5" ? 210.0 : (fmt === "thermal" ? null : 297.0),
+        orientation: "portrait",
+        margin_top_mm: 10.0,
+        margin_bottom_mm: 10.0,
+        margin_left_mm: 10.0,
+        margin_right_mm: 10.0
+      };
+    }
+    this.updateLivePreview();
+  },
+
+  loadLayoutConfig(voucherType) {
+    const mode = activeBillingMode || "traditional";
+    try {
+      if (window.backendBridge && typeof window.backendBridge.getBillLayoutConfig === "function") {
+        const raw = window.backendBridge.getBillLayoutConfig(voucherType, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.configs[voucherType] = res.data;
+          this.populateForm(res.data);
+          this.renderColumnsConfigTable(res.data.columns_config || []);
+          this.isDirty = false;
+          const persistInd = document.getElementById("layout-persistence-indicator");
+          if (persistInd) {
+            persistInd.textContent = "● Database Synced";
+            persistInd.style.color = "#10b981";
+            persistInd.style.borderColor = "#10b981";
+          }
+          this.updateLivePreview();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load layout config via bridge:", e);
+    }
+  },
+
+  switchVoucherType(voucherType) {
+    if (this.isDirty) {
+      const confirmLeave = confirm("You have unsaved changes in this voucher layout. Discard changes and switch?");
+      if (!confirmLeave) return;
+    }
+    this.currentVoucherType = voucherType;
+    document.querySelectorAll(".btn-vch-tab").forEach(tab => {
+      tab.classList.toggle("active", tab.dataset.voucher === voucherType);
+    });
+    this.loadLayoutConfig(voucherType);
+  },
+
+  populateForm(cfg) {
+    if (!cfg) return;
+    const nameEl = document.getElementById("input-layout-name");
+    if (nameEl) nameEl.value = cfg.layout_name || "";
+
+    // 1. Header
+    const h = cfg.header_config || {};
+    const setChk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+
+    setChk("chk-hdr-comp-name", h.show_company_name !== false);
+    setChk("chk-hdr-logo", !!h.show_logo);
+    setChk("chk-hdr-address", h.show_address !== false);
+    setChk("chk-hdr-phone", h.show_phone !== false);
+    setChk("chk-hdr-email", h.show_email !== false);
+    setChk("chk-hdr-website", h.show_website !== false);
+    setChk("chk-hdr-gstin", h.show_gstin !== false);
+    setChk("chk-hdr-state", h.show_state !== false);
+    setChk("chk-hdr-reg", h.show_reg_details !== false);
+    setVal("input-hdr-tagline", h.custom_header_text || "");
+    setVal("sel-hdr-logo-pos", h.logo_position || "left");
+    setVal("input-hdr-logo-w", h.logo_width_mm || 30);
+    setVal("input-hdr-logo-h", h.logo_height_mm || 20);
+
+    const imgThumb = document.getElementById("img-hdr-logo-thumb");
+    const wrapLogo = document.getElementById("wrap-hdr-logo-props");
+    const btnRemLogo = document.getElementById("btn-hdr-remove-logo");
+    if (h.logo_data) {
+      if (imgThumb) imgThumb.src = h.logo_data;
+      if (wrapLogo) wrapLogo.style.display = h.show_logo ? "flex" : "none";
+      if (btnRemLogo) btnRemLogo.style.display = "inline-block";
+    } else {
+      if (imgThumb) imgThumb.src = "";
+      if (wrapLogo) wrapLogo.style.display = "none";
+      if (btnRemLogo) btnRemLogo.style.display = "none";
+    }
+
+    // 2. Invoice Info
+    const info = cfg.invoice_info_config || {};
+    setChk("chk-inv-show-title", info.show_title !== false);
+    setVal("input-inv-title", info.title || "TAX INVOICE");
+    setChk("chk-inv-vch-no", info.show_voucher_no !== false);
+    setVal("input-inv-vch-no-lbl", info.voucher_no_label || "Invoice No");
+    setChk("chk-inv-date", info.show_date !== false);
+    setVal("input-inv-date-lbl", info.date_label || "Date");
+    setChk("chk-inv-due-date", info.show_due_date !== false);
+    setVal("input-inv-due-date-lbl", info.due_date_label || "Due Date");
+    setChk("chk-inv-ref-no", info.show_reference_no !== false);
+    setVal("input-inv-ref-no-lbl", info.reference_no_label || "Ref No");
+    setChk("chk-inv-party-name", info.show_party_name !== false);
+    setVal("input-inv-party-lbl", info.party_name_label || "Customer (Billed To)");
+    setChk("chk-inv-party-address", info.show_party_address !== false);
+    setChk("chk-inv-party-gstin", info.show_party_gstin !== false);
+    setChk("chk-inv-party-state", info.show_party_state !== false);
+    setChk("chk-inv-party-contact", info.show_party_contact !== false);
+
+    // 3. Styling
+    const st = cfg.style_config || {};
+    setVal("input-tbl-header-bg", st.header_bg_color || "#1e40af");
+    setVal("input-tbl-header-color", st.header_text_color || "#ffffff");
+
+    // 4. Totals
+    const tot = cfg.totals_config || {};
+    setChk("chk-tot-subtotal", tot.show_subtotal !== false);
+    setChk("chk-tot-discount", tot.show_discount_total !== false);
+    setChk("chk-tot-taxable", tot.show_taxable_amount !== false);
+    setChk("chk-tot-cgst", tot.show_cgst_total !== false);
+    setChk("chk-tot-sgst", tot.show_sgst_total !== false);
+    setChk("chk-tot-igst", tot.show_igst_total !== false);
+    setChk("chk-tot-roundoff", tot.show_round_off !== false);
+    setChk("chk-tot-grandtotal", tot.show_grand_total !== false);
+    setChk("chk-tot-words", tot.show_amount_in_words !== false);
+    setChk("chk-tot-payment-method", tot.show_payment_method !== false);
+    setChk("chk-tot-amount-paid", tot.show_amount_paid !== false);
+    setChk("chk-tot-balance-due", tot.show_balance_due !== false);
+
+    // 5. Footer
+    const ftr = cfg.footer_config || {};
+    setChk("chk-ftr-terms", ftr.show_terms !== false);
+    setVal("txt-ftr-terms", ftr.terms_and_conditions || "");
+    setChk("chk-ftr-bank", ftr.show_bank_details !== false);
+    setVal("input-ftr-bank-name", ftr.bank_name || "");
+    setVal("input-ftr-acc-no", ftr.account_number || "");
+    setVal("input-ftr-ifsc", ftr.ifsc_code || "");
+    setVal("input-ftr-upi", ftr.upi_id || "");
+    setChk("chk-ftr-notes", ftr.show_customer_notes !== false);
+    setVal("input-ftr-notes", ftr.customer_notes || "");
+    setChk("chk-ftr-signatory", ftr.show_authorized_signatory !== false);
+    setVal("input-ftr-signatory-title", ftr.signatory_title || "Authorized Signatory");
+    setChk("chk-ftr-seal", ftr.show_company_seal !== false);
+  },
+
+  renderColumnsConfigTable(columns) {
+    const container = document.getElementById("columns-config-container");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const cols = Array.isArray(columns) && columns.length ? columns : [];
+    cols.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    cols.forEach((col, idx) => {
+      const row = document.createElement("div");
+      row.className = `col-cfg-row ${col.visible ? '' : 'col-hidden'}`;
+      row.dataset.key = col.key;
+
+      row.innerHTML = `
+        <span class="col-cfg-order">${idx + 1}</span>
+        <input type="checkbox" class="col-vis-chk" ${col.visible ? 'checked' : ''} title="Toggle Visibility">
+        <span class="col-cfg-key-pill" title="${col.key}">${col.key}</span>
+        <input type="text" class="col-cfg-label-input" value="${col.label || col.key}" title="Header Label">
+        <input type="text" class="col-cfg-width-input" value="${col.width || '8%'}" title="Width (e.g. 10%)">
+        <select class="col-cfg-align-select" title="Column Alignment">
+          <option value="left" ${col.align === 'left' ? 'selected' : ''}>Left</option>
+          <option value="center" ${col.align === 'center' ? 'selected' : ''}>Center</option>
+          <option value="right" ${col.align === 'right' ? 'selected' : ''}>Right</option>
+        </select>
+        <div style="display: flex; gap: 2px;">
+          <button type="button" class="col-cfg-btn-order btn-move-up" title="Move Up" ${idx === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="col-cfg-btn-order btn-move-down" title="Move Down" ${idx === cols.length - 1 ? 'disabled' : ''}>▼</button>
+        </div>
+      `;
+
+      // Event handlers for row
+      const chk = row.querySelector(".col-vis-chk");
+      chk.addEventListener("change", () => {
+        row.classList.toggle("col-hidden", !chk.checked);
+        this.handleInputChange();
+      });
+
+      const lblInp = row.querySelector(".col-cfg-label-input");
+      lblInp.addEventListener("input", () => this.handleInputChange());
+
+      const wInp = row.querySelector(".col-cfg-width-input");
+      wInp.addEventListener("input", () => this.handleInputChange());
+
+      const alignSel = row.querySelector(".col-cfg-align-select");
+      alignSel.addEventListener("change", () => this.handleInputChange());
+
+      const btnUp = row.querySelector(".btn-move-up");
+      btnUp.addEventListener("click", () => {
+        if (idx > 0) {
+          const temp = cols[idx - 1];
+          cols[idx - 1] = cols[idx];
+          cols[idx] = temp;
+          cols.forEach((c, i) => { c.order = i + 1; });
+          this.renderColumnsConfigTable(cols);
+          this.handleInputChange();
+        }
+      });
+
+      const btnDown = row.querySelector(".btn-move-down");
+      btnDown.addEventListener("click", () => {
+        if (idx < cols.length - 1) {
+          const temp = cols[idx + 1];
+          cols[idx + 1] = cols[idx];
+          cols[idx] = temp;
+          cols.forEach((c, i) => { c.order = i + 1; });
+          this.renderColumnsConfigTable(cols);
+          this.handleInputChange();
+        }
+      });
+
+      container.appendChild(row);
+    });
+  },
+
+  gatherForm() {
+    const getChk = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+    const getVal = (id, def = "") => { const el = document.getElementById(id); return el ? el.value : def; };
+
+    const imgThumb = document.getElementById("img-hdr-logo-thumb");
+    const logoData = (imgThumb && imgThumb.src && imgThumb.src.startsWith("data:")) ? imgThumb.src : "";
+
+    // Gather columns from table
+    const colRows = document.querySelectorAll(".col-cfg-row");
+    const gatheredCols = [];
+    colRows.forEach((row, idx) => {
+      gatheredCols.push({
+        key: row.dataset.key,
+        order: idx + 1,
+        visible: row.querySelector(".col-vis-chk").checked,
+        label: row.querySelector(".col-cfg-label-input").value.trim(),
+        width: row.querySelector(".col-cfg-width-input").value.trim(),
+        align: row.querySelector(".col-cfg-align-select").value
+      });
+    });
+
+    return {
+      voucher_type: this.currentVoucherType,
+      layout_name: getVal("input-layout-name", "Standard Layout"),
+      header_config: {
+        show_company_name: getChk("chk-hdr-comp-name"),
+        show_logo: getChk("chk-hdr-logo"),
+        logo_data: logoData,
+        logo_position: getVal("sel-hdr-logo-pos", "left"),
+        logo_width_mm: parseFloat(getVal("input-hdr-logo-w", 30)) || 30,
+        logo_height_mm: parseFloat(getVal("input-hdr-logo-h", 20)) || 20,
+        show_address: getChk("chk-hdr-address"),
+        show_phone: getChk("chk-hdr-phone"),
+        show_email: getChk("chk-hdr-email"),
+        show_website: getChk("chk-hdr-website"),
+        show_gstin: getChk("chk-hdr-gstin"),
+        show_state: getChk("chk-hdr-state"),
+        show_reg_details: getChk("chk-hdr-reg"),
+        custom_header_text: getVal("input-hdr-tagline")
+      },
+      invoice_info_config: {
+        title: getVal("input-inv-title", "TAX INVOICE"),
+        show_title: getChk("chk-inv-show-title"),
+        show_voucher_no: getChk("chk-inv-vch-no"),
+        voucher_no_label: getVal("input-inv-vch-no-lbl", "Invoice No"),
+        show_date: getChk("chk-inv-date"),
+        date_label: getVal("input-inv-date-lbl", "Date"),
+        show_due_date: getChk("chk-inv-due-date"),
+        due_date_label: getVal("input-inv-due-date-lbl", "Due Date"),
+        show_party_name: getChk("chk-inv-party-name"),
+        party_name_label: getVal("input-inv-party-lbl", "Customer (Billed To)"),
+        show_party_address: getChk("chk-inv-party-address"),
+        show_party_gstin: getChk("chk-inv-party-gstin"),
+        show_party_state: getChk("chk-inv-party-state"),
+        show_party_contact: getChk("chk-inv-party-contact"),
+        show_place_of_supply: true,
+        show_reference_no: getChk("chk-inv-ref-no"),
+        reference_no_label: getVal("input-inv-ref-no-lbl", "Ref No")
+      },
+      columns_config: gatheredCols,
+      totals_config: {
+        show_subtotal: getChk("chk-tot-subtotal"),
+        show_discount_total: getChk("chk-tot-discount"),
+        show_taxable_amount: getChk("chk-tot-taxable"),
+        show_cgst_total: getChk("chk-tot-cgst"),
+        show_sgst_total: getChk("chk-tot-sgst"),
+        show_igst_total: getChk("chk-tot-igst"),
+        show_round_off: getChk("chk-tot-roundoff"),
+        show_grand_total: getChk("chk-tot-grandtotal"),
+        show_amount_in_words: getChk("chk-tot-words"),
+        show_payment_method: getChk("chk-tot-payment-method"),
+        show_amount_paid: getChk("chk-tot-amount-paid"),
+        show_balance_due: getChk("chk-tot-balance-due")
+      },
+      footer_config: {
+        show_terms: getChk("chk-ftr-terms"),
+        terms_and_conditions: getVal("txt-ftr-terms"),
+        show_bank_details: getChk("chk-ftr-bank"),
+        bank_name: getVal("input-ftr-bank-name"),
+        account_number: getVal("input-ftr-acc-no"),
+        ifsc_code: getVal("input-ftr-ifsc"),
+        upi_id: getVal("input-ftr-upi"),
+        show_customer_notes: getChk("chk-ftr-notes"),
+        customer_notes: getVal("input-ftr-notes"),
+        show_authorized_signatory: getChk("chk-ftr-signatory"),
+        signatory_title: getVal("input-ftr-signatory-title", "Authorized Signatory"),
+        show_company_seal: getChk("chk-ftr-seal")
+      },
+      style_config: {
+        header_bg_color: getVal("input-tbl-header-bg", "#1e40af"),
+        header_text_color: getVal("input-tbl-header-color", "#ffffff")
+      }
+    };
+  },
+
+  saveLayout() {
+    const data = this.gatherForm();
+    const mode = activeBillingMode || "traditional";
+    try {
+      if (window.backendBridge && typeof window.backendBridge.saveBillLayoutConfig === "function") {
+        const raw = window.backendBridge.saveBillLayoutConfig(this.currentVoucherType, JSON.stringify(data), mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.isDirty = false;
+          const persistInd = document.getElementById("layout-persistence-indicator");
+          if (persistInd) {
+            persistInd.textContent = "● Database Synced";
+            persistInd.style.color = "#10b981";
+            persistInd.style.borderColor = "#10b981";
+          }
+          showNotification(`${data.layout_name} saved successfully!`, "success");
+          return;
+        } else {
+          showNotification(`Save failed: ${res ? res.error : "Unknown error"}`, "error");
+        }
+      }
+    } catch (e) {
+      showNotification(`Save error: ${e}`, "error");
+    }
+  },
+
+  resetLayout(section) {
+    const mode = activeBillingMode || "traditional";
+    try {
+      if (window.backendBridge && typeof window.backendBridge.resetBillLayoutConfig === "function") {
+        const sec = (section === "all" || !section) ? "" : section;
+        const raw = window.backendBridge.resetBillLayoutConfig(this.currentVoucherType, sec, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.loadLayoutConfig(this.currentVoucherType);
+          showNotification(sec ? `Section '${sec}' reset to default.` : "Layout restored to defaults.", "info");
+        }
+      }
+    } catch (e) {
+      showNotification(`Reset error: ${e}`, "error");
+    }
+  },
+
+  duplicateFrom(sourceVoucherType) {
+    const mode = activeBillingMode || "traditional";
+    try {
+      if (window.backendBridge && typeof window.backendBridge.duplicateBillLayoutConfig === "function") {
+        const raw = window.backendBridge.duplicateBillLayoutConfig(sourceVoucherType, this.currentVoucherType, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.loadLayoutConfig(this.currentVoucherType);
+          showNotification(`Layout duplicated from '${sourceVoucherType}' successfully!`, "success");
+        } else {
+          showNotification(`Duplicate failed: ${res ? res.error : "Unknown error"}`, "error");
+        }
+      }
+    } catch (e) {
+      showNotification(`Duplicate error: ${e}`, "error");
+    }
+  },
+
+  updateLivePreview() {
+    const canvas = document.getElementById("bill-invoice-preview-canvas");
+    if (!canvas) return;
+
+    const data = this.gatherForm();
+    const comp = this.companyDetails || {};
+    const fmt = this.currentPreviewFmt;
+    const isThermal = fmt === "thermal";
+    const orient = this.currentPreviewOrientation || "portrait";
+    const zoom = this.currentPreviewZoom / 100;
+
+    const pCfg = this.paperConfig || {
+      width_mm: fmt === "a5" ? 148 : 210,
+      height_mm: fmt === "a5" ? 210 : 297,
+      margin_top_mm: 10,
+      margin_bottom_mm: 10,
+      margin_left_mm: 10,
+      margin_right_mm: 10
+    };
+
+    if (isThermal) {
+      const widthMm = pCfg.width_mm || 80;
+      const is58 = widthMm <= 60;
+      canvas.innerHTML = `
+        <div class="invoice-preview-thermal" style="width: ${widthMm * 3.78}px; max-width: ${widthMm * 3.78}px; transform: scale(${zoom}); padding: 12px 10px; box-sizing: border-box; overflow: hidden;">
+          <div style="text-align: center; border-bottom: 1px dashed #475569; padding-bottom: 6px; margin-bottom: 6px;">
+            <div style="font-weight: 800; font-size: 13px;">${comp.company_name || 'ANTI MATRIX'}</div>
+            <div style="font-size: 10px; font-weight: 700;">${data.invoice_info_config.title || 'RECEIPT'}</div>
+            ${data.header_config.show_gstin && comp.gstin ? `<div style="font-size: 9px;">GSTIN: ${comp.gstin}</div>` : ''}
+            ${data.header_config.show_phone && comp.phone ? `<div style="font-size: 9px;">Ph: ${comp.phone}</div>` : ''}
+          </div>
+
+          <div style="font-size: 9px; line-height: 1.4; border-bottom: 1px dashed #475569; padding-bottom: 4px; margin-bottom: 6px;">
+            <div><b>Vch No:</b> INV-2026-001 &nbsp; <b>Date:</b> 16-11-2026</div>
+            <div><b>Party:</b> Cash Retail Customer</div>
+          </div>
+
+          <table style="width: 100%; font-size: 9px; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; box-sizing: border-box;">
+            <tr style="border-bottom: 1px dashed #475569;">
+              <th style="width: ${is58 ? '44%' : '42%'}; text-align: left; padding: 2px 0;">Item</th>
+              <th style="width: ${is58 ? '16%' : '16%'}; text-align: center; padding: 2px 0;">Qty</th>
+              <th style="width: ${is58 ? '20%' : '20%'}; text-align: right; padding: 2px 0;">Rate</th>
+              <th style="width: ${is58 ? '20%' : '22%'}; text-align: right; padding: 2px 0;">Total</th>
+            </tr>
+            <tr>
+              <td style="overflow-wrap: break-word; word-break: break-word; padding: 2px 0;">Standard Product Item</td>
+              <td style="text-align: center; padding: 2px 0;">2</td>
+              <td style="text-align: right; padding: 2px 0;">500.00</td>
+              <td style="text-align: right; padding: 2px 0; font-weight: 700;">1000.00</td>
+            </tr>
+            <tr>
+              <td style="overflow-wrap: break-word; word-break: break-word; padding: 2px 0;">Commercial Supply Box</td>
+              <td style="text-align: center; padding: 2px 0;">1</td>
+              <td style="text-align: right; padding: 2px 0;">1200.00</td>
+              <td style="text-align: right; padding: 2px 0; font-weight: 700;">1200.00</td>
+            </tr>
+          </table>
+
+          <div style="border-top: 1px dashed #475569; padding-top: 4px; font-size: 9px; line-height: 1.5; width: 100%; box-sizing: border-box;">
+            ${data.totals_config.show_subtotal ? `<div style="display: flex; justify-content: space-between;"><span>Subtotal:</span><span style="font-variant-numeric: tabular-nums;">₹ 2200.00</span></div>` : ''}
+            ${data.totals_config.show_cgst_total ? `<div style="display: flex; justify-content: space-between;"><span>CGST (9%):</span><span style="font-variant-numeric: tabular-nums;">₹ 198.00</span></div>` : ''}
+            ${data.totals_config.show_sgst_total ? `<div style="display: flex; justify-content: space-between;"><span>SGST (9%):</span><span style="font-variant-numeric: tabular-nums;">₹ 198.00</span></div>` : ''}
+            <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 11px; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 2px 0; margin-top: 2px;">
+              <span>GRAND TOTAL:</span><span style="font-variant-numeric: tabular-nums;">₹ 2596.00</span>
+            </div>
+          </div>
+
+          ${data.footer_config.show_customer_notes && data.footer_config.customer_notes ? `
+            <div style="text-align: center; font-size: 9px; margin-top: 8px;">${data.footer_config.customer_notes}</div>
+          ` : ''}
+
+          <div class="thermal-cut-line" style="margin-top: 12px;">✂ --- AUTOMATIC PAPER CUT --- ✂</div>
+          <div class="thermal-receipt-cut-bottom"></div>
+        </div>
+      `;
+      return;
+    }
+
+    // Sheet Preview (A4 & A5)
+    let wMm = pCfg.width_mm || (fmt === "a5" ? 148 : 210);
+    let hMm = pCfg.height_mm || (fmt === "a5" ? 210 : 297);
+    if (orient === "landscape") {
+      const t = wMm; wMm = hMm; hMm = t;
+    }
+
+    // Scale mm to px (1 mm ≈ 3.78 px)
+    const sheetW = wMm * 3.78;
+    const sheetH = hMm * 3.78;
+    const mTop = (pCfg.margin_top_mm || 10) * 3.78;
+    const mBottom = (pCfg.margin_bottom_mm || 10) * 3.78;
+    const mLeft = (pCfg.margin_left_mm || 10) * 3.78;
+    const mRight = (pCfg.margin_right_mm || 10) * 3.78;
+
+    const h = data.header_config;
+    const info = data.invoice_info_config;
+    const cols = data.columns_config.filter(c => c.visible);
+    const tot = data.totals_config;
+    const ftr = data.footer_config;
+    const st = data.style_config;
+
+    // Header layout with Logo
+    let logoHtml = "";
+    if (h.show_logo && h.logo_data) {
+      const logoW = (h.logo_width_mm || 30) * 3.78;
+      const logoH = (h.logo_height_mm || 20) * 3.78;
+      logoHtml = `<img src="${h.logo_data}" style="max-width: ${logoW}px; max-height: ${logoH}px; object-fit: contain;">`;
+    }
+
+    let headerCompanyHtml = `
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        ${h.show_company_name ? `<div style="font-size: 16px; font-weight: 800; color: ${st.header_bg_color || '#1e40af'};">${comp.company_name || 'ANTI MATRIX COMMERCIAL BILLING'}</div>` : ''}
+        ${h.custom_header_text ? `<div style="font-size: 10px; font-weight: 600; color: #475569;">${h.custom_header_text}</div>` : ''}
+        <div style="font-size: 9px; color: #475569; line-height: 1.3;">
+          ${h.show_address && comp.address ? `<span>${comp.address}</span>` : ''}
+          ${h.show_state && comp.state ? ` &bull; <span>State: ${comp.state}</span>` : ''}
+          ${h.show_phone && comp.phone ? ` &bull; <span>Ph: ${comp.phone}</span>` : ''}
+          ${h.show_email && comp.email ? ` &bull; <span>Email: ${comp.email}</span>` : ''}
+        </div>
+        <div style="font-size: 9px; color: #1e293b; font-weight: 700; margin-top: 2px;">
+          ${h.show_gstin && comp.gstin ? `<span>GSTIN: ${comp.gstin}</span>` : ''}
+          ${h.show_reg_details && comp.code ? ` &bull; <span>Reg/CIN: ${comp.code}</span>` : ''}
+        </div>
+      </div>
+    `;
+
+    let headerFlex = "";
+    if (h.logo_position === "center" && logoHtml) {
+      headerFlex = `
+        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; border-bottom: 2px solid ${st.header_bg_color || '#1e40af'}; padding-bottom: 8px;">
+          ${logoHtml}
+          ${headerCompanyHtml}
+        </div>
+      `;
+    } else if (h.logo_position === "right" && logoHtml) {
+      headerFlex = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid ${st.header_bg_color || '#1e40af'}; padding-bottom: 8px;">
+          ${headerCompanyHtml}
+          ${logoHtml}
+        </div>
+      `;
+    } else {
+      headerFlex = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid ${st.header_bg_color || '#1e40af'}; padding-bottom: 8px;">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            ${logoHtml}
+            ${headerCompanyHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    // Party & Invoice Metadata Box
+    const metaBoxHtml = `
+      <div style="margin-top: 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; padding: 6px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 9px;">
+        <div>
+          ${info.show_party_name ? `<div><b>${info.party_name_label || 'Billed To'}:</b> Supreme Retail Traders</div>` : ''}
+          ${info.show_party_address ? `<div><b>Address:</b> 44 Market Street, West Commercial Zone</div>` : ''}
+          ${info.show_party_gstin ? `<div><b>GSTIN:</b> 33AABCT9876Q1Z2</div>` : ''}
+          ${info.show_party_state ? `<div><b>State & Code:</b> Tamil Nadu (33)</div>` : ''}
+        </div>
+        <div>
+          ${info.show_voucher_no ? `<div><b>${info.voucher_no_label || 'Invoice No'}:</b> INV-2026-0042</div>` : ''}
+          ${info.show_date ? `<div><b>${info.date_label || 'Date'}:</b> 16-11-2026</div>` : ''}
+          ${info.show_due_date ? `<div><b>${info.due_date_label || 'Due Date'}:</b> 30-11-2026</div>` : ''}
+          ${info.show_reference_no ? `<div><b>${info.reference_no_label || 'Ref No'}:</b> PO-88912</div>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Calculate total percentage specified and normalize to exactly 100%
+    const isA5 = (fmt === "a5");
+    let totalPct = 0;
+    const rawPcts = cols.map(c => {
+      let p = parseFloat(c.width);
+      if (isNaN(p) || p <= 0) p = 100 / (cols.length || 1);
+      totalPct += p;
+      return p;
+    });
+    const normCols = cols.map((c, i) => {
+      const normPct = ((rawPcts[i] / (totalPct || 1)) * 100).toFixed(1) + "%";
+      return { ...c, normWidth: normPct };
+    });
+
+    // Columns Table Header
+    let tableHeadersHtml = "";
+    normCols.forEach(c => {
+      tableHeadersHtml += `<th style="text-align: ${c.align}; width: ${c.normWidth}; padding: ${isA5 ? '3px 3px' : '4px 5px'}; font-size: ${isA5 ? '7.5px' : '8.5px'}; border: 1px solid #cbd5e1; box-sizing: border-box; overflow-wrap: break-word; word-break: break-word;">${c.label || c.key}</th>`;
+    });
+
+    // Sample Table Rows
+    const sampleRows = [
+      { sl_no: "1", name: "High Speed Barcode Scanner", sku: "SCN-100", hsn: "8471", barcode: "8901234567890", description: "USB 2D Imager", qty: "2", unit: "Pcs", rate: "1250.00", discount: "50.00", taxable_amount: "2450.00", cgst: "220.50", sgst: "220.50", igst: "0.00", gst_rate: "18%", total: "2891.00" },
+      { sl_no: "2", name: "Thermal Receipt Paper Roll (80mm)", sku: "PR-80M", hsn: "4811", barcode: "8909876543210", description: "BPA Free Roll", qty: "10", unit: "Roll", rate: "65.00", discount: "0.00", taxable_amount: "650.00", cgst: "39.00", sgst: "39.00", igst: "0.00", gst_rate: "12%", total: "728.00" }
+    ];
+
+    let tableRowsHtml = "";
+    sampleRows.forEach(row => {
+      tableRowsHtml += "<tr>";
+      normCols.forEach(c => {
+        tableRowsHtml += `<td style="text-align: ${c.align}; width: ${c.normWidth}; padding: ${isA5 ? '3px 3px' : '4px 5px'}; font-size: ${isA5 ? '7.5px' : '8.5px'}; border: 1px solid #cbd5e1; box-sizing: border-box; overflow-wrap: break-word; word-break: break-word;">${row[c.key] || '-'}</td>`;
+      });
+      tableRowsHtml += "</tr>";
+    });
+
+    // Totals Table
+    let totalsRowsHtml = "";
+    if (tot.show_subtotal) totalsRowsHtml += `<tr><td style="text-align: right; padding: 2px 4px;"><b>Subtotal:</b></td><td style="text-align: right; padding: 2px 4px; width: 80px; font-variant-numeric: tabular-nums;">₹ 3,100.00</td></tr>`;
+    if (tot.show_discount_total) totalsRowsHtml += `<tr><td style="text-align: right; padding: 2px 4px;"><b>Discount:</b></td><td style="text-align: right; padding: 2px 4px; font-variant-numeric: tabular-nums;">-₹ 50.00</td></tr>`;
+    if (tot.show_taxable_amount) totalsRowsHtml += `<tr><td style="text-align: right; padding: 2px 4px;"><b>Taxable Amount:</b></td><td style="text-align: right; padding: 2px 4px; font-variant-numeric: tabular-nums;">₹ 3,050.00</td></tr>`;
+    if (tot.show_cgst_total) totalsRowsHtml += `<tr><td style="text-align: right; padding: 2px 4px;"><b>CGST:</b></td><td style="text-align: right; padding: 2px 4px; font-variant-numeric: tabular-nums;">₹ 259.50</td></tr>`;
+    if (tot.show_sgst_total) totalsRowsHtml += `<tr><td style="text-align: right; padding: 2px 4px;"><b>SGST:</b></td><td style="text-align: right; padding: 2px 4px; font-variant-numeric: tabular-nums;">₹ 259.50</td></tr>`;
+    if (tot.show_round_off) totalsRowsHtml += `<tr><td style="text-align: right; padding: 2px 4px;"><b>Round-Off:</b></td><td style="text-align: right; padding: 2px 4px; font-variant-numeric: tabular-nums;">+₹ 0.00</td></tr>`;
+    if (tot.show_grand_total) totalsRowsHtml += `<tr style="border-top: 1px solid #047857; border-bottom: 2px solid #047857; color: #047857;"><td style="text-align: right; padding: 4px;"><b>GRAND TOTAL:</b></td><td style="text-align: right; padding: 4px; font-size: ${isA5 ? '10px' : '11px'}; font-weight: 800; font-variant-numeric: tabular-nums;">₹ 3,619.00</td></tr>`;
+    if (tot.show_amount_in_words) totalsRowsHtml += `<tr><td colspan="2" style="text-align: right; font-size: ${isA5 ? '7px' : '8px'}; color: #64748b; padding-top: 2px; overflow-wrap: break-word;">Three Thousand Six Hundred Nineteen Only</td></tr>`;
+
+    // Footer Table
+    const footerHtml = `
+      <div style="margin-top: auto; padding-top: 10px; border-top: 1px solid #cbd5e1; display: grid; grid-template-columns: 1fr 180px; gap: 14px; font-size: 8px; width: 100%; box-sizing: border-box;">
+        <div style="min-width: 0; overflow-wrap: break-word;">
+          ${ftr.show_terms && ftr.terms_and_conditions ? `
+            <div style="margin-bottom: 4px;">
+              <b>Terms & Conditions:</b><br/>
+              <span style="white-space: pre-line; color: #475569;">${ftr.terms_and_conditions}</span>
+            </div>
+          ` : ''}
+          ${ftr.show_bank_details ? `
+            <div style="color: #334155;">
+              <b>Bank Details:</b> ${ftr.bank_name || 'HDFC Bank'} | A/c: ${ftr.account_number || '50200012345678'} | IFSC: ${ftr.ifsc_code || 'HDFC0001234'} ${ftr.upi_id ? `| UPI: ${ftr.upi_id}` : ''}
+            </div>
+          ` : ''}
+          ${ftr.show_customer_notes && ftr.customer_notes ? `
+            <div style="font-style: italic; color: #64748b; margin-top: 4px;">${ftr.customer_notes}</div>
+          ` : ''}
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-end; text-align: right;">
+          ${ftr.show_company_seal ? `
+            <div style="border: 1px dashed #94a3b8; border-radius: 4px; width: 60px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #94a3b8; margin-bottom: 4px;">SEAL</div>
+          ` : ''}
+          ${ftr.show_authorized_signatory ? `
+            <div style="border-top: 1px solid #475569; width: 140px; padding-top: 2px; font-size: 9px; font-weight: 700; color: #1e293b;">${ftr.signatory_title || 'Authorized Signatory'}</div>
+            <div style="font-size: 7px; color: #64748b;">For ${comp.company_name || 'ANTI MATRIX'}</div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    canvas.innerHTML = `
+      <div class="invoice-preview-sheet" style="
+        width: ${sheetW}px;
+        max-width: ${sheetW}px;
+        min-height: ${sheetH}px;
+        padding: ${mTop}px ${mRight}px ${mBottom}px ${mLeft}px;
+        transform: scale(${zoom});
+        box-sizing: border-box;
+        overflow: hidden;
+      ">
+        ${headerFlex}
+        ${info.show_title ? `<div style="text-align: center; font-size: ${isA5 ? '11px' : '13px'}; font-weight: 800; color: ${st.header_bg_color || '#1e40af'}; margin-top: 6px; letter-spacing: 0.5px;">${info.title.toUpperCase()}</div>` : ''}
+        ${metaBoxHtml}
+
+        <table style="width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; box-sizing: border-box;">
+          <thead>
+            <tr style="background: ${st.header_bg_color || '#1e40af'}; color: ${st.header_text_color || '#ffffff'};">
+              ${tableHeadersHtml}
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 8px; width: 100%; box-sizing: border-box;">
+          <table style="font-size: ${isA5 ? '8px' : '9px'}; border-collapse: collapse; min-width: ${isA5 ? '180px' : '220px'}; box-sizing: border-box;">
+            ${totalsRowsHtml}
+          </table>
+        </div>
+
+        ${footerHtml}
+      </div>
+    `;
+  },
+
+  testPrintInvoice() {
+    const mode = activeBillingMode || "traditional";
+    try {
+      if (this.currentPreviewFmt === "thermal") {
+        if (window.backendBridge && typeof window.backendBridge.renderInvoiceThermal === "function") {
+          const raw = window.backendBridge.renderInvoiceThermal(this.currentVoucherType, JSON.stringify({}), mode);
+          const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (res && res.success) {
+            showNotification(`Thermal test receipt generated (${res.receipt_text ? res.receipt_text.length : 0} chars). Ready for printer!`, "success");
+            return;
+          }
+        }
+      } else {
+        if (window.backendBridge && typeof window.backendBridge.renderInvoicePDF === "function") {
+          const raw = window.backendBridge.renderInvoicePDF(this.currentVoucherType, this.currentPreviewFmt, JSON.stringify({}), mode);
+          const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (res && res.success) {
+            showNotification(`Invoice PDF generated successfully at: ${res.file_path}`, "success");
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      showNotification(`Test print error: ${e}`, "error");
+    }
+  }
+};
+
+window.BillLayoutConfigModule = BillLayoutConfigModule;
+BillLayoutConfigModule.init();
+
+// =============================================================
+// PHASE 4: VOUCHER NUMBERING CONFIGURATION MODULE
+// =============================================================
+const VoucherNumberingConfigModule = {
+  currentVoucherType: "sales_invoice",
+  isDirty: false,
+  config: null,
+  status: null,
+
+  init() {
+    this.setupEventListeners();
+  },
+
+  setupEventListeners() {
+    // Voucher Type Tabs
+    const tabs = document.querySelectorAll(".btn-vch-tab[data-vch-type]");
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        const vt = tab.dataset.vchType;
+        if (vt && vt !== this.currentVoucherType) {
+          this.switchVoucherType(vt);
+        }
+      });
+    });
+
+    // Form inputs change & input listeners
+    const formInputIds = [
+      "cfg-vch-enable-custom",
+      "cfg-vch-series",
+      "cfg-vch-reset-freq",
+      "cfg-vch-prefix",
+      "cfg-vch-suffix",
+      "cfg-vch-start-num",
+      "cfg-vch-padding",
+      "cfg-vch-include-fy",
+      "cfg-vch-fy-format",
+      "cfg-vch-fy-sep",
+      "cfg-vch-include-branch",
+      "cfg-vch-branch-pos"
+    ];
+
+    formInputIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("input", () => this.markDirty());
+        el.addEventListener("change", () => this.markDirty());
+      }
+    });
+
+    // Action buttons
+    const btnSave = document.getElementById("btn-vch-num-save");
+    if (btnSave) {
+      btnSave.addEventListener("click", () => this.saveConfiguration());
+    }
+
+    const btnReset = document.getElementById("btn-vch-num-reset");
+    if (btnReset) {
+      btnReset.addEventListener("click", () => this.resetToDefault());
+    }
+  },
+
+  initScreen() {
+    this.loadConfiguration(this.currentVoucherType);
+  },
+
+  switchVoucherType(vchType) {
+    if (this.isDirty) {
+      if (!confirm("You have unsaved voucher numbering changes. Switch without saving?")) {
+        return;
+      }
+    }
+    this.currentVoucherType = vchType;
+    const tabs = document.querySelectorAll(".btn-vch-tab[data-vch-type]");
+    tabs.forEach(t => {
+      const active = t.dataset.vchType === vchType;
+      t.classList.toggle("active", active);
+      t.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    this.loadConfiguration(vchType);
+  },
+
+  loadConfiguration(vchType) {
+    try {
+      const mode = activeBillingMode || "traditional";
+      const bridge = window.backendBridge || window.backend;
+      if (bridge && typeof bridge.getVoucherNumberingConfig === "function") {
+        const raw = bridge.getVoucherNumberingConfig(vchType, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          this.config = res.data;
+          this.populateForm(res.data);
+          this.clearDirty();
+        }
+      }
+      this.refreshStatus();
+    } catch (e) {
+      console.warn("Error loading voucher numbering config:", e);
+    }
+    this.updateLivePreview();
+  },
+
+  populateForm(cfg) {
+    if (!cfg) return;
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val !== undefined && val !== null ? val : "";
+    };
+    const setChk = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = Boolean(val);
+    };
+
+    setChk("cfg-vch-enable-custom", cfg.is_custom_enabled);
+    setVal("cfg-vch-series", cfg.series || "Main");
+    setVal("cfg-vch-reset-freq", cfg.reset_frequency || "yearly");
+    setVal("cfg-vch-prefix", cfg.prefix || "");
+    setVal("cfg-vch-suffix", cfg.suffix || "");
+    setVal("cfg-vch-start-num", cfg.start_number || 1);
+    setVal("cfg-vch-padding", cfg.padding || 4);
+    setChk("cfg-vch-include-fy", cfg.include_financial_year);
+    setVal("cfg-vch-fy-format", cfg.fy_format || "YYYY-YY");
+    setVal("cfg-vch-fy-sep", cfg.fy_separator !== undefined ? cfg.fy_separator : "/");
+    setChk("cfg-vch-include-branch", cfg.include_branch_code);
+    setVal("cfg-vch-branch-pos", cfg.branch_position || "prefix");
+  },
+
+  readFormData() {
+    const getVal = (id, def = "") => {
+      const el = document.getElementById(id);
+      return el ? el.value : def;
+    };
+    const getChk = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.checked : false;
+    };
+
+    return {
+      voucher_type: this.currentVoucherType,
+      is_custom_enabled: getChk("cfg-vch-enable-custom"),
+      series: getVal("cfg-vch-series", "Main"),
+      reset_frequency: getVal("cfg-vch-reset-freq", "yearly"),
+      prefix: getVal("cfg-vch-prefix", ""),
+      suffix: getVal("cfg-vch-suffix", ""),
+      start_number: parseInt(getVal("cfg-vch-start-num", "1"), 10) || 1,
+      padding: parseInt(getVal("cfg-vch-padding", "4"), 10) || 4,
+      include_financial_year: getChk("cfg-vch-include-fy"),
+      fy_format: getVal("cfg-vch-fy-format", "YYYY-YY"),
+      fy_separator: getVal("cfg-vch-fy-sep", "/"),
+      include_branch_code: getChk("cfg-vch-include-branch"),
+      branch_position: getVal("cfg-vch-branch-pos", "prefix")
+    };
+  },
+
+  markDirty() {
+    this.isDirty = true;
+    const ind = document.getElementById("vch-num-persistence-indicator");
+    if (ind) {
+      ind.textContent = "● Unsaved Changes";
+      ind.style.color = "#f59e0b";
+      ind.style.borderColor = "#f59e0b";
+    }
+    this.updateLivePreview();
+  },
+
+  clearDirty() {
+    this.isDirty = false;
+    const ind = document.getElementById("vch-num-persistence-indicator");
+    if (ind) {
+      ind.textContent = "● Saved";
+      ind.style.color = "#10b981";
+      ind.style.borderColor = "#10b981";
+    }
+  },
+
+  refreshStatus() {
+    try {
+      const mode = activeBillingMode || "traditional";
+      const bridge = window.backendBridge || window.backend;
+      if (bridge && typeof bridge.getVoucherNumberingStatus === "function") {
+        const raw = bridge.getVoucherNumberingStatus(this.currentVoucherType, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          const s = res.data;
+          this.status = s;
+          const elAlloc = document.getElementById("status-vch-last-allocated");
+          if (elAlloc) elAlloc.textContent = s.current_allocated_number || "0";
+          const elComm = document.getElementById("status-vch-total-committed");
+          if (elComm) elComm.textContent = s.total_committed_vouchers || "0";
+          const elFy = document.getElementById("status-vch-fy");
+          if (elFy) elFy.textContent = s.financial_year || "2026-2027";
+          const elBr = document.getElementById("status-vch-branch");
+          if (elBr) elBr.textContent = s.branch_code || "BR01";
+        }
+      }
+    } catch (e) {
+      console.warn("Could not refresh numbering status:", e);
+    }
+  },
+
+  updateLivePreview() {
+    const data = this.readFormData();
+    try {
+      const mode = activeBillingMode || "traditional";
+      const bridge = window.backendBridge || window.backend;
+      if (bridge && typeof bridge.previewVoucherNumber === "function") {
+        const raw = bridge.previewVoucherNumber(this.currentVoucherType, JSON.stringify(data), mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          const prev = res.data;
+          this.renderPreview(prev, data);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Preview RPC error, falling back to local preview:", e);
+    }
+    this.renderLocalPreview(data);
+  },
+
+  renderPreview(prev, data) {
+    const disp = document.getElementById("vch-num-live-preview-display");
+    if (disp) disp.textContent = prev.preview_number || "INV-0001";
+
+    const p1 = document.getElementById("proj-vch-1");
+    if (p1 && prev.projected_numbers && prev.projected_numbers[0]) p1.textContent = prev.projected_numbers[0];
+    const p2 = document.getElementById("proj-vch-2");
+    if (p2 && prev.projected_numbers && prev.projected_numbers[1]) p2.textContent = prev.projected_numbers[1];
+    const p3 = document.getElementById("proj-vch-3");
+    if (p3 && prev.projected_numbers && prev.projected_numbers[2]) p3.textContent = prev.projected_numbers[2];
+
+    // Chips
+    const chipP = document.getElementById("chip-vch-prefix");
+    if (chipP) chipP.textContent = data.prefix || "(None)";
+    const chipS = document.getElementById("chip-vch-seq");
+    if (chipS) chipS.textContent = String(prev.sample_sequence || 1).padStart(data.padding || 4, "0");
+
+    const chipWrapFy = document.getElementById("chip-wrap-fy");
+    const chipFy = document.getElementById("chip-vch-fy");
+    if (chipWrapFy && chipFy) {
+      chipWrapFy.style.display = data.include_financial_year ? "inline-block" : "none";
+      chipFy.textContent = prev.financial_year || "2026-27";
+    }
+
+    const chipWrapBr = document.getElementById("chip-wrap-br");
+    const chipBr = document.getElementById("chip-vch-br");
+    if (chipWrapBr && chipBr) {
+      chipWrapBr.style.display = data.include_branch_code ? "inline-block" : "none";
+      chipBr.textContent = prev.branch_code || "BR01";
+    }
+
+    // Validation box
+    const valBox = document.getElementById("vch-num-validation-box");
+    if (valBox) {
+      if (prev.errors && prev.errors.length > 0) {
+        valBox.style.display = "block";
+        valBox.innerHTML = `⚠️ <strong>Validation Warnings:</strong><ul style="margin: 4px 0 0 16px; padding: 0;">${prev.errors.map(err => `<li>${err}</li>`).join("")}</ul>`;
+      } else {
+        valBox.style.display = "none";
+        valBox.innerHTML = "";
+      }
+    }
+  },
+
+  renderLocalPreview(data) {
+    const pad = data.padding || 4;
+    const seq = String(data.start_number || 1).padStart(pad, "0");
+    let preview = data.prefix ? `${data.prefix}${seq}` : seq;
+    if (data.include_financial_year) preview = `${preview}/2026-27`;
+    const disp = document.getElementById("vch-num-live-preview-display");
+    if (disp) disp.textContent = preview;
+  },
+
+  saveConfiguration() {
+    const data = this.readFormData();
+    try {
+      const mode = activeBillingMode || "traditional";
+      const bridge = window.backendBridge || window.backend;
+      if (bridge && typeof bridge.saveVoucherNumberingConfig === "function") {
+        const raw = bridge.saveVoucherNumberingConfig(this.currentVoucherType, JSON.stringify(data), mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          showNotification(`Voucher numbering rules for ${this.currentVoucherType.replace('_', ' ').toUpperCase()} saved successfully.`, "success");
+          this.clearDirty();
+          this.refreshStatus();
+          return;
+        } else if (res && res.error) {
+          showNotification(`Failed to save numbering configuration: ${res.error}`, "error");
+          return;
+        }
+      }
+    } catch (e) {
+      showNotification(`Error saving voucher numbering: ${e}`, "error");
+    }
+  },
+
+  resetToDefault() {
+    if (!confirm(`Are you sure you want to reset voucher numbering rules for ${this.currentVoucherType.replace('_', ' ').toUpperCase()} to system factory defaults?`)) {
+      return;
+    }
+    try {
+      const mode = activeBillingMode || "traditional";
+      const bridge = window.backendBridge || window.backend;
+      if (bridge && typeof bridge.resetVoucherNumberingConfig === "function") {
+        const raw = bridge.resetVoucherNumberingConfig(this.currentVoucherType, mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success) {
+          showNotification(`Voucher numbering rules for ${this.currentVoucherType.replace('_', ' ').toUpperCase()} restored to factory defaults.`, "success");
+          this.loadConfiguration(this.currentVoucherType);
+          return;
+        } else if (res && res.error) {
+          showNotification(`Failed to reset: ${res.error}`, "error");
+          return;
+        }
+      }
+    } catch (e) {
+      showNotification(`Error resetting voucher numbering: ${e}`, "error");
+    }
+  }
+};
+
+window.VoucherNumberingConfigModule = VoucherNumberingConfigModule;
+VoucherNumberingConfigModule.init();
+
+// ============================================================================
+// ANTI-MATRIX BILLING V2 — PHASE 5: GST & TAX CONFIGURATION MODULE
+// ============================================================================
+const GstTaxConfigModule = {
+  isDirty: false,
+  currentConfig: null,
+
+  init() {
+    // Bind Save and Reset buttons
+    const btnSave = document.getElementById("btn-gst-tax-save");
+    if (btnSave) {
+      btnSave.addEventListener("click", () => this.saveConfiguration());
+    }
+
+    const btnReset = document.getElementById("btn-gst-tax-reset");
+    if (btnReset) {
+      btnReset.addEventListener("click", () => this.resetToDefault());
+    }
+
+    const btnVerify = document.getElementById("btn-gst-verify-gstin");
+    if (btnVerify) {
+      btnVerify.addEventListener("click", () => this.verifyGstin());
+    }
+
+    const btnSandbox = document.getElementById("btn-gst-run-sandbox");
+    if (btnSandbox) {
+      btnSandbox.addEventListener("click", () => this.runSandboxTest());
+    }
+
+    // Cess checkbox toggle
+    const chkCess = document.getElementById("cfg-gst-enable-cess");
+    const inpCessRate = document.getElementById("cfg-gst-default-cess-rate");
+    if (chkCess && inpCessRate) {
+      chkCess.addEventListener("change", () => {
+        inpCessRate.disabled = !chkCess.checked;
+        if (!chkCess.checked) inpCessRate.value = "0.00";
+        this.markDirty();
+        this.runSandboxTest();
+      });
+    }
+
+    // Track input dirty state across all controls
+    const watchIds = [
+      "cfg-gst-enabled", "cfg-gst-gstin", "cfg-gst-legal-name", "cfg-gst-state",
+      "cfg-gst-reg-type", "cfg-gst-place-of-supply", "cfg-gst-default-rate",
+      "cfg-gst-tax-mode", "cfg-gst-rounding-rule", "cfg-gst-prec-curr",
+      "cfg-gst-prec-qty", "cfg-gst-hsn-mode", "cfg-gst-effective-date",
+      "cfg-gst-show-hsn-summary", "cfg-gst-enable-rcm", "cfg-gst-default-cess-rate"
+    ];
+
+    watchIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const evt = (el.type === "checkbox" || el.tagName === "SELECT") ? "change" : "input";
+        el.addEventListener(evt, () => {
+          this.markDirty();
+          if (id === "cfg-gst-tax-mode" || id === "cfg-gst-rounding-rule" || id === "cfg-gst-state") {
+            this.runSandboxTest();
+          }
+        });
+        if (id === "cfg-gst-gstin") {
+          el.addEventListener("input", () => {
+            el.value = el.value.toUpperCase();
+          });
+        }
+      }
+    });
+
+    // Sandbox live listeners
+    ["sandbox-price", "sandbox-qty", "sandbox-tax-rate", "sandbox-customer-state"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("input", () => this.runSandboxTest());
+        el.addEventListener("change", () => this.runSandboxTest());
+      }
+    });
+
+    // Keyboard shortcut (Ctrl+S / Cmd+S)
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        const pane = document.getElementById("pane-gst-tax-config");
+        if (pane && pane.style.display !== "none") {
+          e.preventDefault();
+          this.saveConfiguration();
+        }
+      }
+    });
+  },
+
+  markDirty() {
+    this.isDirty = true;
+    const badge = document.getElementById("gst-tax-persistence-indicator");
+    if (badge) {
+      badge.textContent = "● Unsaved Changes";
+      badge.style.color = "#f59e0b";
+      badge.style.borderColor = "#f59e0b";
+    }
+  },
+
+  clearDirty() {
+    this.isDirty = false;
+    const badge = document.getElementById("gst-tax-persistence-indicator");
+    if (badge) {
+      badge.textContent = "● Saved";
+      badge.style.color = "#10b981";
+      badge.style.borderColor = "#10b981";
+    }
+  },
+
+  initScreen() {
+    const scopeBadge = document.getElementById("gst-tax-scope-badge");
+    const activeCompany = (typeof currentCompany !== "undefined" && currentCompany) ? currentCompany : { company_name: "Anti-Matrix HQ", company_code: "CORP01" };
+    if (scopeBadge) {
+      scopeBadge.textContent = `${activeCompany.company_name || "Company"} Scope`;
+    }
+
+    const effDateInput = document.getElementById("cfg-gst-effective-date");
+    if (effDateInput && !effDateInput.value) {
+      effDateInput.value = new Date().toISOString().split("T")[0];
+    }
+
+    this.loadConfiguration();
+  },
+
+  loadConfiguration() {
+    try {
+      const mode = (typeof activeBillingMode !== "undefined" && activeBillingMode) ? activeBillingMode : "traditional";
+      const bridge = window.backendBridge || window.backend;
+      let cfg = null;
+
+      if (bridge && typeof bridge.getGstTaxConfig === "function") {
+        const raw = bridge.getGstTaxConfig(mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success && res.data) {
+          cfg = res.data;
+        }
+      }
+
+      if (!cfg) {
+        cfg = {
+          is_gst_enabled: true,
+          gstin: "33AAAPL9876C1Z2",
+          legal_name: "ANTI-MATRIX RETAIL ENTERPRISE PRIVATE LIMITED",
+          state: "Tamil Nadu (33)",
+          state_code: "33",
+          registration_type: "Regular",
+          default_place_of_supply: "Tamil Nadu (33)",
+          default_tax_mode: "exclusive",
+          default_tax_rate: 18.00,
+          enable_cess: false,
+          default_cess_rate: 0.00,
+          tax_rounding_rule: "nearest_rupee",
+          decimal_precision_currency: 2,
+          decimal_precision_qty: 3,
+          hsn_enforcement_mode: "optional",
+          show_hsn_summary: true,
+          enable_rcm: false,
+          effective_from: new Date().toISOString().split("T")[0]
+        };
+      }
+
+      this.currentConfig = cfg;
+      this.populateForm(cfg);
+      this.clearDirty();
+      this.runSandboxTest();
+    } catch (e) {
+      console.error("Failed to load GST tax config:", e);
+      if (typeof showNotification === "function") {
+        showNotification(`Error loading GST configuration: ${e}`, "error");
+      }
+    }
+  },
+
+  populateForm(cfg) {
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val != null ? val : "";
+    };
+    const setChecked = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = !!val;
+    };
+
+    setChecked("cfg-gst-enabled", cfg.is_gst_enabled);
+    setVal("cfg-gst-gstin", cfg.gstin || "");
+    setVal("cfg-gst-legal-name", cfg.legal_name || "");
+    setVal("cfg-gst-state", cfg.state || "");
+    setVal("cfg-gst-reg-type", cfg.registration_type || "Regular");
+    setVal("cfg-gst-place-of-supply", cfg.default_place_of_supply || cfg.state || "");
+    setVal("cfg-gst-default-rate", parseFloat(cfg.default_tax_rate || 18.00).toFixed(2));
+    setChecked("cfg-gst-enable-cess", cfg.enable_cess);
+
+    const cessInp = document.getElementById("cfg-gst-default-cess-rate");
+    if (cessInp) {
+      cessInp.value = parseFloat(cfg.default_cess_rate || 0.00).toFixed(2);
+      cessInp.disabled = !cfg.enable_cess;
+    }
+
+    setVal("cfg-gst-tax-mode", cfg.default_tax_mode || "exclusive");
+    setVal("cfg-gst-rounding-rule", cfg.tax_rounding_rule || "nearest_rupee");
+    setVal("cfg-gst-prec-curr", String(cfg.decimal_precision_currency != null ? cfg.decimal_precision_currency : 2));
+    setVal("cfg-gst-prec-qty", String(cfg.decimal_precision_qty != null ? cfg.decimal_precision_qty : 3));
+    setVal("cfg-gst-hsn-mode", cfg.hsn_enforcement_mode || "optional");
+
+    if (cfg.effective_from) {
+      setVal("cfg-gst-effective-date", String(cfg.effective_from).split("T")[0]);
+    }
+
+    setChecked("cfg-gst-show-hsn-summary", cfg.show_hsn_summary != null ? cfg.show_hsn_summary : true);
+    setChecked("cfg-gst-enable-rcm", !!cfg.enable_rcm);
+  },
+
+  collectFormData() {
+    const getVal = id => {
+      const el = document.getElementById(id);
+      return el ? el.value.trim() : "";
+    };
+    const getChecked = id => {
+      const el = document.getElementById(id);
+      return el ? el.checked : false;
+    };
+
+    const gstin = getVal("cfg-gst-gstin").toUpperCase();
+    const stateStr = getVal("cfg-gst-state");
+    let stateCode = "";
+    const match = stateStr.match(/\((\d{2})\)/);
+    if (match) {
+      stateCode = match[1];
+    } else if (gstin.length >= 2 && /^\d{2}$/.test(gstin.substring(0, 2))) {
+      stateCode = gstin.substring(0, 2);
+    }
+
+    return {
+      is_gst_enabled: getChecked("cfg-gst-enabled"),
+      gstin: gstin,
+      legal_name: getVal("cfg-gst-legal-name"),
+      state: stateStr,
+      state_code: stateCode,
+      registration_type: getVal("cfg-gst-reg-type") || "Regular",
+      default_place_of_supply: getVal("cfg-gst-place-of-supply") || stateStr,
+      default_tax_mode: getVal("cfg-gst-tax-mode") || "exclusive",
+      default_tax_rate: parseFloat(getVal("cfg-gst-default-rate")) || 18.00,
+      supported_tax_rates: [0.00, 5.00, 12.00, 18.00, 28.00],
+      enable_cess: getChecked("cfg-gst-enable-cess"),
+      default_cess_rate: parseFloat(getVal("cfg-gst-default-cess-rate")) || 0.00,
+      tax_rounding_rule: getVal("cfg-gst-rounding-rule") || "nearest_rupee",
+      decimal_precision_currency: parseInt(getVal("cfg-gst-prec-curr")) || 2,
+      decimal_precision_qty: parseInt(getVal("cfg-gst-prec-qty")) || 3,
+      hsn_enforcement_mode: getVal("cfg-gst-hsn-mode") || "optional",
+      show_hsn_summary: getChecked("cfg-gst-show-hsn-summary"),
+      enable_rcm: getChecked("cfg-gst-enable-rcm"),
+      effective_from: getVal("cfg-gst-effective-date") || new Date().toISOString().split("T")[0]
+    };
+  },
+
+  verifyGstin() {
+    const el = document.getElementById("cfg-gst-gstin");
+    const msgEl = document.getElementById("gstin-validation-msg");
+    const val = el ? el.value.trim().toUpperCase() : "";
+
+    if (!val) {
+      if (msgEl) {
+        msgEl.textContent = "Please enter a 15-character GSTIN to verify.";
+        msgEl.style.color = "#f59e0b";
+      }
+      return;
+    }
+
+    const bridge = window.backendBridge || window.backend;
+    if (bridge && typeof bridge.validateGstin === "function") {
+      try {
+        const raw = bridge.validateGstin(val);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (msgEl) {
+          if (res.valid) {
+            msgEl.textContent = `✓ Valid GSTIN (State Code: ${res.state_code}, PAN: ${res.pan}, Entity: ${res.entity_number})`;
+            msgEl.style.color = "#34d399";
+          } else {
+            msgEl.textContent = `✗ Invalid GSTIN: ${res.error}`;
+            msgEl.style.color = "#f87171";
+          }
+        }
+        return;
+      } catch (e) {
+        console.warn("Bridge GSTIN validation failed:", e);
+      }
+    }
+
+    // Client fallback regex
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (gstinRegex.test(val)) {
+      if (msgEl) {
+        msgEl.textContent = `✓ Valid GSTIN Structure (${val.substring(0, 2)})`;
+        msgEl.style.color = "#34d399";
+      }
+    } else {
+      if (msgEl) {
+        msgEl.textContent = "✗ Invalid GSTIN format: Must be 15 chars (e.g. 33AAAPL9876C1Z2)";
+        msgEl.style.color = "#f87171";
+      }
+    }
+  },
+
+  saveConfiguration() {
+    const data = this.collectFormData();
+
+    // If GST is enabled, validate GSTIN format
+    if (data.is_gst_enabled && data.gstin) {
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(data.gstin)) {
+        if (typeof showNotification === "function") {
+          showNotification("Invalid GSTIN format. Expected 15 characters (e.g. 33AAAPL9876C1Z2).", "error");
+        }
+        const msgEl = document.getElementById("gstin-validation-msg");
+        if (msgEl) {
+          msgEl.textContent = "✗ Invalid GSTIN format: Must match standard 15-character GST specification";
+          msgEl.style.color = "#f87171";
+        }
+        return;
+      }
+    }
+
+    try {
+      const mode = (typeof activeBillingMode !== "undefined" && activeBillingMode) ? activeBillingMode : "traditional";
+      const bridge = window.backendBridge || window.backend;
+
+      if (bridge && typeof bridge.saveGstTaxConfig === "function") {
+        const raw = bridge.saveGstTaxConfig(JSON.stringify(data), mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+        if (res && res.success) {
+          if (typeof showNotification === "function") {
+            showNotification("GST & Tax Configuration saved successfully. Changes take effect prospectively.", "success");
+          }
+          this.currentConfig = res.data || data;
+          this.clearDirty();
+          this.runSandboxTest();
+          return;
+        } else if (res && res.error) {
+          if (typeof showNotification === "function") {
+            showNotification(`Failed to save GST configuration: ${res.error}`, "error");
+          }
+          return;
+        }
+      }
+
+      // Offline / fallback save
+      this.currentConfig = data;
+      this.clearDirty();
+      if (typeof showNotification === "function") {
+        showNotification("GST & Tax Configuration saved locally.", "success");
+      }
+    } catch (e) {
+      if (typeof showNotification === "function") {
+        showNotification(`Error saving GST configuration: ${e}`, "error");
+      }
+    }
+  },
+
+  resetToDefault() {
+    if (!confirm("Are you sure you want to restore standard GST factory defaults (18% default, standard 0/5/12/18/28% slabs, Round to nearest rupee)? Historical invoices will not be affected.")) {
+      return;
+    }
+
+    try {
+      const mode = (typeof activeBillingMode !== "undefined" && activeBillingMode) ? activeBillingMode : "traditional";
+      const bridge = window.backendBridge || window.backend;
+
+      if (bridge && typeof bridge.resetGstTaxConfig === "function") {
+        const raw = bridge.resetGstTaxConfig(mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+        if (res && res.success) {
+          if (typeof showNotification === "function") {
+            showNotification("GST & Tax Configuration restored to standard factory defaults.", "success");
+          }
+          this.loadConfiguration();
+          return;
+        } else if (res && res.error) {
+          if (typeof showNotification === "function") {
+            showNotification(`Failed to reset GST configuration: ${res.error}`, "error");
+          }
+          return;
+        }
+      }
+
+      // Fallback reset
+      this.loadConfiguration();
+    } catch (e) {
+      if (typeof showNotification === "function") {
+        showNotification(`Error resetting GST configuration: ${e}`, "error");
+      }
+    }
+  },
+
+  runSandboxTest() {
+    const price = parseFloat(document.getElementById("sandbox-price")?.value) || 0;
+    const qty = parseFloat(document.getElementById("sandbox-qty")?.value) || 1;
+    const rate = parseFloat(document.getElementById("sandbox-tax-rate")?.value) || 0;
+    const custState = document.getElementById("sandbox-customer-state")?.value || "Tamil Nadu (33)";
+    const taxMode = document.getElementById("cfg-gst-tax-mode")?.value || "exclusive";
+    const roundingRule = document.getElementById("cfg-gst-rounding-rule")?.value || "nearest_rupee";
+    const compState = document.getElementById("cfg-gst-state")?.value || "Tamil Nadu (33)";
+
+    // Determine Intra vs Inter
+    const compCode = compState.match(/\((\d{2})\)/)?.[1] || "33";
+    const custCode = custState.match(/\((\d{2})\)/)?.[1] || "33";
+    const isIntraState = compCode === custCode;
+
+    let taxable = 0;
+    let taxAmount = 0;
+    const gross = price * qty;
+
+    if (taxMode === "inclusive" && rate > 0) {
+      taxable = Math.round((gross / (1 + rate / 100)) * 100) / 100;
+      taxAmount = Math.round((gross - taxable) * 100) / 100;
+    } else {
+      taxable = Math.round(gross * 100) / 100;
+      taxAmount = Math.round((taxable * (rate / 100)) * 100) / 100;
+    }
+
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    if (isIntraState) {
+      cgst = Math.round((taxAmount / 2) * 100) / 100;
+      sgst = Math.round((taxAmount - cgst) * 100) / 100; // Zero penny discrepancy
+    } else {
+      igst = taxAmount;
+    }
+
+    const unroundedTotal = taxable + cgst + sgst + igst;
+    let grandTotal = unroundedTotal;
+    let roundOff = 0;
+
+    if (roundingRule === "nearest_rupee") {
+      grandTotal = Math.round(unroundedTotal);
+      roundOff = Math.round((grandTotal - unroundedTotal) * 100) / 100;
+    } else if (roundingRule === "two_decimals") {
+      grandTotal = Math.round(unroundedTotal * 100) / 100;
+      roundOff = 0;
+    }
+
+    // Update UI elements
+    const setTxt = (id, txt) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
+
+    setTxt("sandbox-res-tax-type", isIntraState ? "Intra-state (CGST + SGST)" : "Inter-state (IGST)");
+    setTxt("sandbox-res-taxable", `₹ ${taxable.toFixed(2)}`);
+
+    const rowCgst = document.getElementById("sandbox-row-cgst");
+    const rowSgst = document.getElementById("sandbox-row-sgst");
+    const rowIgst = document.getElementById("sandbox-row-igst");
+
+    if (isIntraState) {
+      if (rowCgst) { rowCgst.style.display = "flex"; rowCgst.querySelector("span").textContent = `CGST (${(rate / 2).toFixed(1)}%):`; }
+      if (rowSgst) { rowSgst.style.display = "flex"; rowSgst.querySelector("span").textContent = `SGST (${(rate / 2).toFixed(1)}%):`; }
+      if (rowIgst) rowIgst.style.display = "none";
+      setTxt("sandbox-res-cgst", `₹ ${cgst.toFixed(2)}`);
+      setTxt("sandbox-res-sgst", `₹ ${sgst.toFixed(2)}`);
+    } else {
+      if (rowCgst) rowCgst.style.display = "none";
+      if (rowSgst) rowSgst.style.display = "none";
+      if (rowIgst) { rowIgst.style.display = "flex"; rowIgst.querySelector("span").textContent = `IGST (${rate.toFixed(1)}%):`; }
+      setTxt("sandbox-res-igst", `₹ ${igst.toFixed(2)}`);
+    }
+
+    setTxt("sandbox-res-roundoff", `₹ ${roundOff >= 0 ? "+" : ""}${roundOff.toFixed(2)}`);
+    setTxt("sandbox-res-grandtotal", `₹ ${grandTotal.toFixed(2)}`);
+  }
+};
+
+window.GstTaxConfigModule = GstTaxConfigModule;
+GstTaxConfigModule.init();
+
+// ============================================================================
+// ANTI-MATRIX BILLING V2 — PHASE 6: INVENTORY CONFIGURATION MODULE
+// ============================================================================
+const InventoryConfigModule = {
+  isDirty: false,
+  currentConfig: null,
+
+  init() {
+    // Bind Save and Reset buttons
+    const btnSave = document.getElementById("btn-inventory-save");
+    if (btnSave) {
+      btnSave.addEventListener("click", () => this.saveConfiguration());
+    }
+
+    const btnReset = document.getElementById("btn-inventory-reset");
+    if (btnReset) {
+      btnReset.addEventListener("click", () => this.resetToDefault());
+    }
+
+    const btnSim = document.getElementById("btn-inv-run-simulator");
+    if (btnSim) {
+      btnSim.addEventListener("click", () => this.runStockSimulator());
+    }
+
+    // Track input dirty state across all controls
+    const watchIds = [
+      "cfg-inv-enable-tracking", "cfg-inv-default-uom", "cfg-inv-qty-precision",
+      "cfg-inv-allow-fractional", "cfg-inv-default-type", "cfg-inv-barcode-symbology",
+      "cfg-inv-auto-sku", "cfg-inv-allow-negative-stock", "cfg-inv-validate-availability",
+      "cfg-inv-warning-behavior", "cfg-inv-min-stock-level", "cfg-inv-reorder-level",
+      "cfg-inv-reorder-qty", "cfg-inv-max-stock-level", "cfg-inv-valuation-method",
+      "cfg-inv-default-mat-centre", "cfg-inv-track-branch-stock", "cfg-inv-allow-transfers",
+      "cfg-inv-enable-barcode", "cfg-inv-enable-batch", "cfg-inv-enable-expiry",
+      "cfg-inv-link-hsn", "cfg-inv-enable-low-stock-alert", "cfg-inv-warn-on-low-stock",
+      "cfg-inv-warn-on-negative-stock", "cfg-inv-warn-on-expiry", "cfg-inv-expiry-days"
+    ];
+
+    watchIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const evt = (el.type === "checkbox" || el.tagName === "SELECT") ? "change" : "input";
+        el.addEventListener(evt, () => {
+          this.markDirty();
+          if (id === "cfg-inv-allow-negative-stock" || id === "cfg-inv-min-stock-level" || id === "cfg-inv-reorder-level") {
+            this.runStockSimulator();
+          }
+        });
+      }
+    });
+
+    // Simulator live listeners
+    ["sim-current-stock", "sim-current-wac", "sim-inward-qty", "sim-unit-cost", "sim-outward-qty"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("input", () => this.runStockSimulator());
+        el.addEventListener("change", () => this.runStockSimulator());
+      }
+    });
+
+    // Keyboard shortcut (Ctrl+S / Cmd+S)
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        const pane = document.getElementById("pane-inventory-config");
+        if (pane && pane.style.display !== "none") {
+          e.preventDefault();
+          this.saveConfiguration();
+        }
+      }
+    });
+  },
+
+  markDirty() {
+    this.isDirty = true;
+    const badge = document.getElementById("inventory-persistence-indicator");
+    if (badge) {
+      badge.textContent = "● Unsaved Changes";
+      badge.style.color = "#f59e0b";
+      badge.style.borderColor = "#f59e0b";
+    }
+  },
+
+  clearDirty() {
+    this.isDirty = false;
+    const badge = document.getElementById("inventory-persistence-indicator");
+    if (badge) {
+      badge.textContent = "● Saved";
+      badge.style.color = "#10b981";
+      badge.style.borderColor = "#10b981";
+    }
+  },
+
+  initScreen() {
+    const scopeBadge = document.getElementById("inventory-scope-badge");
+    const activeCompany = (typeof currentCompany !== "undefined" && currentCompany) ? currentCompany : { company_name: "Anti-Matrix HQ", company_code: "CORP01" };
+    if (scopeBadge) {
+      scopeBadge.textContent = `${activeCompany.company_name || "Company"} Scope`;
+    }
+
+    this.loadConfiguration();
+  },
+
+  loadConfiguration() {
+    try {
+      const mode = (typeof activeBillingMode !== "undefined" && activeBillingMode) ? activeBillingMode : "traditional";
+      const bridge = window.backendBridge || window.backend;
+      let cfg = null;
+
+      if (bridge && typeof bridge.getInventoryConfig === "function") {
+        const raw = bridge.getInventoryConfig(mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (res && res.success && res.data) {
+          cfg = res.data;
+        }
+      }
+
+      if (!cfg) {
+        cfg = {
+          enable_inventory_tracking: true,
+          default_uom: "Pcs.",
+          qty_decimal_precision: 3,
+          allow_fractional_qty: true,
+          default_product_type: "Stockable",
+          auto_generate_sku: true,
+          barcode_symbology: "EAN-13",
+          allow_negative_stock: false,
+          validate_stock_on_sale: true,
+          stock_warning_behavior: "warn_and_allow",
+          low_stock_alert_enabled: true,
+          default_min_stock_level: 10.0,
+          default_reorder_level: 15.0,
+          default_reorder_qty: 50.0,
+          default_max_stock_level: 500.0,
+          valuation_method: "weighted_average",
+          default_material_centre: "Main Store",
+          track_branch_stock: true,
+          allow_inter_branch_transfer: true,
+          enable_batch_tracking: false,
+          enable_expiry_tracking: false,
+          enable_barcode_tracking: true,
+          link_hsn_sac: true,
+          warn_on_low_stock: true,
+          warn_on_negative_stock: true,
+          warn_on_expiry: false,
+          expiry_warning_days: 30
+        };
+      }
+
+      this.currentConfig = cfg;
+      this.populateForm(cfg);
+      this.clearDirty();
+      this.runStockSimulator();
+    } catch (e) {
+      console.error("Failed to load inventory config:", e);
+      if (typeof showNotification === "function") {
+        showNotification(`Error loading inventory configuration: ${e}`, "error");
+      }
+    }
+  },
+
+  populateForm(cfg) {
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val != null ? val : "";
+    };
+    const setChecked = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = !!val;
+    };
+
+    setChecked("cfg-inv-enable-tracking", cfg.enable_inventory_tracking);
+    setVal("cfg-inv-default-uom", cfg.default_uom || "Pcs.");
+    setVal("cfg-inv-qty-precision", String(cfg.qty_decimal_precision != null ? cfg.qty_decimal_precision : 3));
+    setChecked("cfg-inv-allow-fractional", cfg.allow_fractional_qty);
+    setVal("cfg-inv-default-type", cfg.default_product_type || "Stockable");
+    setChecked("cfg-inv-auto-sku", cfg.auto_generate_sku);
+    setVal("cfg-inv-barcode-symbology", cfg.barcode_symbology || "EAN-13");
+
+    setChecked("cfg-inv-allow-negative-stock", cfg.allow_negative_stock);
+    setChecked("cfg-inv-validate-availability", cfg.validate_stock_on_sale);
+    setVal("cfg-inv-warning-behavior", cfg.stock_warning_behavior || "warn_and_allow");
+    setChecked("cfg-inv-low-stock-alert_enabled", cfg.low_stock_alert_enabled);
+
+    setVal("cfg-inv-min-stock-level", parseFloat(cfg.default_min_stock_level || 10.0).toFixed(1));
+    setVal("cfg-inv-reorder-level", parseFloat(cfg.default_reorder_level || 15.0).toFixed(1));
+    setVal("cfg-inv-reorder-qty", parseFloat(cfg.default_reorder_qty || 50.0).toFixed(1));
+    setVal("cfg-inv-max-stock-level", parseFloat(cfg.default_max_stock_level || 500.0).toFixed(1));
+
+    setVal("cfg-inv-valuation-method", cfg.valuation_method || "weighted_average");
+    setVal("cfg-inv-default-mat-centre", cfg.default_material_centre || "Main Store");
+    setChecked("cfg-inv-track-branch-stock", cfg.track_branch_stock);
+    setChecked("cfg-inv-allow-transfers", cfg.allow_inter_branch_transfer);
+
+    setChecked("cfg-inv-enable-barcode", cfg.enable_barcode_tracking);
+    setChecked("cfg-inv-enable-batch", cfg.enable_batch_tracking);
+    setChecked("cfg-inv-enable-expiry", cfg.enable_expiry_tracking);
+    setChecked("cfg-inv-link-hsn", cfg.link_hsn_sac);
+
+    setChecked("cfg-inv-enable-low-stock-alert", cfg.low_stock_alert_enabled);
+    setChecked("cfg-inv-warn-on-low-stock", cfg.warn_on_low_stock);
+    setChecked("cfg-inv-warn-on-negative-stock", cfg.warn_on_negative_stock);
+    setChecked("cfg-inv-warn-on-expiry", cfg.warn_on_expiry);
+    setVal("cfg-inv-expiry-days", String(cfg.expiry_warning_days || 30));
+  },
+
+  collectFormData() {
+    const getVal = id => {
+      const el = document.getElementById(id);
+      return el ? el.value.trim() : "";
+    };
+    const getChecked = id => {
+      const el = document.getElementById(id);
+      return el ? el.checked : false;
+    };
+
+    return {
+      enable_inventory_tracking: getChecked("cfg-inv-enable-tracking"),
+      default_uom: getVal("cfg-inv-default-uom") || "Pcs.",
+      qty_decimal_precision: parseInt(getVal("cfg-inv-qty-precision")) || 3,
+      allow_fractional_qty: getChecked("cfg-inv-allow-fractional"),
+      default_product_type: getVal("cfg-inv-default-type") || "Stockable",
+      auto_generate_sku: getChecked("cfg-inv-auto-sku"),
+      barcode_symbology: getVal("cfg-inv-barcode-symbology") || "EAN-13",
+      allow_negative_stock: getChecked("cfg-inv-allow-negative-stock"),
+      validate_stock_on_sale: getChecked("cfg-inv-validate-availability"),
+      stock_warning_behavior: getVal("cfg-inv-warning-behavior") || "warn_and_allow",
+      low_stock_alert_enabled: getChecked("cfg-inv-enable-low-stock-alert"),
+      default_min_stock_level: parseFloat(getVal("cfg-inv-min-stock-level")) || 10.0,
+      default_reorder_level: parseFloat(getVal("cfg-inv-reorder-level")) || 15.0,
+      default_reorder_qty: parseFloat(getVal("cfg-inv-reorder-qty")) || 50.0,
+      default_max_stock_level: parseFloat(getVal("cfg-inv-max-stock-level")) || 500.0,
+      valuation_method: getVal("cfg-inv-valuation-method") || "weighted_average",
+      default_material_centre: getVal("cfg-inv-default-mat-centre") || "Main Store",
+      track_branch_stock: getChecked("cfg-inv-track-branch-stock"),
+      allow_inter_branch_transfer: getChecked("cfg-inv-allow-transfers"),
+      enable_batch_tracking: getChecked("cfg-inv-enable-batch"),
+      enable_expiry_tracking: getChecked("cfg-inv-enable-expiry"),
+      enable_barcode_tracking: getChecked("cfg-inv-enable-barcode"),
+      link_hsn_sac: getChecked("cfg-inv-link-hsn"),
+      warn_on_low_stock: getChecked("cfg-inv-warn-on-low-stock"),
+      warn_on_negative_stock: getChecked("cfg-inv-warn-on-negative-stock"),
+      warn_on_expiry: getChecked("cfg-inv-warn-on-expiry"),
+      expiry_warning_days: parseInt(getVal("cfg-inv-expiry-days")) || 30
+    };
+  },
+
+  saveConfiguration() {
+    const data = this.collectFormData();
+
+    // Threshold consistency check
+    if (data.default_reorder_level < data.default_min_stock_level) {
+      if (typeof showNotification === "function") {
+        showNotification("Validation error: Reorder level cannot be less than minimum stock level.", "error");
+      }
+      return;
+    }
+    if (data.default_max_stock_level < data.default_reorder_level) {
+      if (typeof showNotification === "function") {
+        showNotification("Validation error: Maximum stock level cannot be less than reorder level.", "error");
+      }
+      return;
+    }
+
+    try {
+      const mode = (typeof activeBillingMode !== "undefined" && activeBillingMode) ? activeBillingMode : "traditional";
+      const bridge = window.backendBridge || window.backend;
+
+      if (bridge && typeof bridge.saveInventoryConfig === "function") {
+        const raw = bridge.saveInventoryConfig(JSON.stringify(data), mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+        if (res && res.success) {
+          if (typeof showNotification === "function") {
+            showNotification("Inventory & Stock Configuration saved successfully. Settings take effect immediately.", "success");
+          }
+          this.currentConfig = res.data || data;
+          this.clearDirty();
+          this.runStockSimulator();
+          return;
+        } else if (res && res.error) {
+          if (typeof showNotification === "function") {
+            showNotification(`Failed to save inventory configuration: ${res.error}`, "error");
+          }
+          return;
+        }
+      }
+
+      // Offline / fallback save
+      this.currentConfig = data;
+      this.clearDirty();
+      if (typeof showNotification === "function") {
+        showNotification("Inventory Configuration saved locally.", "success");
+      }
+    } catch (e) {
+      if (typeof showNotification === "function") {
+        showNotification(`Error saving inventory configuration: ${e}`, "error");
+      }
+    }
+  },
+
+  resetToDefault() {
+    if (!confirm("Are you sure you want to restore standard inventory factory defaults (Negative Stock Disabled, WAC valuation, 10 min stock, 15 reorder level)? Historical stock movements will not be affected.")) {
+      return;
+    }
+
+    try {
+      const mode = (typeof activeBillingMode !== "undefined" && activeBillingMode) ? activeBillingMode : "traditional";
+      const bridge = window.backendBridge || window.backend;
+
+      if (bridge && typeof bridge.resetInventoryConfig === "function") {
+        const raw = bridge.resetInventoryConfig(mode);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+        if (res && res.success) {
+          if (typeof showNotification === "function") {
+            showNotification("Inventory Configuration restored to standard factory defaults.", "success");
+          }
+          this.loadConfiguration();
+          return;
+        } else if (res && res.error) {
+          if (typeof showNotification === "function") {
+            showNotification(`Failed to reset inventory configuration: ${res.error}`, "error");
+          }
+          return;
+        }
+      }
+
+      this.loadConfiguration();
+    } catch (e) {
+      if (typeof showNotification === "function") {
+        showNotification(`Error resetting inventory configuration: ${e}`, "error");
+      }
+    }
+  },
+
+  runStockSimulator() {
+    const curStock = parseFloat(document.getElementById("sim-current-stock")?.value) || 0.0;
+    const curWac = parseFloat(document.getElementById("sim-current-wac")?.value) || 0.0;
+    const inQty = parseFloat(document.getElementById("sim-inward-qty")?.value) || 0.0;
+    const inCost = parseFloat(document.getElementById("sim-unit-cost")?.value) || 0.0;
+    const outQty = parseFloat(document.getElementById("sim-outward-qty")?.value) || 0.0;
+    const allowNegative = document.getElementById("cfg-inv-allow-negative-stock")?.checked || false;
+    const minLevel = parseFloat(document.getElementById("cfg-inv-min-stock-level")?.value) || 10.0;
+    const reorderLevel = parseFloat(document.getElementById("cfg-inv-reorder-level")?.value) || 15.0;
+    const uom = document.getElementById("cfg-inv-default-uom")?.value || "Pcs.";
+
+    const projectedStock = curStock + inQty - outQty;
+
+    let policyStatus = "✓ Transaction Allowed";
+    let policyColor = "#34d399";
+
+    if (projectedStock < 0) {
+      if (!allowNegative) {
+        policyStatus = "✗ Blocked: Negative Stock Prohibited";
+        policyColor = "#f87171";
+      } else {
+        policyStatus = "⚠️ Warning: Negative Stock Permitted";
+        policyColor = "#f59e0b";
+      }
+    }
+
+    let status = "OPTIMAL";
+    let statusColor = "#34d399";
+    if (projectedStock < 0) {
+      status = "NEGATIVE_STOCK";
+      statusColor = "#ef4444";
+    } else if (projectedStock === 0) {
+      status = "OUT_OF_STOCK";
+      statusColor = "#f59e0b";
+    } else if (projectedStock <= minLevel) {
+      status = "LOW_STOCK";
+      statusColor = "#f87171";
+    } else if (projectedStock <= reorderLevel) {
+      status = "REORDER_REQUIRED";
+      statusColor = "#fbbf24";
+    }
+
+    // WAC update
+    let newWac = curWac;
+    if (inQty > 0 && inCost > 0) {
+      const existingVal = Math.max(0, curStock) * curWac;
+      const inwardVal = inQty * inCost;
+      const totalPool = Math.max(0, curStock) + inQty;
+      if (totalPool > 0) {
+        newWac = Math.round(((existingVal + inwardVal) / totalPool) * 100) / 100;
+      }
+    }
+
+    const valuation = Math.round(Math.max(0, projectedStock) * newWac * 100) / 100;
+
+    const setTxt = (id, txt) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
+
+    const polEl = document.getElementById("sim-res-policy-status");
+    if (polEl) {
+      polEl.textContent = policyStatus;
+      polEl.style.color = policyColor;
+    }
+
+    setTxt("sim-res-projected-stock", `${projectedStock.toFixed(3)} ${uom}`);
+
+    const statEl = document.getElementById("sim-res-stock-status");
+    if (statEl) {
+      statEl.textContent = status;
+      statEl.style.color = statusColor;
+    }
+
+    setTxt("sim-res-wac-rate", `₹ ${newWac.toFixed(2)}`);
+    setTxt("sim-res-valuation", `₹ ${valuation.toFixed(2)}`);
+  }
+};
+
+window.InventoryConfigModule = InventoryConfigModule;
+InventoryConfigModule.init();
+
+function initPaperConfigScreen() {
+  PaperConfigModule.initScreen();
+}
+
+window.PaperConfigModule = PaperConfigModule;
+window.initPaperConfigScreen = initPaperConfigScreen;
+
+PaperConfigModule.init();
+
 ZoomController.init();
 showScreen("view-login");

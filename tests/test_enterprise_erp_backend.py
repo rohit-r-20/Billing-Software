@@ -177,6 +177,7 @@ def test_end_to_end_purchase_sales_returns_inventory_lifecycle(erp_db):
         company_id="C1",
         branch_id="B1",
         party_name="LOCAL CUSTOMER",
+        customer_category="Direct Customer",
         items=[
             {
                 "name": "MILK BIKIS",

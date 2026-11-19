@@ -27,6 +27,7 @@ from db.traditional_models import (
     utc_now,
     ensure_utc,
 )
+from services.voucher_numbering_service import voucher_numbering_service
 from core.logging_config import logger
 
 BARCODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # 32 unambiguous characters
@@ -949,9 +950,20 @@ class TraditionalProductService:
             max_audit_seq = self._scan_audit_log_max_vch_no(session, company_id, clean_series, financial_year=fy)
 
             max_committed = max(seq_current, max_inv_seq, max_audit_seq, 0)
-            next_num = max_committed + 1
-
-            formatted_no = f"{prefix}{next_num:0{padding}d}"
+            
+            # Check voucher numbering configuration
+            vch_cfg = voucher_numbering_service.get_traditional_config(
+                company_id, "sales_invoice", branch_id=resolved_branch_id, series=clean_series
+            )
+            if vch_cfg.get("is_custom_enabled"):
+                start_num = int(vch_cfg.get("start_number") or 1)
+                next_num = max(max_committed + 1, start_num)
+                br_obj = session.scalar(select(Branch).where(Branch.id == resolved_branch_id))
+                br_code = br_obj.code if br_obj and br_obj.code else "BR01"
+                formatted_no = voucher_numbering_service.format_voucher_number(vch_cfg, next_num, fy, br_code)
+            else:
+                next_num = max_committed + 1
+                formatted_no = f"{prefix}{next_num:0{padding}d}"
 
             return {
                 "voucher_number": formatted_no,
@@ -960,6 +972,7 @@ class TraditionalProductService:
                 "financial_year": fy,
                 "branch_id": resolved_branch_id,
                 "company_id": company_id,
+                "is_custom": bool(vch_cfg.get("is_custom_enabled")),
             }
 
     def save_sale_invoice(
@@ -1018,10 +1031,36 @@ class TraditionalProductService:
 
             max_audit_seq = self._scan_audit_log_max_vch_no(session, company_id, series, financial_year=fy)
             current_seq = seq_row.current_number if seq_row else 0
-            allocated_seq = max(current_seq, max_inv_seq, max_audit_seq, 0) + 1
-            padding = seq_row.padding if seq_row and seq_row.padding else 3
-            prefix = seq_row.prefix if seq_row and seq_row.prefix is not None else ""
-            vch_no = f"{prefix}{allocated_seq:0{padding}d}"
+
+            # Check voucher numbering configuration
+            vch_cfg = voucher_numbering_service.get_traditional_config(
+                company_id, "sales_invoice", branch_id=resolved_branch_id, series=series
+            )
+            if vch_cfg.get("is_custom_enabled"):
+                start_num = int(vch_cfg.get("start_number") or 1)
+                allocated_seq = max(current_seq, max_inv_seq, max_audit_seq, start_num - 1) + 1
+                padding = int(vch_cfg.get("padding") or 4)
+                prefix = vch_cfg.get("prefix") or ""
+                br_obj = session.scalar(select(Branch).where(Branch.id == resolved_branch_id))
+                br_code = br_obj.code if br_obj and br_obj.code else "BR01"
+                vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, allocated_seq, fy, br_code)
+
+                # Collision avoidance guard
+                while session.scalar(
+                    select(SaleInvoice.id).where(
+                        and_(
+                            SaleInvoice.company_id == company_id,
+                            SaleInvoice.voucher_number == vch_no,
+                        )
+                    )
+                ):
+                    allocated_seq += 1
+                    vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, allocated_seq, fy, br_code)
+            else:
+                allocated_seq = max(current_seq, max_inv_seq, max_audit_seq, 0) + 1
+                padding = seq_row.padding if seq_row and seq_row.padding else 3
+                prefix = seq_row.prefix if seq_row and seq_row.prefix is not None else ""
+                vch_no = f"{prefix}{allocated_seq:0{padding}d}"
 
             if not seq_row:
                 seq_row = VoucherSequence(

@@ -29,22 +29,27 @@ def test_company_service(tmp_path):
             }
         ]
     })
-    return CompanyService(db=db_mgr)
+    cs = CompanyService(db=db_mgr)
+    cs.provision_initial_administrator("COMP0001", "A", "a", "Administrator")
+    return cs
 
 
 def test_successful_authentication_with_code_and_password(test_company_service):
-    # Default seeded company COMP0001 with password 'a'
-    comp = test_company_service.authenticate("COMP0001", "a")
+    # Default seeded company COMP0001 with user 'A' and password 'a'
+    comp = test_company_service.authenticate("COMP0001", "a", username="A")
     assert comp is not None
     assert comp["code"] == "COMP0001"
     assert comp["name"] == "ANTI MATRIX"
     assert comp["username"] == "A"
     assert comp["role"] == "Administrator"
 
+    # Strict fail-closed: missing username must return None
+    assert test_company_service.authenticate("COMP0001", "a", username=None) is None
+
 
 def test_successful_authentication_with_username_and_password(test_company_service):
-    # Authenticate with username 'A' and password 'a'
-    comp = test_company_service.authenticate("A", "a")
+    # Authenticate with company code 'COMP0001', username 'A' and password 'a'
+    comp = test_company_service.authenticate("COMP0001", "a", username="A")
     assert comp is not None
     assert comp["code"] == "COMP0001"
     assert comp["username"] == "A"

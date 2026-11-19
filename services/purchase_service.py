@@ -14,6 +14,7 @@ from services.supplier_service import SupplierService
 from services.inventory_service import InventoryService
 from services.company_service import resolve_cached_company_id, get_cached_default_branch_id
 from services.tax_service import tax_service
+from services.voucher_numbering_service import voucher_numbering_service
 from core.logging_config import logger
 
 
@@ -127,6 +128,22 @@ class PurchaseService:
                 pass
 
             next_num = max_num + 1
+
+            try:
+                vch_cfg = voucher_numbering_service.get_config(actual_comp_id, "purchase_invoice")
+                if vch_cfg and vch_cfg.get("is_custom_enabled"):
+                    start_num = int(vch_cfg.get("start_number") or 1)
+                    eff_seq = max(next_num, start_num)
+                    candidate_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+                    while True:
+                        cursor.execute("SELECT id FROM purchase_vouchers WHERE company_id = ? AND vch_no = ?;", (actual_comp_id, candidate_no))
+                        if not cursor.fetchone():
+                            return candidate_no
+                        eff_seq += 1
+                        candidate_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+            except Exception:
+                pass
+
             return f"PUR-{str(next_num).zfill(6)}"
 
     def _allocate_purchase_voucher_number(self, cursor, company_id: str, series: str = "Main", is_trad: bool = False) -> str:
@@ -1614,10 +1631,29 @@ class PurchaseService:
             cnt = 0
             try:
                 cursor.execute("SELECT COUNT(id) FROM purchase_returns WHERE company_id = ?;", (actual_comp_id,))
-                cnt = cursor.fetchone()[0]
+                c_row = cursor.fetchone()
+                if c_row:
+                    cnt = c_row[0] if not isinstance(c_row, dict) else c_row["COUNT(id)"]
             except Exception:
-                pass
-            vch_no = f"PR-{str(cnt + 1).zfill(6)}"
+                cnt = 0
+
+            cnt += 1
+            try:
+                vch_cfg = voucher_numbering_service.get_config(actual_comp_id, "purchase_return")
+                if vch_cfg and vch_cfg.get("is_custom_enabled"):
+                    start_num = int(vch_cfg.get("start_number") or 1)
+                    eff_seq = max(cnt, start_num)
+                    vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+                    while True:
+                        cursor.execute("SELECT id FROM purchase_returns WHERE company_id = ? AND vch_no = ?;", (actual_comp_id, vch_no))
+                        if not cursor.fetchone():
+                            break
+                        eff_seq += 1
+                        vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, eff_seq, financial_year="2026-2027", branch_code="BR01")
+                else:
+                    vch_no = f"PR-{str(cnt).zfill(6)}"
+            except Exception:
+                vch_no = f"PR-{str(cnt).zfill(6)}"
 
             total_taxable = Decimal("0")
             total_cgst = Decimal("0")

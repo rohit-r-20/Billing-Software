@@ -35,6 +35,12 @@ from services.inventory_service import inventory_service
 from services.billing_service import billing_service
 from services.tax_service import tax_service
 from services.printing_service import printing_service
+from services.paper_config_service import paper_config_service
+from services.bill_layout_config_service import bill_layout_service
+from services.voucher_print_service import voucher_print_service
+from services.voucher_numbering_service import voucher_numbering_service
+from services.gst_tax_config_service import gst_tax_config_service
+from services.inventory_config_service import inventory_config_service
 from services.backup_service import backup_service
 from services.reporting_service import reporting_service
 from services.migration_service import migration_service
@@ -65,6 +71,15 @@ from services.traditional_setup_token import (
     verify_setup_token,
     consume_setup_token,
 )
+from services.traditional_recovery_service import TraditionalRecoveryService
+from services.traditional_recovery_token import (
+    get_canonical_recovery_token_path,
+    verify_recovery_token,
+    consume_recovery_token,
+)
+from services.traditional_accounting_service import TraditionalAccountingService
+from services.traditional_payment_service import TraditionalPaymentService
+from services.traditional_financial_reconciliation_service import TraditionalFinancialReconciliationService
 from db.traditional_database import traditional_db_manager
 
 
@@ -91,6 +106,16 @@ class BackendBridge(QObject):
         self._traditional_product_service = TraditionalProductService(traditional_db_manager)
         self._traditional_customer_service = TraditionalCustomerService(traditional_db_manager)
         self._traditional_dashboard_service = TraditionalDashboardService(traditional_db_manager)
+        self._traditional_recovery_service = TraditionalRecoveryService(traditional_db_manager)
+        self._traditional_accounting_service = TraditionalAccountingService(traditional_db_manager)
+        self._traditional_payment_service = TraditionalPaymentService(
+            traditional_db_manager, accounting_service=self._traditional_accounting_service
+        )
+        self._traditional_recon_service = TraditionalFinancialReconciliationService(
+            db_manager=traditional_db_manager,
+            accounting_service=self._traditional_accounting_service,
+            payment_service=self._traditional_payment_service,
+        )
         # Register mobile scanner callbacks
         mobile_scanner_service.scan_callback = self._on_mobile_scan
         mobile_scanner_service.status_callback = self._on_mobile_status
@@ -98,7 +123,34 @@ class BackendBridge(QObject):
     def _require_traditional_session(self) -> TraditionalSession:
         """Verify that an active, non-expired Traditional Billing session exists."""
         if not self._traditional_session:
+            # Check if active authenticated Fast Billing session can supply credentials
+            if self._authenticated_session:
+                auth_at_str = self._authenticated_session.get("authenticated_at")
+                if auth_at_str:
+                    try:
+                        auth_at = datetime.fromisoformat(auth_at_str)
+                        if (datetime.now(timezone.utc) - auth_at).total_seconds() > 24 * 3600:
+                            self._authenticated_session = None
+                            raise PermissionError("Session expired: Authenticated session has expired. Please sign in again.")
+                    except (ValueError, TypeError):
+                        pass
+                tok = self._authenticated_session.get("session_id") or secrets.token_urlsafe(32)
+                reg_sess = traditional_session_registry.get_session(tok)
+                if not reg_sess:
+                    tok = traditional_session_registry.create_session(
+                        user_id=self._authenticated_session.get("user_id", "SYS_USER"),
+                        company_id=self._authenticated_session.get("company_id", ""),
+                        branch_id=self._authenticated_session.get("branch_id", ""),
+                        role_name=self._authenticated_session.get("role", "User"),
+                        username=self._authenticated_session.get("username", "user"),
+                        display_name=self._authenticated_session.get("display_name")
+                    )
+                    reg_sess = traditional_session_registry.get_session(tok)
+                self._traditional_session = reg_sess
+                return reg_sess
+
             raise PermissionError("Authentication required: No active Traditional Billing session.")
+
         validated = traditional_session_registry.get_session(self._traditional_session.token)
         if not validated:
             self._traditional_session = None
@@ -117,20 +169,64 @@ class BackendBridge(QObject):
         return session
 
     def _require_authenticated(self) -> Dict[str, Any]:
-        """Verify that an authenticated backend session exists."""
-        if not self._authenticated_session:
-            if self._traditional_session:
-                validated = traditional_session_registry.get_session(self._traditional_session.token)
-                if validated:
-                    self._traditional_session = validated
-                    return {
-                        "company_id": validated.company_id,
-                        "company_code": getattr(validated, "company_code", "") or validated.company_id,
-                        "user_id": validated.user_id,
-                        "role": validated.role_name
-                    }
-            raise PermissionError("Authentication required: No active authenticated session.")
-        return self._authenticated_session
+        """
+        Verify that an authenticated session exists (supporting both Fast Billing and Traditional Billing).
+        Checks session validity, expiration, and returns unified session context.
+        """
+        # 1. Check Fast Billing session if active
+        if self._authenticated_session:
+            auth_at_str = self._authenticated_session.get("authenticated_at")
+            if auth_at_str:
+                try:
+                    auth_at = datetime.fromisoformat(auth_at_str)
+                    if (datetime.now(timezone.utc) - auth_at).total_seconds() > 24 * 3600:
+                        self._authenticated_session = None
+                        raise PermissionError("Session expired: Authenticated session has expired. Please sign in again.")
+                except (ValueError, TypeError):
+                    pass
+            return self._authenticated_session
+
+        # 2. Check Traditional Billing session if active
+        if self._traditional_session:
+            validated = traditional_session_registry.get_session(self._traditional_session.token)
+            if not validated:
+                self._traditional_session = None
+                raise PermissionError("Session expired: Authenticated session has expired. Please sign in again.")
+            self._traditional_session = validated
+
+            # Resolve company code and name from Traditional DB
+            comp_code = ""
+            comp_name = ""
+            try:
+                with traditional_db_manager.read_session_scope() as session:
+                    from db.traditional_models import Company as TradComp
+                    comp = session.get(TradComp, validated.company_id)
+                    if comp:
+                        comp_code = comp.code or ""
+                        comp_name = comp.name or ""
+            except Exception as e:
+                logger.debug(f"Could not load traditional company details for session: {e}")
+
+            session_dict = {
+                "session_id": validated.token,
+                "company_id": validated.company_id,
+                "company_code": comp_code,
+                "company_name": comp_name,
+                "branch_id": validated.branch_id,
+                "branch_code": "BR01",
+                "branch_name": "Main Branch",
+                "user_id": validated.user_id,
+                "username": validated.username,
+                "display_name": validated.display_name,
+                "role": validated.role_name,
+                "authenticated_at": validated.created_at.isoformat(),
+                "auth_source": "traditional"
+            }
+            # Cache onto _authenticated_session so subsequent Fast Billing calls share this session
+            self._authenticated_session = session_dict
+            return session_dict
+
+        raise PermissionError("Authentication required: No active authenticated session.")
 
     def _require_authorized_company(self, requested_company_id: Optional[str] = None) -> str:
         """
@@ -265,8 +361,22 @@ class BackendBridge(QObject):
                 "username": comp["username"],
                 "display_name": comp.get("displayName") or comp["username"],
                 "role": user_role.strip(),
-                "authenticated_at": datetime.now(timezone.utc).isoformat()
+                "authenticated_at": datetime.now(timezone.utc).isoformat(),
+                "auth_source": "fast_billing"
             }
+            # Register traditional session for interoperability across billing modes
+            try:
+                t_token = traditional_session_registry.create_session(
+                    user_id=comp["userId"],
+                    company_id=comp["id"],
+                    branch_id=branch_data["id"],
+                    role_name=user_role.strip(),
+                    username=comp["username"],
+                    display_name=comp.get("displayName") or comp["username"]
+                )
+                self._traditional_session = traditional_session_registry.get_session(t_token)
+            except Exception as e:
+                logger.debug(f"Traditional session registration note: {e}")
 
             response_data = {
                 "company": {
@@ -311,43 +421,51 @@ class BackendBridge(QObject):
     @pyqtSlot(result=str)
     def logout(self) -> str:
         self._authenticated_session = None
+        if self._traditional_session:
+            try:
+                traditional_session_registry.revoke_session(self._traditional_session.token)
+            except Exception:
+                pass
+            self._traditional_session = None
         return json.dumps({"success": True, "message": "Logged out successfully."})
 
     @pyqtSlot(result=str)
     def getAuthenticatedSession(self) -> str:
-        if not self._authenticated_session:
+        try:
+            sess = self._require_authenticated()
+            return json.dumps({
+                "success": True,
+                "authenticated": True,
+                "data": {
+                    "company": {
+                        "id": sess["company_id"],
+                        "code": sess.get("company_code", ""),
+                        "name": sess.get("company_name", "")
+                    },
+                    "branch": {
+                        "id": sess.get("branch_id", ""),
+                        "code": sess.get("branch_code", "BR01"),
+                        "name": sess.get("branch_name", "Main Branch")
+                    },
+                    "user": {
+                        "id": sess.get("user_id", ""),
+                        "username": sess.get("username", "user"),
+                        "displayName": sess.get("display_name") or sess.get("username", "user"),
+                        "role": sess.get("role", "User")
+                    },
+                    # Backward-compatible fields
+                    "companyId": sess["company_id"],
+                    "companyCode": sess.get("company_code", ""),
+                    "companyName": sess.get("company_name", ""),
+                    "userId": sess.get("user_id", ""),
+                    "username": sess.get("username", "user"),
+                    "role": sess.get("role", "User"),
+                    "branchId": sess.get("branch_id", ""),
+                    "branchCode": sess.get("branch_code", "BR01")
+                }
+            })
+        except Exception:
             return json.dumps({"success": False, "authenticated": False, "data": None})
-        return json.dumps({
-            "success": True,
-            "authenticated": True,
-            "data": {
-                "company": {
-                    "id": self._authenticated_session["company_id"],
-                    "code": self._authenticated_session["company_code"],
-                    "name": self._authenticated_session["company_name"]
-                },
-                "branch": {
-                    "id": self._authenticated_session["branch_id"],
-                    "code": self._authenticated_session["branch_code"],
-                    "name": self._authenticated_session["branch_name"]
-                },
-                "user": {
-                    "id": self._authenticated_session["user_id"],
-                    "username": self._authenticated_session["username"],
-                    "displayName": self._authenticated_session.get("display_name") or self._authenticated_session["username"],
-                    "role": self._authenticated_session["role"]
-                },
-                # Backward-compatible fields
-                "companyId": self._authenticated_session["company_id"],
-                "companyCode": self._authenticated_session["company_code"],
-                "companyName": self._authenticated_session["company_name"],
-                "userId": self._authenticated_session["user_id"],
-                "username": self._authenticated_session["username"],
-                "role": self._authenticated_session["role"],
-                "branchId": self._authenticated_session["branch_id"],
-                "branchCode": self._authenticated_session["branch_code"]
-            }
-        })
 
     @pyqtSlot(str, result=str)
     def createCompany(self, json_data: str) -> str:
@@ -1419,6 +1537,15 @@ class BackendBridge(QObject):
     def generatePdfInvoice(self, company_id: str, vch_id: str) -> str:
         try:
             auth_cid = self._require_authorized_company(company_id)
+            try:
+                res = voucher_print_service.export_pdf(auth_cid, "sales_invoice", vch_id, paper_format="a4", billing_mode="fast_billing")
+                return json.dumps({"success": True, "filepath": res["file_path"]})
+            except Exception:
+                try:
+                    res = voucher_print_service.export_pdf(auth_cid, "sales_invoice", vch_id, paper_format="a4", billing_mode="traditional")
+                    return json.dumps({"success": True, "filepath": res["file_path"]})
+                except Exception:
+                    pass
             vch = billing_service.get_voucher_details(auth_cid, vch_id)
             if not vch:
                 return json.dumps({"success": False, "error": "Voucher not found."})
@@ -1426,6 +1553,7 @@ class BackendBridge(QObject):
             printing_service.generate_pdf_invoice(vch, out_file)
             return json.dumps({"success": True, "filepath": str(out_file)})
         except Exception as e:
+            logger.error(f"Error in generatePdfInvoice: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(result=str)
@@ -1505,6 +1633,733 @@ class BackendBridge(QObject):
             })
         except Exception as e:
             logger.error(f"Error printing invoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # =========================================================================
+    # PHASE 3: SALES & PURCHASE PRINT CONFIGURATION BRIDGE SLOTS
+    # =========================================================================
+    @pyqtSlot(str, str, str, str, str, int, str, result=str)
+    def printVoucherRecord(
+        self,
+        company_id: str,
+        voucher_type: str,
+        voucher_id: str,
+        paper_format: str,
+        printer_name: str,
+        copies: int,
+        billing_mode: str = "traditional"
+    ) -> str:
+        """
+        Phase 3: Prints an actual saved voucher record (Sales Invoice, Sales Return,
+        Purchase Invoice, Purchase Return) using configured Phase 1 paper geometry
+        and Phase 2 bill layout. Idempotent; never mutates voucher, financial, or stock data.
+        """
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = voucher_print_service.print_voucher(
+                company_id=auth_cid,
+                voucher_type=voucher_type,
+                voucher_id=voucher_id,
+                paper_format=paper_format,
+                printer_name=printer_name,
+                copies=copies,
+                is_reprint=False,
+                billing_mode=billing_mode or "traditional"
+            )
+            return json.dumps(res)
+        except Exception as e:
+            logger.error(f"Error in printVoucherRecord: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, str, int, result=str)
+    def printVoucherRecordSimple(
+        self,
+        company_id: str,
+        voucher_type: str,
+        voucher_id: str,
+        paper_format: str,
+        printer_name: str,
+        copies: int
+    ) -> str:
+        """Overload for printVoucherRecord defaulting to traditional mode."""
+        return self.printVoucherRecord(
+            company_id=company_id,
+            voucher_type=voucher_type,
+            voucher_id=voucher_id,
+            paper_format=paper_format,
+            printer_name=printer_name,
+            copies=copies,
+            billing_mode="traditional"
+        )
+
+    @pyqtSlot(str, str, str, str, str, result=str)
+    def previewVoucherRecord(
+        self,
+        company_id: str,
+        voucher_type: str,
+        voucher_id: str,
+        paper_format: str,
+        billing_mode: str
+    ) -> str:
+        """
+        Phase 3: Previews an actual saved voucher record using the configured layout
+        and paper specifications. Returns preview PDF path or thermal stream.
+        """
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = voucher_print_service.preview_voucher(
+                company_id=auth_cid,
+                voucher_type=voucher_type,
+                voucher_id=voucher_id,
+                paper_format=paper_format or "a4",
+                billing_mode=billing_mode or "traditional"
+            )
+            return json.dumps(res)
+        except Exception as e:
+            logger.error(f"Error in previewVoucherRecord: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, str, str, result=str)
+    def exportVoucherPdf(
+        self,
+        company_id: str,
+        voucher_type: str,
+        voucher_id: str,
+        paper_format: str,
+        target_path: str,
+        billing_mode: str
+    ) -> str:
+        """
+        Phase 3: Exports an actual saved voucher record to a standalone PDF file.
+        """
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = voucher_print_service.export_pdf(
+                company_id=auth_cid,
+                voucher_type=voucher_type,
+                voucher_id=voucher_id,
+                output_path=target_path if target_path else None,
+                paper_format=paper_format or "a4",
+                billing_mode=billing_mode or "traditional"
+            )
+            return json.dumps(res)
+        except Exception as e:
+            logger.error(f"Error in exportVoucherPdf: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, str, int, str, result=str)
+    def reprintVoucher(
+        self,
+        company_id: str,
+        voucher_type: str,
+        voucher_id: str,
+        paper_format: str,
+        printer_name: str,
+        copies: int,
+        billing_mode: str
+    ) -> str:
+        """
+        Phase 3: Reprints an existing committed voucher record.
+        Strictly idempotent: does not duplicate invoice, stock, or ledger entries.
+        """
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = voucher_print_service.print_voucher(
+                company_id=auth_cid,
+                voucher_type=voucher_type,
+                voucher_id=voucher_id,
+                paper_format=paper_format,
+                printer_name=printer_name,
+                copies=copies,
+                is_reprint=True,
+                billing_mode=billing_mode or "traditional"
+            )
+            return json.dumps(res)
+        except Exception as e:
+            logger.error(f"Error in reprintVoucher: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, result=str)
+    def getVoucherPrintDetails(
+        self,
+        company_id: str,
+        voucher_type: str,
+        voucher_id: str,
+        billing_mode: str
+    ) -> str:
+        """
+        Phase 3: Retrieves authoritative voucher print details for frontend modal/inspector.
+        """
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            rec = voucher_print_service.get_voucher_record(
+                company_id=auth_cid,
+                voucher_type=voucher_type,
+                voucher_id=voucher_id,
+                billing_mode=billing_mode or "traditional"
+            )
+            return json.dumps({"success": True, "data": rec})
+        except Exception as e:
+            logger.error(f"Error in getVoucherPrintDetails: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Paper Configuration (Phase 1) ---
+    @pyqtSlot(result=str)
+    def getAvailablePrintersWithCapabilities(self) -> str:
+        """Returns installed printers along with inferred hardware capabilities."""
+        printers = []
+        default_name = ""
+        if QPrinterInfo:
+            try:
+                default_p = QPrinterInfo.defaultPrinter()
+                if default_p:
+                    default_name = default_p.printerName()
+                for p in QPrinterInfo.availablePrinters():
+                    name = p.printerName()
+                    is_def = (name == default_name)
+                    is_thermal = any(k in name.lower() for k in ("pos", "thermal", "receipt", "tm-", "rp-", "xp-", "tsp"))
+                    printers.append({
+                        "name": name,
+                        "is_default": is_def,
+                        "description": p.description() or "",
+                        "make_and_model": p.makeAndModel() or "",
+                        "is_thermal": is_thermal,
+                        "supports_auto_cut": is_thermal,
+                        "supports_density": is_thermal,
+                    })
+            except Exception as e:
+                logger.warning(f"Error inspecting system printers: {e}")
+
+        if not printers:
+            printers = [
+                {
+                    "name": "Standard Desktop A4 Laser Printer",
+                    "is_default": True,
+                    "description": "Standard Office Laser Printer",
+                    "make_and_model": "Standard Laser",
+                    "is_thermal": False,
+                    "supports_auto_cut": False,
+                    "supports_density": False,
+                },
+                {
+                    "name": "Default POS Thermal Printer (80mm)",
+                    "is_default": False,
+                    "description": "ESC/POS Receipt Printer",
+                    "make_and_model": "Thermal 80mm",
+                    "is_thermal": True,
+                    "supports_auto_cut": True,
+                    "supports_density": True,
+                },
+                {
+                    "name": "Compact Thermal Printer (58mm)",
+                    "is_default": False,
+                    "description": "ESC/POS Compact Receipt Printer",
+                    "make_and_model": "Thermal 58mm",
+                    "is_thermal": True,
+                    "supports_auto_cut": False,
+                    "supports_density": False,
+                },
+                {
+                    "name": "Microsoft Print to PDF",
+                    "is_default": False,
+                    "description": "Software PDF Printer",
+                    "make_and_model": "Microsoft Print to PDF",
+                    "is_thermal": False,
+                    "supports_auto_cut": False,
+                    "supports_density": False,
+                }
+            ]
+        return json.dumps({"success": True, "data": printers, "default_printer": default_name})
+
+    @pyqtSlot(str, str, result=str)
+    def getPaperConfig(self, paper_format: str, billing_mode: str) -> str:
+        """Retrieves paper configuration for specified format and billing mode."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            if mode == "traditional":
+                comp_id = None
+                branch_id = None
+                if self._traditional_session:
+                    comp_id = self._traditional_session.company_id
+                    branch_id = self._traditional_session.branch_id
+                else:
+                    with traditional_db_manager.read_session_scope() as session:
+                        from db.traditional_models import Company
+                        comp = session.query(Company).first()
+                        if comp:
+                            comp_id = comp.id
+                if not comp_id:
+                    return json.dumps({"success": False, "error": "No company found in Traditional Billing."})
+                cfg = paper_config_service.get_paper_config(comp_id, paper_format, branch_id)
+                return json.dumps({"success": True, "data": cfg})
+            else:
+                comp_id = self._authenticated_session.get("company_id", "COMP0001") if self._authenticated_session else "COMP0001"
+                cfg = paper_config_service.get_fast_paper_config(comp_id, paper_format)
+                return json.dumps({"success": True, "data": cfg})
+        except Exception as e:
+            logger.error(f"Error getting paper configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def savePaperConfig(self, paper_format: str, config_json: str, billing_mode: str) -> str:
+        """Saves paper configuration for specified format and billing mode."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            data = json.loads(config_json)
+            if mode == "traditional":
+                comp_id = None
+                branch_id = None
+                if self._traditional_session:
+                    comp_id = self._traditional_session.company_id
+                    branch_id = self._traditional_session.branch_id
+                else:
+                    with traditional_db_manager.read_session_scope() as session:
+                        from db.traditional_models import Company
+                        comp = session.query(Company).first()
+                        if comp:
+                            comp_id = comp.id
+                if not comp_id:
+                    return json.dumps({"success": False, "error": "No company found in Traditional Billing."})
+                res = paper_config_service.save_paper_config(comp_id, paper_format, data, branch_id)
+                return json.dumps({"success": True, "data": res})
+            else:
+                comp_id = self._authenticated_session.get("company_id", "COMP0001") if self._authenticated_session else "COMP0001"
+                res = paper_config_service.save_fast_paper_config(comp_id, paper_format, data)
+                return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error saving paper configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def resetPaperConfig(self, paper_format: str, billing_mode: str) -> str:
+        """Resets paper configuration for specified format and billing mode to defaults."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            if mode == "traditional":
+                comp_id = None
+                branch_id = None
+                if self._traditional_session:
+                    comp_id = self._traditional_session.company_id
+                    branch_id = self._traditional_session.branch_id
+                else:
+                    with traditional_db_manager.read_session_scope() as session:
+                        from db.traditional_models import Company
+                        comp = session.query(Company).first()
+                        if comp:
+                            comp_id = comp.id
+                if not comp_id:
+                    return json.dumps({"success": False, "error": "No company found in Traditional Billing."})
+                res = paper_config_service.reset_paper_config(comp_id, paper_format, branch_id)
+                return json.dumps({"success": True, "data": res})
+            else:
+                comp_id = self._authenticated_session.get("company_id", "COMP0001") if self._authenticated_session else "COMP0001"
+                res = paper_config_service.reset_fast_paper_config(comp_id, paper_format)
+                return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error resetting paper configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def testPrintPaper(self, printer_name: str, paper_format: str, config_json: str) -> str:
+        """Executes a test print for the given paper format and configuration settings."""
+        try:
+            data = json.loads(config_json) if config_json else {}
+            if printer_name:
+                data["default_printer"] = printer_name
+            res = paper_config_service.generate_test_print(paper_format, data)
+            return json.dumps(res)
+        except Exception as e:
+            logger.error(f"Error executing test print: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # =========================================================================
+    # Phase 2: Bill Layout Configuration Slots
+    # =========================================================================
+
+    def _resolve_company_and_branch(self, billing_mode: str) -> tuple[Optional[str], Optional[str]]:
+        mode = (billing_mode or "traditional").lower()
+        comp_id = None
+        branch_id = None
+        if mode == "traditional":
+            if self._traditional_session:
+                comp_id = self._traditional_session.company_id
+                branch_id = self._traditional_session.branch_id
+            else:
+                with traditional_db_manager.read_session_scope() as session:
+                    from db.traditional_models import Company
+                    comp = session.query(Company).first()
+                    if comp:
+                        comp_id = comp.id
+        else:
+            comp_id = self._authenticated_session.get("company_id", "COMP0001") if self._authenticated_session else "COMP0001"
+        return comp_id, branch_id
+
+    @pyqtSlot(str, str, result=str)
+    def getBillLayoutConfig(self, voucher_type: str, billing_mode: str) -> str:
+        """Retrieves bill layout configuration for specified voucher type and billing mode."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+
+            if mode == "traditional":
+                cfg = bill_layout_service.get_layout_config(comp_id, voucher_type, branch_id)
+            else:
+                cfg = bill_layout_service.get_fast_layout_config(comp_id, voucher_type)
+            return json.dumps({"success": True, "data": cfg})
+        except Exception as e:
+            logger.error(f"Error getting bill layout config: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def saveBillLayoutConfig(self, voucher_type: str, config_json: str, billing_mode: str) -> str:
+        """Saves bill layout configuration for specified voucher type and billing mode."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            data = json.loads(config_json)
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+
+            if mode == "traditional":
+                res = bill_layout_service.save_layout_config(comp_id, voucher_type, data, branch_id)
+            else:
+                res = bill_layout_service.save_fast_layout_config(comp_id, voucher_type, data)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error saving bill layout config: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def resetBillLayoutConfig(self, voucher_type: str, section: str, billing_mode: str) -> str:
+        """Resets bill layout or a specific section for specified voucher type and billing mode."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+
+            sec = section.strip() if section else None
+            if mode == "traditional":
+                res = bill_layout_service.reset_layout_config(comp_id, voucher_type, section=sec, branch_id=branch_id)
+            else:
+                res = bill_layout_service.reset_fast_layout_config(comp_id, voucher_type)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error resetting bill layout config: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def duplicateBillLayoutConfig(self, from_voucher_type: str, to_voucher_type: str, billing_mode: str) -> str:
+        """Duplicates an existing layout configuration to another voucher type."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+
+            if mode == "traditional":
+                res = bill_layout_service.duplicate_layout_config(comp_id, from_voucher_type, to_voucher_type, branch_id=branch_id)
+            else:
+                res = bill_layout_service.duplicate_fast_layout_config(comp_id, from_voucher_type, to_voucher_type)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error duplicating bill layout config: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def getCompanyDetailsForBillLayout(self, billing_mode: str) -> str:
+        """Returns actual company records for invoice header preview and printing."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            comp_id, _ = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            details = bill_layout_service.get_company_details(comp_id)
+            return json.dumps({"success": True, "data": details})
+        except Exception as e:
+            logger.error(f"Error loading company details for layout: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, result=str)
+    def renderInvoicePDF(self, voucher_type: str, paper_format: str, voucher_data_json: str, billing_mode: str) -> str:
+        """Compiles an invoice PDF using Phase 1 Paper Settings, Phase 2 Layout Settings, and actual/sample voucher data."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            comp_id, _ = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            vch_data = json.loads(voucher_data_json) if voucher_data_json else {}
+            res = bill_layout_service.compile_invoice_pdf(
+                voucher_data=vch_data,
+                company_id=comp_id,
+                voucher_type=voucher_type,
+                paper_format=paper_format,
+                is_fast_billing=(mode != "traditional")
+            )
+            return json.dumps(res)
+        except Exception as e:
+            logger.error(f"Error compiling invoice PDF: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def renderInvoiceThermal(self, voucher_type: str, voucher_data_json: str, billing_mode: str) -> str:
+        """Formats an invoice thermal receipt using Phase 1 & 2 settings."""
+        try:
+            mode = (billing_mode or "traditional").lower()
+            comp_id, _ = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            vch_data = json.loads(voucher_data_json) if voucher_data_json else {}
+            text = bill_layout_service.format_invoice_thermal(
+                voucher_data=vch_data,
+                company_id=comp_id,
+                voucher_type=voucher_type,
+                is_fast_billing=(mode != "traditional")
+            )
+            return json.dumps({"success": True, "receipt_text": text})
+        except Exception as e:
+            logger.error(f"Error formatting thermal invoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Phase 4: Voucher Numbering Configuration ---
+    @pyqtSlot(str, str, result=str)
+    def getVoucherNumberingConfig(self, voucher_type: str, billing_mode: str) -> str:
+        """Retrieves voucher numbering configuration for specified voucher type and billing mode."""
+        try:
+            self._require_authenticated()
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            cfg = voucher_numbering_service.get_config(comp_id, voucher_type, branch_id=branch_id, series="Main", billing_mode=mode)
+            return json.dumps({"success": True, "data": cfg})
+        except Exception as e:
+            logger.error(f"Error retrieving voucher numbering configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def saveVoucherNumberingConfig(self, voucher_type: str, config_json: str, billing_mode: str) -> str:
+        """Saves voucher numbering configuration for specified voucher type and billing mode."""
+        try:
+            self._require_authorized_role("Administrator", "Admin", "System Administrator", "Owner", "Manager", "Store Manager", "Accountant")
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            data = json.loads(config_json)
+            res = voucher_numbering_service.save_config(comp_id, voucher_type, data, branch_id=branch_id, series="Main", billing_mode=mode)
+            return json.dumps({"success": True, "data": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "error": str(pe), "authenticated": True, "permission_denied": True})
+        except Exception as e:
+            logger.error(f"Error saving voucher numbering configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def resetVoucherNumberingConfig(self, voucher_type: str, billing_mode: str) -> str:
+        """Resets voucher numbering configuration for specified voucher type and billing mode."""
+        try:
+            self._require_authorized_role("Administrator", "Admin", "System Administrator", "Owner", "Manager", "Store Manager", "Accountant")
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            res = voucher_numbering_service.reset_config(comp_id, voucher_type, branch_id=branch_id, series="Main", billing_mode=mode)
+            return json.dumps({"success": True, "data": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "error": str(pe), "authenticated": True, "permission_denied": True})
+        except Exception as e:
+            logger.error(f"Error resetting voucher numbering configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def previewVoucherNumber(self, voucher_type: str, config_json: str, billing_mode: str) -> str:
+        """Generates sample preview without consuming sequence."""
+        try:
+            self._require_authenticated()
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            data = json.loads(config_json) if config_json else {}
+            data["voucher_type"] = voucher_type
+            res = voucher_numbering_service.preview_voucher_number(
+                data, company_id=comp_id, branch_id=branch_id, billing_mode=mode
+            )
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error generating voucher preview: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getVoucherNumberingStatus(self, voucher_type: str, billing_mode: str) -> str:
+        """Retrieves live sequence allocation state and count for specified voucher type."""
+        try:
+            self._require_authenticated()
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            status = voucher_numbering_service.get_numbering_status(
+                comp_id, voucher_type, branch_id=branch_id, billing_mode=mode
+            )
+            return json.dumps({"success": True, "data": status})
+        except Exception as e:
+            logger.error(f"Error retrieving voucher numbering status: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Phase 5: GST & Tax Configuration ---
+    @pyqtSlot(str, result=str)
+    def getGstTaxConfig(self, billing_mode: str) -> str:
+        """Retrieves GST and Tax configuration for specified billing mode."""
+        try:
+            self._require_authenticated()
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            cfg = gst_tax_config_service.get_config(comp_id, branch_id=branch_id, billing_mode=mode)
+            return json.dumps({"success": True, "data": cfg})
+        except Exception as e:
+            logger.error(f"Error retrieving GST tax configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def saveGstTaxConfig(self, config_json: str, billing_mode: str) -> str:
+        """Saves GST and Tax configuration for specified billing mode."""
+        try:
+            self._require_authorized_role("Administrator", "Admin", "System Administrator", "Owner", "Manager", "Store Manager", "Accountant")
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            data = json.loads(config_json)
+            res = gst_tax_config_service.save_config(comp_id, data, branch_id=branch_id, billing_mode=mode)
+            return json.dumps({"success": True, "data": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "error": str(pe), "authenticated": True, "permission_denied": True})
+        except Exception as e:
+            logger.error(f"Error saving GST tax configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def resetGstTaxConfig(self, billing_mode: str) -> str:
+        """Resets GST and Tax configuration to factory defaults."""
+        try:
+            self._require_authorized_role("Administrator", "Admin", "System Administrator", "Owner", "Manager", "Store Manager", "Accountant")
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            res = gst_tax_config_service.reset_config(comp_id, branch_id=branch_id, billing_mode=mode)
+            return json.dumps({"success": True, "data": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "error": str(pe), "authenticated": True, "permission_denied": True})
+        except Exception as e:
+            logger.error(f"Error resetting GST tax configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def calculateTaxPreview(self, config_json: str, sample_data_json: str, billing_mode: str) -> str:
+        """Calculates live tax preview for sandbox verification without mutating state."""
+        try:
+            self._require_authenticated()
+            cfg = json.loads(config_json) if config_json else {}
+            sample_data = json.loads(sample_data_json) if sample_data_json else {}
+            items = sample_data.get("items") or [{"price": 100.0, "qty": 1.0, "tax_rate": 18.0}]
+            cust_state = sample_data.get("customer_state")
+            sale_type = sample_data.get("sale_type")
+            res = gst_tax_config_service.calculate_sample_tax(cfg, items, customer_state=cust_state, sale_type=sale_type)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error in calculateTaxPreview: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def validateGstin(self, gstin: str) -> str:
+        """Validates a 15-character GSTIN string and returns breakdown."""
+        try:
+            self._require_authenticated()
+            is_valid, msg, comps = gst_tax_config_service.validate_gstin(gstin)
+            return json.dumps({"success": True, "is_valid": is_valid, "message": msg, "components": comps})
+        except Exception as e:
+            logger.error(f"Error validating GSTIN: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # --- Phase 6: Inventory Configuration ---
+    @pyqtSlot(str, result=str)
+    def getInventoryConfig(self, billing_mode: str) -> str:
+        """Retrieves Inventory configuration for specified billing mode."""
+        try:
+            self._require_authenticated()
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            cfg = inventory_config_service.get_config(comp_id, branch_id=branch_id, billing_mode=mode)
+            return json.dumps({"success": True, "data": cfg})
+        except Exception as e:
+            logger.error(f"Error retrieving inventory configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def saveInventoryConfig(self, config_json: str, billing_mode: str) -> str:
+        """Saves Inventory configuration for specified billing mode."""
+        try:
+            self._require_authorized_role("Administrator", "Admin", "System Administrator", "Owner", "Manager", "Store Manager", "Accountant")
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            data = json.loads(config_json)
+            res = inventory_config_service.save_config(comp_id, data, branch_id=branch_id, billing_mode=mode)
+            return json.dumps({"success": True, "data": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "error": str(pe), "authenticated": True, "permission_denied": True})
+        except Exception as e:
+            logger.error(f"Error saving inventory configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def resetInventoryConfig(self, billing_mode: str) -> str:
+        """Resets Inventory configuration to factory defaults."""
+        try:
+            self._require_authorized_role("Administrator", "Admin", "System Administrator", "Owner", "Manager", "Store Manager", "Accountant")
+            mode = (billing_mode or "traditional").lower()
+            comp_id, branch_id = self._resolve_company_and_branch(mode)
+            if not comp_id:
+                return json.dumps({"success": False, "error": "No active company found."})
+            res = inventory_config_service.reset_config(comp_id, branch_id=branch_id, billing_mode=mode)
+            return json.dumps({"success": True, "data": res})
+        except PermissionError as pe:
+            return json.dumps({"success": False, "error": str(pe), "authenticated": True, "permission_denied": True})
+        except Exception as e:
+            logger.error(f"Error resetting inventory configuration: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def simulateInventoryStock(self, config_json: str, sample_data_json: str, billing_mode: str) -> str:
+        """Simulates live stock transaction results for sandbox verification without writing to database."""
+        try:
+            self._require_authenticated()
+            cfg = json.loads(config_json) if config_json else {}
+            sample_data = json.loads(sample_data_json) if sample_data_json else {}
+            current_stock = float(sample_data.get("current_stock") or 0.0)
+            inward_qty = float(sample_data.get("inward_qty") or 0.0)
+            outward_qty = float(sample_data.get("outward_qty") or 0.0)
+            unit_cost = float(sample_data.get("unit_cost") or 0.0)
+            current_wac = float(sample_data.get("current_wac") or 0.0)
+            res = inventory_config_service.simulate_stock_transaction(
+                cfg=cfg,
+                current_stock=current_stock,
+                inward_qty=inward_qty,
+                outward_qty=outward_qty,
+                unit_cost=unit_cost,
+                current_wac=current_wac,
+            )
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error simulating stock transaction: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     # --- Backups ---
@@ -1757,6 +2612,26 @@ class BackendBridge(QObject):
             # Store active session on the bridge
             token = auth_res["session_token"]
             self._traditional_session = traditional_session_registry.get_session(token)
+
+            # Synchronize Fast Billing authenticated session so dual-mode features work seamlessly
+            comp_info = auth_res.get("company", {})
+            branch_info = auth_res.get("branch", {})
+            user_info = auth_res.get("user", {})
+            self._authenticated_session = {
+                "session_id": token,
+                "company_id": comp_info.get("id"),
+                "company_code": comp_info.get("code"),
+                "company_name": comp_info.get("name"),
+                "branch_id": branch_info.get("id"),
+                "branch_code": branch_info.get("code", "BR01"),
+                "branch_name": branch_info.get("name", "Main Branch"),
+                "user_id": user_info.get("id"),
+                "username": user_info.get("username"),
+                "display_name": user_info.get("displayName") or user_info.get("username"),
+                "role": user_info.get("role", "User"),
+                "authenticated_at": datetime.now(timezone.utc).isoformat(),
+                "auth_source": "traditional"
+            }
             return json.dumps({"success": True, "data": auth_res})
         except Exception as e:
             logger.error(f"Error in traditional_authenticateUser: {e}")
@@ -1766,6 +2641,7 @@ class BackendBridge(QObject):
     @pyqtSlot(result=str)
     def traditional_logout(self) -> str:
         try:
+            self._authenticated_session = None
             if self._traditional_session:
                 traditional_session_registry.revoke_session(self._traditional_session.token)
                 self._traditional_session = None
@@ -2086,6 +2962,474 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": inv})
         except Exception as e:
             logger.error(f"Error in traditional_saveSaleInvoice: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 29. Get Company Profile for Recovery (Public sanitized inspection)
+    @pyqtSlot(str, result=str)
+    def traditional_getCompanyRecoveryProfile(self, company_id: str) -> str:
+        try:
+            cid = company_id.strip() if company_id else None
+            profile = self._traditional_recovery_service.get_recovery_profile(cid)
+            return json.dumps({"success": True, "data": profile})
+        except Exception as e:
+            logger.error(f"Error in traditional_getCompanyRecoveryProfile: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 30. Recover Company Details & Administrator Account (Protected by Native Qt Dialog Token Authorization)
+    @pyqtSlot(str, result=str)
+    def traditional_recoverCompanyAndAdmin(self, recovery_data_json: str) -> str:
+        try:
+            # 1. Recovery token file existence check
+            token_path = get_canonical_recovery_token_path()
+            if not token_path.exists():
+                return json.dumps({
+                    "success": False,
+                    "error": f"Recovery authorization token file ('{token_path.name}') not found. "
+                             f"Please run 'python scripts/provision_traditional_recovery_token.py' in the terminal to provision an authorization token."
+                })
+
+            # 2. Prompt operator via mandatory native modal Qt dialog (never touches browser JavaScript)
+            entered_token = ""
+            if self.parent_window:
+                entered_token, ok = QInputDialog.getText(
+                    self.parent_window,
+                    "Company & Account Recovery Authorization",
+                    "Enter the one-time Recovery Authorization Token provisioned from local terminal:",
+                    QLineEdit.Password
+                )
+                if not ok or not entered_token.strip():
+                    return json.dumps({"success": False, "error": "Recovery authorization was cancelled."})
+            elif hasattr(self, "_override_recovery_token"):
+                if self._override_recovery_token is None:
+                    return json.dumps({"success": False, "error": "Recovery authorization was cancelled."})
+                entered_token = self._override_recovery_token
+            else:
+                logger.warning("Recovery rejected: No authorization UI dialog or test override available.")
+                return json.dumps({"success": False, "error": "Recovery authorization UI unavailable."})
+
+            if not verify_recovery_token(entered_token, token_path):
+                logger.warning("Failed company/admin recovery attempt: Invalid token entered.")
+                return json.dumps({"success": False, "error": "Recovery authorization failed: Invalid recovery token."})
+
+            # 3. Atomic recovery transaction
+            data = json.loads(recovery_data_json)
+            res = self._traditional_recovery_service.recover_company_and_admin(data)
+
+            # 4. Overwrite and consume recovery token post-commit
+            token_consumed = False
+            try:
+                token_consumed = consume_recovery_token(token_path)
+            except Exception as fe:
+                logger.error(f"Recovery token removal failed post-commit: {fe}")
+                token_consumed = False
+
+            if not token_consumed and token_path.exists():
+                logger.warning(f"Recovery token file '{token_path}' remains after commit. Remediation required.")
+                res["warning"] = (
+                    f"SECURITY ALERT: Company & Administrator recovery was successfully applied and committed to the database, "
+                    f"but the local authorization token file ('{token_path.name}') could not be automatically deleted. "
+                    f"Remediation: To ensure this authorization token cannot be reused, please manually delete the file at '{token_path}'."
+                )
+
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            logger.error(f"Error in traditional_recoverCompanyAndAdmin: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # =========================================================================
+    # Phase 3.6: Traditional Payment, Receipt, Outstanding & Reconciliation Slots
+    # =========================================================================
+
+    # 31. Peek Next Receipt Voucher Number
+    @pyqtSlot(str, result=str)
+    def traditional_getNextReceiptNumber(self, prefix: str = "RCT") -> str:
+        try:
+            session = self._require_traditional_session()
+            vch = self._traditional_payment_service.peek_next_receipt_number(
+                company_id=session.company_id,
+                branch_id=session.branch_id,
+                prefix=(prefix or "RCT").strip(),
+            )
+            return json.dumps({"success": True, "data": {"voucher_number": vch}})
+        except Exception as e:
+            logger.error(f"Error in traditional_getNextReceiptNumber: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 32. Get Customer Invoices for Receipt Allocation
+    @pyqtSlot(str, str, result=str)
+    def traditional_getCustomerInvoices(self, customer_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            invoices = self._traditional_payment_service.get_customer_invoices_for_receipt(
+                company_id=session.company_id,
+                customer_id=customer_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+                branch_id=session.branch_id,
+            )
+            return json.dumps({"success": True, "data": invoices}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getCustomerInvoices: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 33. Create Customer Receipt (Atomic)
+    @pyqtSlot(str, result=str)
+    def traditional_createCustomerReceipt(self, receipt_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Cashier", "Manager")
+            data = json.loads(receipt_data_json)
+            cust_acc_id = data.pop("customer_account_id", None) or data.pop("customer_id", None)
+            data["company_id"] = session.company_id
+            if not data.get("branch_id") and session.branch_id:
+                data["branch_id"] = session.branch_id
+            data["customer_account_id"] = cust_acc_id
+            data["user_id"] = session.user_id
+            data.pop("created_by", None)
+            res = self._traditional_payment_service.create_customer_receipt(**data)
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_createCustomerReceipt: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 34. Get Customer Receipt Details
+    @pyqtSlot(str, result=str)
+    def traditional_getCustomerReceipt(self, receipt_id: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_customer_receipt_details(
+                company_id=session.company_id,
+                receipt_id=receipt_id.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getCustomerReceipt: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 35. List Customer Receipts
+    @pyqtSlot(str, str, str, str, str, int, int, result=str)
+    def traditional_listCustomerReceipts(
+        self,
+        customer_id: str = "",
+        from_date: str = "",
+        to_date: str = "",
+        status: str = "",
+        search: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_customer_receipts(
+                company_id=session.company_id,
+                customer_id=customer_id.strip() if customer_id else None,
+                from_date=from_date.strip() if from_date else None,
+                to_date=to_date.strip() if to_date else None,
+                status=status.strip() if status else None,
+                search=search.strip() if search else None,
+                limit=limit if limit > 0 else 50,
+                offset=offset if offset >= 0 else 0,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listCustomerReceipts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 36. Reverse Customer Receipt (Controlled Managerial Reversal)
+    @pyqtSlot(str, str, result=str)
+    def traditional_reverseCustomerReceipt(self, receipt_id: str, reversal_reason: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            if not reversal_reason or not reversal_reason.strip():
+                return json.dumps({"success": False, "error": "Reversal reason is mandatory."})
+            res = self._traditional_payment_service.reverse_customer_receipt(
+                company_id=session.company_id,
+                receipt_id=receipt_id.strip(),
+                user_id=session.user_id,
+                reversal_reason=reversal_reason.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reverseCustomerReceipt: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 37. Peek Next Payment Voucher Number
+    @pyqtSlot(str, result=str)
+    def traditional_getNextPaymentNumber(self, prefix: str = "PMT") -> str:
+        try:
+            session = self._require_traditional_session()
+            vch = self._traditional_payment_service.peek_next_payment_number(
+                company_id=session.company_id,
+                branch_id=session.branch_id,
+                prefix=(prefix or "PMT").strip(),
+            )
+            return json.dumps({"success": True, "data": {"voucher_number": vch}})
+        except Exception as e:
+            logger.error(f"Error in traditional_getNextPaymentNumber: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 38. List Suppliers
+    @pyqtSlot(str, bool, result=str)
+    def traditional_listSuppliers(self, search_term: str = "", active_only: bool = True) -> str:
+        try:
+            session = self._require_traditional_session()
+            suppliers = self._traditional_customer_service.list_customers(
+                session.company_id,
+                search_term=search_term.strip() if search_term else None,
+                active_only=active_only,
+                account_type="Creditor",
+            )
+            return json.dumps({"success": True, "data": suppliers})
+        except Exception as e:
+            logger.error(f"Error in traditional_listSuppliers: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 39. Get Supplier Bills for Payment Allocation
+    @pyqtSlot(str, str, result=str)
+    def traditional_getSupplierBills(self, supplier_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            bills = self._traditional_payment_service.get_supplier_bills_for_payment(
+                company_id=session.company_id,
+                supplier_id=supplier_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+                branch_id=session.branch_id,
+            )
+            return json.dumps({"success": True, "data": bills}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getSupplierBills: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 40. Create Supplier Payment (Atomic)
+    @pyqtSlot(str, result=str)
+    def traditional_createSupplierPayment(self, payment_data_json: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Cashier", "Manager")
+            data = json.loads(payment_data_json)
+            supp_acc_id = data.pop("supplier_account_id", None) or data.pop("supplier_id", None)
+            source_acc_id = data.pop("source_account_id", None) or data.pop("payment_account_id", None)
+            data["company_id"] = session.company_id
+            if not data.get("branch_id") and session.branch_id:
+                data["branch_id"] = session.branch_id
+            data["supplier_account_id"] = supp_acc_id
+            data["source_account_id"] = source_acc_id
+            data["user_id"] = session.user_id
+            data.pop("created_by", None)
+            res = self._traditional_payment_service.create_supplier_payment(**data)
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_createSupplierPayment: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 41. Get Supplier Payment Details
+    @pyqtSlot(str, result=str)
+    def traditional_getSupplierPayment(self, payment_id: str) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_supplier_payment_details(
+                company_id=session.company_id,
+                payment_id=payment_id.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getSupplierPayment: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 42. List Supplier Payments
+    @pyqtSlot(str, str, str, str, str, int, int, result=str)
+    def traditional_listSupplierPayments(
+        self,
+        supplier_id: str = "",
+        from_date: str = "",
+        to_date: str = "",
+        status: str = "",
+        search: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_supplier_payments(
+                company_id=session.company_id,
+                supplier_id=supplier_id.strip() if supplier_id else None,
+                from_date=from_date.strip() if from_date else None,
+                to_date=to_date.strip() if to_date else None,
+                status=status.strip() if status else None,
+                search=search.strip() if search else None,
+                limit=limit if limit > 0 else 50,
+                offset=offset if offset >= 0 else 0,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listSupplierPayments: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 43. Reverse Supplier Payment (Controlled Managerial Reversal)
+    @pyqtSlot(str, str, result=str)
+    def traditional_reverseSupplierPayment(self, payment_id: str, reversal_reason: str) -> str:
+        try:
+            session = self._require_traditional_role("Administrator", "Store Manager", "Manager")
+            if not reversal_reason or not reversal_reason.strip():
+                return json.dumps({"success": False, "error": "Reversal reason is mandatory."})
+            res = self._traditional_payment_service.reverse_supplier_payment(
+                company_id=session.company_id,
+                payment_id=payment_id.strip(),
+                user_id=session.user_id,
+                reversal_reason=reversal_reason.strip(),
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reverseSupplierPayment: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 44. List Cash and Bank Accounts
+    @pyqtSlot(result=str)
+    def traditional_listCashAndBankAccounts(self) -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_cash_and_bank_accounts(session.company_id)
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listCashAndBankAccounts: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 45. Customer Outstanding
+    @pyqtSlot(str, str, result=str)
+    def traditional_getCustomerOutstanding(self, customer_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_customer_outstanding(
+                company_id=session.company_id,
+                customer_account_id=customer_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getCustomerOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 46. List All Customers Outstanding (Receivables)
+    @pyqtSlot(str, result=str)
+    def traditional_listCustomersOutstanding(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_customers_outstanding(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listCustomersOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 47. Supplier Outstanding
+    @pyqtSlot(str, str, result=str)
+    def traditional_getSupplierOutstanding(self, supplier_id: str, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.get_supplier_outstanding(
+                company_id=session.company_id,
+                supplier_account_id=supplier_id.strip(),
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getSupplierOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 48. List All Suppliers Outstanding (Payables)
+    @pyqtSlot(str, result=str)
+    def traditional_listSuppliersOutstanding(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_payment_service.list_suppliers_outstanding(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_listSuppliersOutstanding: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 49. Financial Reconciliation Summary
+    @pyqtSlot(str, result=str)
+    def traditional_getFinancialReconciliationSummary(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.get_financial_reconciliation_summary(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            # Map top-level keys and UI fields
+            verdict = res.get("overall_verdict", "HEALTHY")
+            res["overall_status"] = "BALANCED" if verdict == "HEALTHY" else "MISMATCHED"
+            sub = res.get("subsystems", {})
+            for k, v in sub.items():
+                res[k] = v
+            # Alias journal_audit from journal_integrity if needed
+            if "journal_integrity" in sub and "journal_audit" not in res:
+                res["journal_audit"] = sub["journal_integrity"]
+            # Ensure card fields for UI
+            if "customer_ar" in res:
+                res["customer_ar"]["gl_ar_balance"] = res["customer_ar"].get("total_gl_balance")
+                res["customer_ar"]["subledger_net_receivable"] = res["customer_ar"].get("total_subledger_balance")
+                res["customer_ar"]["discrepancy"] = res["customer_ar"].get("difference")
+            if "supplier_ap" in res:
+                res["supplier_ap"]["gl_ap_balance"] = res["supplier_ap"].get("total_gl_balance")
+                res["supplier_ap"]["subledger_net_payable"] = res["supplier_ap"].get("total_subledger_balance")
+                res["supplier_ap"]["discrepancy"] = res["supplier_ap"].get("difference")
+            if "customer_advances" in res:
+                res["customer_advances"]["unallocated_receipts_advances"] = res["customer_advances"].get("total_unallocated_advances")
+                res["customer_advances"]["discrepancy"] = "0.00"
+            if "supplier_advances" in res:
+                res["supplier_advances"]["unallocated_payments_advances"] = res["supplier_advances"].get("total_unallocated_advances")
+                res["supplier_advances"]["discrepancy"] = "0.00"
+            if "journal_audit" in res:
+                res["journal_audit"]["total_anomalies_count"] = res["journal_audit"].get("total_anomalies", 0)
+
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_getFinancialReconciliationSummary: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 50. Reconcile Customer AR
+    @pyqtSlot(str, result=str)
+    def traditional_reconcileCustomerAR(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.reconcile_customer_ar(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reconcileCustomerAR: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 51. Reconcile Supplier AP
+    @pyqtSlot(str, result=str)
+    def traditional_reconcileSupplierAP(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.reconcile_supplier_ap(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reconcileSupplierAP: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    # 52. Reconcile Cash and Bank
+    @pyqtSlot(str, result=str)
+    def traditional_reconcileCashAndBank(self, as_of_date: str = "") -> str:
+        try:
+            session = self._require_traditional_session()
+            res = self._traditional_recon_service.reconcile_cash_and_bank(
+                company_id=session.company_id,
+                as_of_date=as_of_date.strip() if as_of_date else None,
+            )
+            return json.dumps({"success": True, "data": res}, default=str)
+        except Exception as e:
+            logger.error(f"Error in traditional_reconcileCashAndBank: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
 

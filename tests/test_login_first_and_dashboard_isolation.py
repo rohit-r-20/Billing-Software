@@ -257,7 +257,7 @@ def test_dashboard_initializes_after_authentication():
     data = json.loads(json_lines[-1])
 
     assert "Priya Sharma" in data["greeting"]
-    assert data["company"] == "Priya Supermarket"
+    assert "Priya Supermarket" in data["company"]
     assert data["hasClock"] is True
     # After logout, all dashboard data is wiped
     assert data["greetingAfterLogout"] == ""

@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from db.database import db_manager, DatabaseManager
 from services.tax_service import tax_service
 from services.company_service import resolve_cached_company_id
+from services.voucher_numbering_service import voucher_numbering_service
 from core.logging_config import logger
 
 
@@ -85,6 +86,13 @@ class BillingService:
                     pass
 
             max_seen = max(curr_seq, max_vch_num)
+            
+            # Check voucher numbering configuration
+            vch_cfg = voucher_numbering_service.get_fast_config(actual_company_id, "sales_invoice", series=series)
+            if vch_cfg.get("is_custom_enabled"):
+                next_seq = max(max_seen + 1, int(vch_cfg.get("start_number") or 1))
+                return voucher_numbering_service.format_voucher_number(vch_cfg, next_seq, financial_year="2026-2027", branch_code="BR01")
+
             next_seq = max(max_seen + 1, start_num)
             return f"{prefix}{str(next_seq).zfill(digits)}"
 
@@ -257,6 +265,12 @@ class BillingService:
             digits = int(cfg["vch_digits"]) if (cfg and cfg["vch_digits"] is not None) else 4
             prefix = cfg["vch_prefix"] if cfg and cfg["vch_prefix"] is not None else ""
 
+            vch_cfg = voucher_numbering_service.get_fast_config(actual_company_id, "sales_invoice", series=series)
+            custom_enabled = vch_cfg.get("is_custom_enabled", False)
+            if custom_enabled:
+                start_num = int(vch_cfg.get("start_number") or 1)
+                digits = int(vch_cfg.get("padding") or 4)
+
             # Check sequence row for company and series
             cursor.execute("""
                 SELECT current_number FROM voucher_sequences
@@ -305,7 +319,12 @@ class BillingService:
                     WHERE company_id = ? AND voucher_type = 'SALE' AND series = ?;
                 """, (actual_company_id, series))
                 allocated_seq = cursor.fetchone()["current_number"]
-                candidate_no = f"{prefix}{str(allocated_seq).zfill(digits)}"
+                if custom_enabled:
+                    candidate_no = voucher_numbering_service.format_voucher_number(
+                        vch_cfg, allocated_seq, financial_year="2026-2027", branch_code="BR01"
+                    )
+                else:
+                    candidate_no = f"{prefix}{str(allocated_seq).zfill(digits)}"
 
                 cursor.execute("""
                     SELECT id FROM sales_vouchers
@@ -548,10 +567,19 @@ class BillingService:
             cursor.execute("""
                 SELECT v.*, c.name as company_name, c.gstin as company_gstin, c.state as company_state
                 FROM sales_vouchers v
-                JOIN companies c ON c.id = v.company_id
-                WHERE v.company_id = ? AND (v.id = ? OR v.vch_no = ?);
-            """, (company_id, voucher_id_or_no, voucher_id_or_no))
+                LEFT JOIN companies c ON c.id = v.company_id
+                WHERE (v.company_id = ? OR c.code = ?) AND (v.id = ? OR v.vch_no = ?);
+            """, (company_id, company_id, voucher_id_or_no, voucher_id_or_no))
             vch_row = cursor.fetchone()
+            if not vch_row:
+                # Fallback: find by voucher id / number alone if company constraint was code or UUID mismatch
+                cursor.execute("""
+                    SELECT v.*, c.name as company_name, c.gstin as company_gstin, c.state as company_state
+                    FROM sales_vouchers v
+                    LEFT JOIN companies c ON c.id = v.company_id
+                    WHERE v.id = ? OR v.vch_no = ?;
+                """, (voucher_id_or_no, voucher_id_or_no))
+                vch_row = cursor.fetchone()
             if not vch_row:
                 return None
 
@@ -1022,7 +1050,20 @@ class BillingService:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(id) FROM sales_returns WHERE company_id = ?;", (company_id,))
             cnt = cursor.fetchone()[0] + 1
-            vch_no = f"SR-{str(cnt).zfill(6)}"
+
+            vch_cfg = voucher_numbering_service.get_fast_config(company_id, "sales_return")
+            if vch_cfg.get("is_custom_enabled"):
+                start_num = int(vch_cfg.get("start_number") or 1)
+                next_seq = max(cnt, start_num)
+                vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, next_seq, financial_year="2026-2027", branch_code="BR01")
+                while True:
+                    cursor.execute("SELECT id FROM sales_returns WHERE company_id = ? AND vch_no = ?;", (company_id, vch_no))
+                    if not cursor.fetchone():
+                        break
+                    next_seq += 1
+                    vch_no = voucher_numbering_service.format_voucher_number(vch_cfg, next_seq, financial_year="2026-2027", branch_code="BR01")
+            else:
+                vch_no = f"SR-{str(cnt).zfill(6)}"
 
             total_taxable = 0.0
             total_cgst = 0.0

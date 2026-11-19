@@ -65,8 +65,8 @@ const PRIMARY_NAV_CONFIG = [
         id: "sub-admin-configuration", 
         label: "Configuration", 
         icon: "settings", 
-        action: "open-modal", 
-        modalId: "modal-config" 
+        action: "open-view", 
+        targetView: "view-configuration" 
       },
       { 
         id: "sub-admin-users", 
@@ -171,7 +171,12 @@ const PRIMARY_NAV_CONFIG = [
         label: "Payment", 
         icon: "creditCard", 
         action: "open-view", 
-        targetView: "view-day-book", 
+        targetView: "view-supplier-payment",
+        expandable: true,
+        children: [
+          { id: "sub-pmt-add", label: "Add", action: "open-view", targetView: "view-supplier-payment", icon: "plusCircle" },
+          { id: "sub-pmt-list", label: "List", action: "open-view", targetView: "view-payment-list", icon: "list" }
+        ],
         info: "Vendor & Expense Payment Voucher" 
       },
       { 
@@ -179,7 +184,12 @@ const PRIMARY_NAV_CONFIG = [
         label: "Receipt", 
         icon: "wallet", 
         action: "open-view", 
-        targetView: "view-day-book", 
+        targetView: "view-customer-receipt",
+        expandable: true,
+        children: [
+          { id: "sub-rct-add", label: "Add", action: "open-view", targetView: "view-customer-receipt", icon: "plusCircle" },
+          { id: "sub-rct-list", label: "List", action: "open-view", targetView: "view-receipt-list", icon: "list" }
+        ],
         info: "Customer Collection & Receipt Voucher" 
       },
       { 
@@ -248,6 +258,9 @@ const PRIMARY_NAV_CONFIG = [
       { id: "sub-disp-overview", label: "Operational Dashboard", action: "open-view", targetView: "view-dashboard", icon: "barChart3", isDefault: true },
       { id: "sub-disp-daybook", label: "Financial Day Book", action: "open-view", targetView: "view-day-book", icon: "bookOpen" },
       { id: "sub-disp-trial-balance", label: "Trial Balance (Double-Entry)", action: "open-view", targetView: "view-day-book", icon: "fileSpreadsheet" },
+      { id: "sub-disp-cust-outstanding", label: "Accounts Receivable (Debtors)", action: "open-view", targetView: "view-customer-outstanding", icon: "wallet" },
+      { id: "sub-disp-supp-outstanding", label: "Accounts Payable (Creditors)", action: "open-view", targetView: "view-supplier-outstanding", icon: "creditCard" },
+      { id: "sub-disp-reconciliation", label: "Financial Reconciliation & Audit", action: "open-view", targetView: "view-reconciliation-dashboard", icon: "clipboardCheck" },
       { id: "sub-disp-stock", label: "Stock Valuation & WAC Status", action: "open-view", targetView: "view-stock-summary", icon: "package" },
       { id: "sub-disp-low-stock", label: "Low-Stock Alerts & Warnings", action: "open-modal", modalId: "modal-low-stock", icon: "bell" },
       { id: "sub-disp-gst", label: "GST Reports & Daily Summary", action: "open-modal", modalId: "modal-reports", icon: "percent" }

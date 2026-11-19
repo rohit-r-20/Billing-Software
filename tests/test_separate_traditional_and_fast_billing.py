@@ -38,9 +38,12 @@ STYLES_CSS = BASE_DIR / "styles.css"
 
 def _get_active_company_id():
     """Retrieve actual company UUID from database."""
-    with db_manager.get_connection() as conn:
-        row = conn.execute("SELECT id FROM companies WHERE code = 'COMP0001' LIMIT 1;").fetchone()
-        return row[0] if row else "3a743bcd-8f9a-4154-a316-509cba3de99a"
+    try:
+        with db_manager.get_connection() as conn:
+            row = conn.execute("SELECT id FROM companies WHERE code = 'COMP0001' LIMIT 1;").fetchone()
+            return row[0] if row else "3a743bcd-8f9a-4154-a316-509cba3de99a"
+    except Exception:
+        return "3a743bcd-8f9a-4154-a316-509cba3de99a"
 
 
 COMPANY_ID = _get_active_company_id()
@@ -129,6 +132,7 @@ def test_criterion_3_fast_billing_workspace_isolation():
 # ---------------------------------------------------------------------------
 def test_criterion_4_today_sales_history_server_enforced_date():
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
 
     # Query today's sales history via backend service
     today_sales = billing_service.get_today_sales_history(COMPANY_ID)
@@ -158,6 +162,7 @@ def test_criterion_4_today_sales_history_server_enforced_date():
 # ---------------------------------------------------------------------------
 def test_criterion_5_cashier_product_lookup_omits_stock_and_cost():
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
 
     # Search cashier products
     items = catalogue_service.search_cashier_items(COMPANY_ID, "SPOON")
@@ -202,6 +207,7 @@ def test_criterion_5_cashier_product_lookup_omits_stock_and_cost():
 # ---------------------------------------------------------------------------
 def test_criterion_7_saving_creates_exactly_one_transaction():
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
 
     # Get next sequential number
     next_no_resp = json.loads(bridge.getNextVoucherNumber(COMPANY_ID, "Main"))
@@ -303,6 +309,7 @@ def test_criterion_9_and_10_paper_formats_and_preview_rendering():
 # ---------------------------------------------------------------------------
 def test_criterion_11_multiple_copies_never_duplicate_transactions():
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
 
     # Get a sample invoice
     vouchers = billing_service.list_vouchers(COMPANY_ID, limit=1)
@@ -339,6 +346,7 @@ def test_criterion_11_multiple_copies_never_duplicate_transactions():
 # ---------------------------------------------------------------------------
 def test_criterion_12_printer_failure_preserves_transaction():
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
     vouchers = billing_service.list_vouchers(COMPANY_ID, limit=1)
     target_vch = vouchers[0]
 
@@ -370,14 +378,14 @@ def test_criterion_13_new_bill_starts_fresh_transaction():
 # ---------------------------------------------------------------------------
 def test_criterion_14_company_and_branch_data_isolation():
     bridge = BackendBridge()
+    bridge.authenticateUser("COMP0001", "A", "a")
 
     # Query with active company ID
     today_sales_comp1 = json.loads(bridge.getTodaySalesHistory(COMPANY_ID, ""))
     assert today_sales_comp1["success"] is True
 
-    # Query with non-existent or separate dummy company
+    # Query with non-existent or separate dummy company - strictly rejected by multi-tenant authorization
     dummy_comp = str(uuid.uuid4())
     today_sales_dummy = json.loads(bridge.getTodaySalesHistory(dummy_comp, ""))
-    assert today_sales_dummy["success"] is True
-    # Dummy company has 0 sales
-    assert len(today_sales_dummy["data"]) == 0
+    assert today_sales_dummy["success"] is False
+    assert "Access denied" in today_sales_dummy["error"]

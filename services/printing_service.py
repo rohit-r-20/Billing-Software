@@ -12,12 +12,24 @@ from core.logging_config import logger
 
 class PrintingService:
     @staticmethod
-    def format_thermal_receipt(voucher_data: Dict[str, Any], width_mm: int = 80) -> str:
+    def format_thermal_receipt(voucher_data: Dict[str, Any], width_mm: int = 80, company_id: Optional[str] = None, voucher_type: Optional[str] = None) -> str:
         """
         Formats a clean, aligned thermal receipt text stream suitable for 58mm or 80mm printers.
-        width_mm == 58 -> 32 columns
-        width_mm == 80 -> 48 columns
+        Integrates Phase 1 Paper Settings and Phase 2 Bill Layout Configuration when available.
         """
+        cid = company_id or voucher_data.get("company_id")
+        vt = voucher_type or voucher_data.get("voucher_type") or "sales_invoice"
+        if cid:
+            try:
+                from services.bill_layout_config_service import bill_layout_service
+                return bill_layout_service.format_invoice_thermal(
+                    voucher_data=voucher_data,
+                    company_id=cid,
+                    voucher_type=vt
+                )
+            except Exception as e:
+                logger.warning(f"Error compiling thermal layout, falling back to legacy format: {e}")
+
         cols = config.THERMAL_WIDTH_58MM if width_mm == 58 else config.THERMAL_WIDTH_80MM
         line_sep = "-" * cols
         double_sep = "=" * cols
@@ -110,10 +122,34 @@ class PrintingService:
         return "\n".join(lines)
 
     @classmethod
-    def generate_pdf_invoice(cls, voucher_data: Dict[str, Any], output_path: Path) -> Path:
+    def generate_pdf_invoice(
+        cls,
+        voucher_data: Dict[str, Any],
+        output_path: Path,
+        paper_format: str = "a4",
+        company_id: Optional[str] = None,
+        voucher_type: Optional[str] = None
+    ) -> Path:
         """
-        Generates an A4 Tax Invoice PDF using reportlab.
+        Generates an Invoice PDF combining Phase 1 Paper Settings and Phase 2 Bill Layout Configurations.
         """
+        cid = company_id or voucher_data.get("company_id")
+        vt = voucher_type or voucher_data.get("voucher_type") or "sales_invoice"
+        if cid:
+            try:
+                from services.bill_layout_config_service import bill_layout_service
+                res = bill_layout_service.compile_invoice_pdf(
+                    voucher_data=voucher_data,
+                    company_id=cid,
+                    voucher_type=vt,
+                    paper_format=paper_format,
+                    output_path=output_path
+                )
+                if res.get("success") and res.get("file_path"):
+                    return Path(res["file_path"])
+            except Exception as e:
+                logger.warning(f"Error compiling bill layout PDF, falling back to default format: {e}")
+
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
