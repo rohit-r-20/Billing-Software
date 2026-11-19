@@ -16,11 +16,16 @@ if _venv_python.exists() and sys.executable != str(_venv_python):
     except ImportError:
         os.execv(str(_venv_python), [str(_venv_python)] + sys.argv)
 
-# Set Chromium command-line flags BEFORE PyQt5/QWebEngine initialization.
-# On Windows, --no-sandbox is required to prevent QtWebEngineProcess renderer crash.
+# Configure Chromium command-line flags for QtWebEngine before Qt initialization.
+# Standard desktop execution preserves the native Chromium sandbox.
+# The sandbox bypass (--no-sandbox) is restricted to specialized environments
+# (such as containerized CI or unprivileged virtualization) and can be activated
+# by setting QTWEBENGINE_DISABLE_SANDBOX=1 or by passing --no-sandbox in QTWEBENGINE_CHROMIUM_FLAGS.
 existing_flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
-if '--no-sandbox' not in existing_flags:
+if os.getenv('QTWEBENGINE_DISABLE_SANDBOX') == '1' and '--no-sandbox' not in existing_flags:
     os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = f'{existing_flags} --no-sandbox --disable-logging'.strip()
+elif '--disable-logging' not in existing_flags:
+    os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = f'{existing_flags} --disable-logging'.strip()
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QMessageBox
@@ -33,6 +38,19 @@ from desktop.main_window import MainWindow
 
 def main():
     logger.info(f"Starting {config.APP_DISPLAY_NAME} v{config.VERSION} [{config.get_database_env()}]...")
+
+    # 0. Startup Configuration Validation
+    cfg_diag = config.validate_configuration()
+    if not cfg_diag["valid"]:
+        for err in cfg_diag["errors"]:
+            logger.critical(f"Startup configuration error: {err}")
+        print(f"\n[FATAL CONFIGURATION ERROR]:", file=sys.stderr)
+        for err in cfg_diag["errors"]:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
+    if cfg_diag["warnings"]:
+        for warn in cfg_diag["warnings"]:
+            logger.warning(f"Configuration warning: {warn}")
 
     # Enable High DPI display scaling for modern 4K/Retina screens
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)

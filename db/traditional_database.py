@@ -40,7 +40,7 @@ def validate_traditional_database_target(url_or_path: str) -> None:
         )
 
     # Reject if it exactly matches Fast Billing configured path
-    fast_configured_path = str(config.DATABASE_PATH).strip().lower()
+    fast_configured_path = str(config.get_database_path()).strip().lower()
     if normalized == fast_configured_path or normalized.endswith(fast_configured_path):
         raise TraditionalConfigurationError(
             "FATAL: Traditional Billing cannot use Fast Billing configured database path."
@@ -72,7 +72,7 @@ class TraditionalDatabaseManager:
             if env_url and env_url.strip():
                 target = env_url.strip()
             else:
-                default_sqlite_path = Path("data/traditional_billing.db").resolve()
+                default_sqlite_path = config.get_traditional_database_path().resolve()
                 target = f"sqlite:///{default_sqlite_path}"
 
         validate_traditional_database_target(target)

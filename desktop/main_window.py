@@ -6,10 +6,15 @@ import sys
 import os
 from pathlib import Path
 
-# Ensure Chromium flags are active even if MainWindow is imported directly
+# Configure Chromium command-line flags for QtWebEngine before Qt initialization.
+# Standard desktop execution preserves the native Chromium sandbox.
+# The sandbox bypass (--no-sandbox) is restricted to specialized environments
+# and can be activated by setting QTWEBENGINE_DISABLE_SANDBOX=1 or by passing --no-sandbox in QTWEBENGINE_CHROMIUM_FLAGS.
 existing_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-if "--no-sandbox" not in existing_flags:
+if os.getenv("QTWEBENGINE_DISABLE_SANDBOX") == "1" and "--no-sandbox" not in existing_flags:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{existing_flags} --no-sandbox --disable-logging".strip()
+elif "--disable-logging" not in existing_flags:
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{existing_flags} --disable-logging".strip()
 
 from PyQt5.QtCore import QUrl, Qt, QEvent, QTimer
 from PyQt5.QtWidgets import QMainWindow, QApplication, QMessageBox

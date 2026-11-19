@@ -41,6 +41,7 @@ scratch/
 # Environment secrets
 .env.*
 !.env.example
+!.env.staging.example
 
 # Python testing and tooling
 .pytest_cache/
@@ -50,3 +51,8 @@ scratch/
 # IDE
 .vscode/
 .idea/
+
+# Packaging builds
+build/
+dist/
+*.spec.bak

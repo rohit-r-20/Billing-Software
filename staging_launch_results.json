@@ -1,0 +1,43 @@
+{
+  "launch_success": true,
+  "webengine_loaded": true,
+  "login_screen_rendered": true,
+  "dom_login_elements": {
+    "company_options_count": 1,
+    "has_company_select": true,
+    "has_fast_button": true,
+    "has_pwd_input": true,
+    "has_trad_button": true,
+    "has_user_input": true,
+    "product_name": "Alpha Billing Software",
+    "view_login_active": true,
+    "view_login_found": true
+  },
+  "js_errors": [],
+  "js_warnings": [],
+  "python_exceptions": [],
+  "auth_results": {
+    "traditional_admin": {
+      "invalid_rejected": true,
+      "login_success": true,
+      "session_active": true,
+      "logout_success": true,
+      "role": "Administrator"
+    },
+    "fast_cashier": {
+      "invalid_rejected": true,
+      "login_success": true,
+      "session_active": true,
+      "logout_success": true,
+      "role": "Cashier"
+    }
+  },
+  "session_isolation": {
+    "fast_cashier_rejected_in_traditional_db": true,
+    "traditional_admin_rejected_in_fast_db": true,
+    "role_boundaries_strictly_isolated": true,
+    "traditional_endpoints_protected_post_logout": true,
+    "fast_endpoints_protected_post_logout": true
+  },
+  "prod_db_unchanged": true
+}
