@@ -198,11 +198,19 @@ class PostgresConnectionAdapter:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._in_context = False
-        if exc_type is not None:
-            self._conn.rollback()
-        else:
-            self._conn.commit()
-        self._conn.close()
+        try:
+            if exc_type is not None:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+            else:
+                self._conn.commit()
+        finally:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
 
 
 # ==============================================================================
@@ -276,6 +284,13 @@ class DatabaseManager:
                     max_overflow=pool_opts["max_overflow"],
                     pool_timeout=pool_opts["pool_timeout"],
                     pool_recycle=pool_opts["pool_recycle"],
+                    connect_args={
+                        "connect_timeout": 10,
+                        "keepalives": 1,
+                        "keepalives_idle": 30,
+                        "keepalives_interval": 10,
+                        "keepalives_count": 5,
+                    }
                 )
             else:
                 if not (norm_url.startswith("sqlite:///") or norm_url.startswith("sqlite://")):
@@ -319,13 +334,11 @@ class DatabaseManager:
     def get_connection(self):
         """
         Returns a configured database connection.
-        - On PostgreSQL: Returns a PostgresConnectionAdapter wrapping a native psycopg connection.
+        - On PostgreSQL: Returns a PostgresConnectionAdapter wrapping a pooled connection from the engine.
         - On SQLite: Returns a configured sqlite3.Connection with row_factory=Row, WAL mode, and FK enforcement.
         """
         if self.is_postgres:
-            import psycopg
-            conninfo = self._normalize_psycopg_conninfo(self.database_url)
-            raw_conn = psycopg.connect(conninfo)
+            raw_conn = self.engine.raw_connection()
             return PostgresConnectionAdapter(raw_conn)
         else:
             conn = sqlite3.connect(

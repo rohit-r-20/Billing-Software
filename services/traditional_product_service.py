@@ -212,6 +212,7 @@ class TraditionalProductService:
         search_term: Optional[str] = None,
         category: Optional[str] = None,
         active_only: bool = True,
+        limit: Optional[int] = 500,
     ) -> List[Dict[str, Any]]:
         """List products with barcodes and exact pricing."""
         with self.db.read_session_scope() as session:
@@ -241,6 +242,8 @@ class TraditionalProductService:
                 )
 
             query = query.order_by(Item.name.asc())
+            if limit is not None and limit > 0:
+                query = query.limit(limit)
             items = session.scalars(query).all()
 
             # Batch load barcodes

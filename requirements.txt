@@ -13,10 +13,10 @@ psycopg-binary==3.3.8
 pycparser==3.12
 Pygments==2.21.0
 PyQt5==5.15.11
-PyQt5-Qt5==5.15.19
+PyQt5-Qt5==5.15.2
 PyQt5_sip==12.20.0
 PyQtWebEngine==5.15.7
-PyQtWebEngine-Qt5==5.15.19
+PyQtWebEngine-Qt5==5.15.2
 pytest==9.2.0
 python-dotenv==1.2.4
 reportlab==5.1.0

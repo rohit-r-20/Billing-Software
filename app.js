@@ -773,7 +773,9 @@ function showScreen(screenId) {
   } else if (screenId === "view-fast-billing-print") {
     renderInvoicePrintPreview();
   } else if (screenId === "view-purchase-entry") {
-    initPurchaseEntryScreen();
+    if (!isPurchaseModifyMode) {
+      initPurchaseEntryScreen();
+    }
   } else if (screenId === "view-purchase-list") {
     renderPurchaseRegister();
   } else if (screenId === "view-supplier-master") {
@@ -3972,7 +3974,7 @@ function setupPartyAutocomplete() {
       } else {
         renderSuggestions(filterEligibleCustomers(q), q);
       }
-    }, 120);
+    }, 250);
   });
 
   vchPartyInput.addEventListener("focus", () => {
@@ -4914,6 +4916,19 @@ function handleSaveSalesVoucher() {
   const subtotal = parseFloat(vchSubtotalVal.textContent) || 0;
   const grandTotal = vchGrandTotal.textContent.replace("₹", "").trim();
 
+  const btnSave = btnSaveSalesVoucher || document.getElementById("btn-save-sales-voucher");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = "Saving Invoice...";
+  }
+
+  const resetSaveBtn = () => {
+    if (btnSave) {
+      btnSave.disabled = false;
+      btnSave.textContent = "Save Invoice";
+    }
+  };
+
   // If modifying existing invoice
   if (isSalesModifyMode && currentModifySaleVchId) {
     const payload = {
@@ -4939,6 +4954,7 @@ function handleSaveSalesVoucher() {
 
     if (window.backend && activeCompany) {
       window.backend.modifySaleInvoice(activeCompany.id, currentModifySaleVchId, JSON.stringify(payload), (resp) => {
+        resetSaveBtn();
         try {
           const r = JSON.parse(resp);
           if (r.success) {
@@ -4956,6 +4972,8 @@ function handleSaveSalesVoucher() {
           alert(`Error: ${e.message}`);
         }
       });
+    } else {
+      resetSaveBtn();
     }
     return;
   }
@@ -4983,6 +5001,7 @@ function handleSaveSalesVoucher() {
   };
 
   const onCommitSuccess = (savedData) => {
+    resetSaveBtn();
     lastCompletedVoucher = savedData.vch_no;
     lastCompletedVoucherData = savedData;
     saveSalesVoucherRecord({
@@ -5011,6 +5030,7 @@ function handleSaveSalesVoucher() {
 
   if (window.backend && isTrad && typeof window.backend.traditional_saveSaleInvoice === "function") {
     window.backend.traditional_saveSaleInvoice(JSON.stringify(payload), (resp) => {
+      resetSaveBtn();
       try {
         const r = typeof resp === "string" ? JSON.parse(resp) : resp;
         if (r.success) {
@@ -5027,6 +5047,7 @@ function handleSaveSalesVoucher() {
 
   if (window.backend && activeCompany) {
     window.backend.createSaleInvoice(activeCompany.id, JSON.stringify(payload), (resp) => {
+      resetSaveBtn();
       try {
         const r = JSON.parse(resp);
         if (r.success) {
@@ -5040,6 +5061,7 @@ function handleSaveSalesVoucher() {
     });
   } else {
     // Offline / mock fallback
+    resetSaveBtn();
     const mockVchNo = getNextVoucherNumber();
     const mockData = {
       id: "vch_" + Date.now(),
@@ -6964,7 +6986,7 @@ if (itemsListSearch) {
     if (btnClearItemSearch) btnClearItemSearch.style.display = q ? "block" : "none";
     searchTimer = setTimeout(() => {
       renderProductsList(q, itemsListGroupFilter ? itemsListGroupFilter.value : "");
-    }, 150);
+    }, 250);
   });
 }
 
@@ -7528,7 +7550,7 @@ function setupPosBarcodeAutocomplete() {
           renderPosBarcodeSuggestions(currentPosSuggestions);
         });
       }
-    }, 150);
+    }, 250);
   });
 
   posBarcodeInput.addEventListener("keydown", (e) => {
@@ -7667,7 +7689,7 @@ if (posModalSearchInput) {
     clearTimeout(modalDebounce);
     modalDebounce = setTimeout(() => {
       renderModalProductSearch(posModalSearchInput.value.trim());
-    }, 150);
+    }, 250);
   });
 
   posModalSearchInput.addEventListener("keydown", (e) => {
@@ -8540,6 +8562,14 @@ CGST: 364.80
 SGST: 364.80
 Grand Total: 5189.60`;
 
+// --- Purchase Module State & Helpers ---
+let currentSelectedPurchaseItemId = null;
+let currentSelectedPurchaseItemName = "";
+let lastSavedPurchaseVoucherId = null;
+let currentPrintVoucherId = null;
+let cachedGodownsList = [];
+let purListDebounceTimer = null;
+
 // --- Purchase Entry Screen ---
 function initPurchaseEntryScreen() {
   if (!activeCompany) {
@@ -8570,7 +8600,13 @@ function initPurchaseEntryScreen() {
   const purHandling = document.getElementById("pur-handling-exp");
   if (purHandling) purHandling.value = "0.00";
 
-  // Fetch Next Purchase Voucher Number
+  // Hide Rate Info banner on initial new purchase screen
+  const rateStrip = document.getElementById("pur-rate-info-strip");
+  if (rateStrip) rateStrip.style.display = "none";
+  currentSelectedPurchaseItemId = null;
+  currentSelectedPurchaseItemName = "";
+
+  // Fetch Next Authoritative Purchase Voucher Number
   if (window.backend && window.backend.getNextPurchaseVoucherNumber) {
     window.backend.getNextPurchaseVoucherNumber(activeCompany.id, "Main", (resp) => {
       try {
@@ -8585,20 +8621,44 @@ function initPurchaseEntryScreen() {
     });
   }
 
-  // Load Suppliers & Catalogue
+  // Load Suppliers, Godowns & Catalogue
   loadSuppliersDropdown();
+  loadGodownsDropdown();
   loadCatalogueItemsForPurchase();
 
   // Reset Purchase items grid
-  if (purchaseItemsData.length === 0) {
-    purchaseItemsData = [ createEmptyPurchaseItem() ];
-  }
+  purchaseItemsData = [ createEmptyPurchaseItem() ];
   renderPurchaseGridRows();
   calcPurchaseTotals();
 
   setTimeout(() => {
     if (purSupInvNo) purSupInvNo.focus();
   }, 50);
+}
+
+function loadGodownsDropdown(selectedGodownId) {
+  if (!activeCompany || !window.backend || !window.backend.listGodowns) return;
+  window.backend.listGodowns(activeCompany.id, (resp) => {
+    try {
+      const r = JSON.parse(resp);
+      if (r.success && Array.isArray(r.data)) {
+        cachedGodownsList = r.data;
+        const sel = document.getElementById("pur-godown-select");
+        if (!sel) return;
+        const currentVal = selectedGodownId || sel.value;
+        sel.innerHTML = "";
+        r.data.forEach(g => {
+          const opt = document.createElement("option");
+          opt.value = g.id;
+          opt.textContent = g.name + (g.code ? ` (${g.code})` : "");
+          sel.appendChild(opt);
+        });
+        if (currentVal) sel.value = currentVal;
+      }
+    } catch (e) {
+      console.error("Error loading godowns:", e);
+    }
+  });
 }
 
 function loadSuppliersDropdown(selectIdToSet) {
@@ -8624,6 +8684,20 @@ function loadSuppliersDropdown(selectIdToSet) {
           });
           if (currentVal) sel.value = currentVal;
         });
+
+        // Also populate register filter
+        const filterSel = document.getElementById("pur-list-supplier-filter");
+        if (filterSel) {
+          const cur = filterSel.value;
+          filterSel.innerHTML = '<option value="">-- All Suppliers --</option>';
+          r.data.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.id;
+            opt.textContent = s.name;
+            filterSel.appendChild(opt);
+          });
+          if (cur) filterSel.value = cur;
+        }
       }
     } catch (e) {
       console.error("Error loading suppliers:", e);
@@ -8682,6 +8756,146 @@ function createEmptyPurchaseItem() {
     igst_amount: 0,
     line_total: 0
   };
+}
+
+function renderRatePrecedenceBanner(itemName, rateInfo) {
+  const strip = document.getElementById("pur-rate-info-strip");
+  const textEl = document.getElementById("pur-rate-info-text");
+  if (!strip || !textEl) return;
+
+  let sourceLabel = "Item Master Default";
+  let badgeColor = "#64748b";
+  if (rateInfo.source === "same_supplier_history") {
+    sourceLabel = `Latest Same-Supplier (${rateInfo.supplier_name || "Current Supplier"})`;
+    badgeColor = "#15803d";
+  } else if (rateInfo.source === "cross_supplier_history") {
+    sourceLabel = `Latest Cross-Supplier (${rateInfo.supplier_name || "Previous Supplier"})`;
+    badgeColor = "#b45309";
+  }
+
+  const dateStr = rateInfo.last_purchase_date ? ` [Vch: ${rateInfo.voucher_no || ""} on ${rateInfo.last_purchase_date}]` : "";
+  textEl.innerHTML = `<strong>${escapeHtml(itemName)}</strong> &bull; Source: <span style="font-weight:700; color:${badgeColor};">${sourceLabel}</span> &bull; Rate: <strong>₹ ${(parseFloat(rateInfo.rate) || 0).toFixed(2)}</strong>${dateStr}`;
+  strip.style.display = "flex";
+}
+
+function applyProductToPurchaseRow(it, foundItem, rowEl) {
+  it.item_id = foundItem.id;
+  it.name = foundItem.name;
+  it.barcode = foundItem.barcode || it.barcode;
+  it.unit = foundItem.unit || it.unit || "Pcs";
+  it.tax_rate = parseFloat(foundItem.tax_rate || foundItem.gst_rate || it.tax_rate || 18);
+
+  currentSelectedPurchaseItemId = foundItem.id;
+  currentSelectedPurchaseItemName = foundItem.name;
+
+  const supplierSelect = document.getElementById("pur-supplier-select");
+  const supplierId = supplierSelect ? supplierSelect.value : "";
+
+  // Query authoritative purchase rate precedence
+  if (window.backend && window.backend.getLatestPurchaseRate) {
+    window.backend.getLatestPurchaseRate(activeCompany.id, foundItem.id, supplierId, (resp) => {
+      try {
+        const r = JSON.parse(resp);
+        if (r.success && r.data) {
+          const rateInfo = r.data;
+          it.cost_rate = parseFloat(rateInfo.rate) || 0;
+          if (rateInfo.discount_pct !== undefined && rateInfo.discount_pct !== null) {
+            it.discount_pct = parseFloat(rateInfo.discount_pct) || 0;
+          }
+          renderRatePrecedenceBanner(foundItem.name, rateInfo);
+          if (rowEl) {
+            const rateIn = rowEl.querySelector(".pur-row-rate");
+            if (rateIn) rateIn.value = it.cost_rate.toFixed(2);
+            const discIn = rowEl.querySelector(".pur-row-disc");
+            if (discIn) discIn.value = it.discount_pct.toFixed(2);
+            const taxSel = rowEl.querySelector(".pur-row-tax-rate");
+            if (taxSel) taxSel.value = it.tax_rate.toString();
+          }
+          calcPurchaseTotals();
+          if (rowEl) {
+            const taxEl = rowEl.querySelector(".pur-row-taxable");
+            const totEl = rowEl.querySelector(".pur-row-total");
+            if (taxEl) taxEl.textContent = `₹ ${it.taxable_amount.toFixed(2)}`;
+            if (totEl) totEl.textContent = `₹ ${it.line_total.toFixed(2)}`;
+          }
+        } else {
+          fallbackItemPrice(it, foundItem, rowEl);
+        }
+      } catch (e) {
+        fallbackItemPrice(it, foundItem, rowEl);
+      }
+    });
+  } else {
+    fallbackItemPrice(it, foundItem, rowEl);
+  }
+}
+
+function fallbackItemPrice(it, foundItem, rowEl) {
+  it.cost_rate = parseFloat(foundItem.purchase_price || foundItem.cost_price || 0);
+  renderRatePrecedenceBanner(foundItem.name, {
+    rate: it.cost_rate,
+    source: "item_master_default",
+    supplier_name: "Item Master Default"
+  });
+  if (rowEl) {
+    const rateIn = rowEl.querySelector(".pur-row-rate");
+    if (rateIn) rateIn.value = it.cost_rate.toFixed(2);
+  }
+  calcPurchaseTotals();
+}
+
+function openItemPurchasePriceHistoryModal(itemId, itemName) {
+  if (!activeCompany || !window.backend || !window.backend.getPurchasePriceHistory) return;
+  const targetId = itemId || currentSelectedPurchaseItemId;
+  const targetName = itemName || currentSelectedPurchaseItemName;
+  if (!targetId) {
+    alert("Please select a product from the purchase grid first.");
+    return;
+  }
+
+  const modal = document.getElementById("modal-purchase-price-history");
+  const title = document.getElementById("pur-price-history-title");
+  const subtitle = document.getElementById("pur-price-history-subtitle");
+  const tbody = document.getElementById("pur-price-history-tbody");
+  if (!modal || !tbody) return;
+
+  if (title) title.textContent = `Purchase Price History: ${targetName || "Product"}`;
+  if (subtitle) subtitle.textContent = `Authoritative historical purchase rates recorded across all suppliers and vouchers.`;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:16px;">Loading price history...</td></tr>`;
+  modal.style.display = "flex";
+
+  window.backend.getPurchasePriceHistory(activeCompany.id, targetId, (resp) => {
+    try {
+      const r = JSON.parse(resp);
+      if (r.success && Array.isArray(r.data)) {
+        if (r.data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:16px; color:#64748b;">No previous purchase transactions found for this product.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = "";
+        r.data.forEach((h, idx) => {
+          const tr = document.createElement("tr");
+          const isRev = h.is_revision ? '<span style="font-size:10px; background:#fef3c7; color:#b45309; padding:2px 4px; border-radius:3px;">REVISION</span>' : '<span style="font-size:10px; background:#dcfce7; color:#15803d; padding:2px 4px; border-radius:3px;">ORIGINAL</span>';
+          tr.innerHTML = `
+            <td style="text-align:center;">${idx + 1}</td>
+            <td>${h.purchase_date || h.created_at?.slice(0, 10)}</td>
+            <td style="font-weight:700; color:#1e3a8a;">${h.voucher_no || "-"}</td>
+            <td>${escapeHtml(h.supplier_name || "Supplier")}</td>
+            <td style="text-align:right; font-weight:700;">₹ ${(parseFloat(h.purchase_rate) || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${(parseFloat(h.discount_pct) || 0).toFixed(1)}%</td>
+            <td style="text-align:right;">${(parseFloat(h.tax_rate) || 0).toFixed(1)}%</td>
+            <td style="text-align:right; color:#0f172a; font-weight:600;">₹ ${(parseFloat(h.landed_cost) || parseFloat(h.purchase_rate) || 0).toFixed(2)}</td>
+            <td style="text-align:center;">${isRev}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:16px; color:#ef4444;">${r.error || "Failed to load price history."}</td></tr>`;
+      }
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:16px; color:#ef4444;">Error loading history: ${e.message}</td></tr>`;
+    }
+  });
 }
 
 function calcPurchaseTotals() {
@@ -8749,17 +8963,17 @@ function renderPurchaseGridRows() {
     tr.dataset.index = idx;
     tr.innerHTML = `
       <td style="text-align: center; font-weight: 700; color: #64748b;">${idx + 1}</td>
-      <td><input type="text" class="pur-row-barcode" value="${escapeHtml(it.barcode || "")}" placeholder="Barcode" /></td>
-      <td><input type="text" class="pur-row-name" value="${escapeHtml(it.name || "")}" placeholder="Type product name or scan..." /></td>
-      <td><input type="text" class="pur-row-batch" value="${escapeHtml(it.batch_no || "")}" placeholder="Batch" /></td>
-      <td><input type="number" class="pur-row-qty" value="${it.qty}" min="0.001" step="any" style="text-align: right; font-weight: 700;" /></td>
-      <td><input type="number" class="pur-row-free-qty" value="${it.free_qty || 0}" min="0" step="any" style="text-align: right;" /></td>
-      <td><input type="text" class="pur-row-unit" value="${escapeHtml(it.unit || "Pcs")}" style="text-align: center;" /></td>
-      <td><input type="number" class="pur-row-rate" value="${(parseFloat(it.cost_rate) || 0).toFixed(2)}" min="0" step="0.01" style="text-align: right;" /></td>
-      <td><input type="number" class="pur-row-disc" value="${parseFloat(it.discount_pct) || 0}" min="0" max="100" step="0.5" style="text-align: right;" /></td>
+      <td><input type="text" class="pur-row-barcode pur-nav" data-col="0" value="${escapeHtml(it.barcode || "")}" placeholder="Barcode" /></td>
+      <td><input type="text" class="pur-row-name pur-nav" data-col="1" value="${escapeHtml(it.name || "")}" placeholder="Type product name or scan..." /></td>
+      <td><input type="text" class="pur-row-batch pur-nav" data-col="2" value="${escapeHtml(it.batch_no || "")}" placeholder="Batch" /></td>
+      <td><input type="number" class="pur-row-qty pur-nav" data-col="3" value="${it.qty}" min="0.001" step="any" style="text-align: right; font-weight: 700;" /></td>
+      <td><input type="number" class="pur-row-free-qty pur-nav" data-col="4" value="${it.free_qty || 0}" min="0" step="any" style="text-align: right;" /></td>
+      <td><input type="text" class="pur-row-unit pur-nav" data-col="5" value="${escapeHtml(it.unit || "Pcs")}" style="text-align: center;" /></td>
+      <td><input type="number" class="pur-row-rate pur-nav" data-col="6" value="${(parseFloat(it.cost_rate) || 0).toFixed(2)}" min="0" step="0.01" style="text-align: right;" /></td>
+      <td><input type="number" class="pur-row-disc pur-nav" data-col="7" value="${parseFloat(it.discount_pct) || 0}" min="0" max="100" step="0.5" style="text-align: right;" /></td>
       <td style="text-align: right; font-weight: 600;" class="pur-row-taxable">₹ ${(parseFloat(it.taxable_amount) || 0).toFixed(2)}</td>
       <td>
-        <select class="pur-row-tax-rate" style="width: 100%; border: 1px solid #cbd5e1; padding: 2px;">
+        <select class="pur-row-tax-rate pur-nav" data-col="8" style="width: 100%; border: 1px solid #cbd5e1; padding: 2px;">
           <option value="18" ${it.tax_rate == 18 ? "selected" : ""}>18%</option>
           <option value="12" ${it.tax_rate == 12 ? "selected" : ""}>12%</option>
           <option value="5" ${it.tax_rate == 5 ? "selected" : ""}>5%</option>
@@ -8782,19 +8996,23 @@ function renderPurchaseGridRows() {
     const batchInput = tr.querySelector(".pur-row-batch");
     const btnDel = tr.querySelector(".btn-row-del");
 
+    // Click/focus row to show price precedence
+    tr.addEventListener("focusin", () => {
+      if (it.item_id && it.name) {
+        currentSelectedPurchaseItemId = it.item_id;
+        currentSelectedPurchaseItemName = it.name;
+      }
+    });
+
     barcodeInput.addEventListener("change", (e) => {
       const val = e.target.value.trim();
       it.barcode = val;
       if (val && cachedCatalogueItems.length > 0) {
         const found = cachedCatalogueItems.find(p => (p.barcode || "").toLowerCase() === val.toLowerCase());
         if (found) {
-          it.item_id = found.id;
-          it.name = found.name;
-          it.unit = found.unit || it.unit;
-          if (found.purchase_price) it.cost_rate = parseFloat(found.purchase_price);
-          nameInput.value = it.name;
-          unitInput.value = it.unit;
-          rateInput.value = it.cost_rate.toFixed(2);
+          nameInput.value = found.name;
+          unitInput.value = found.unit || "Pcs";
+          applyProductToPurchaseRow(it, found, tr);
         }
       }
       calcPurchaseTotals();
@@ -8802,16 +9020,12 @@ function renderPurchaseGridRows() {
 
     nameInput.addEventListener("change", (e) => {
       it.name = e.target.value.trim();
-      if (!it.item_id && cachedCatalogueItems.length > 0) {
-        const found = cachedCatalogueItems.find(p => p.name.toLowerCase() === it.name.toLowerCase());
+      if (cachedCatalogueItems.length > 0) {
+        const found = cachedCatalogueItems.find(p => p.name.toLowerCase() === it.name.toLowerCase() || (p.code && p.code.toLowerCase() === it.name.toLowerCase()));
         if (found) {
-          it.item_id = found.id;
-          it.barcode = found.barcode || it.barcode;
-          it.unit = found.unit || it.unit;
-          if (found.purchase_price) it.cost_rate = parseFloat(found.purchase_price);
-          barcodeInput.value = it.barcode;
-          unitInput.value = it.unit;
-          rateInput.value = it.cost_rate.toFixed(2);
+          barcodeInput.value = found.barcode || "";
+          unitInput.value = found.unit || "Pcs";
+          applyProductToPurchaseRow(it, found, tr);
         }
       }
       calcPurchaseTotals();
@@ -8860,6 +9074,42 @@ function renderPurchaseGridRows() {
       }
       renderPurchaseGridRows();
       calcPurchaseTotals();
+    });
+
+    // Fast continuous keyboard navigation across the row
+    const navInputs = tr.querySelectorAll(".pur-nav");
+    navInputs.forEach((inp, colIndex) => {
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (colIndex < navInputs.length - 1) {
+            navInputs[colIndex + 1].focus();
+            if (navInputs[colIndex + 1].select) navInputs[colIndex + 1].select();
+          } else {
+            // Last column in row -> advance to next row or create a new row
+            if (idx === purchaseItemsData.length - 1) {
+              purchaseItemsData.push(createEmptyPurchaseItem());
+              renderPurchaseGridRows();
+              calcPurchaseTotals();
+              setTimeout(() => {
+                const nextRow = tbody.querySelector(`tr[data-index="${idx + 1}"] .pur-row-barcode`);
+                if (nextRow) { nextRow.focus(); if (nextRow.select) nextRow.select(); }
+              }, 20);
+            } else {
+              const nextRow = tbody.querySelector(`tr[data-index="${idx + 1}"] .pur-row-barcode`);
+              if (nextRow) { nextRow.focus(); if (nextRow.select) nextRow.select(); }
+            }
+          }
+        } else if (e.key === "ArrowDown" && idx === purchaseItemsData.length - 1 && colIndex === 0) {
+          purchaseItemsData.push(createEmptyPurchaseItem());
+          renderPurchaseGridRows();
+          calcPurchaseTotals();
+          setTimeout(() => {
+            const nextRow = tbody.querySelector(`tr[data-index="${idx + 1}"] .pur-row-barcode`);
+            if (nextRow) nextRow.focus();
+          }, 20);
+        }
+      });
     });
 
     tbody.appendChild(tr);
@@ -8926,18 +9176,52 @@ function postPurchaseVoucher() {
     }))
   };
 
+  const btnSave = document.getElementById("btn-pur-save-post");
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = "Posting Voucher...";
+  }
+
+  const handlePostSuccess = (r, isModify) => {
+    lastSavedPurchaseVoucherId = r.data.id;
+    const actionWord = isModify ? "modified and reconciled" : "posted";
+    showNotification(`Purchase Voucher ${r.data.vch_no} ${actionWord} successfully! Inward inventory & accounts updated.`);
+    
+    // Display saved confirmation modal with Review / Print options
+    const modal = document.getElementById("modal-purchase-saved");
+    if (modal) {
+      const vchNoEl = document.getElementById("pur-saved-vch-no");
+      const billNoEl = document.getElementById("pur-saved-bill-no");
+      const supEl = document.getElementById("pur-saved-supplier-name");
+      const dateEl = document.getElementById("pur-saved-date");
+      const grandEl = document.getElementById("pur-saved-grand-total");
+      if (vchNoEl) vchNoEl.textContent = r.data.vch_no;
+      if (billNoEl) billNoEl.textContent = r.data.supplier_invoice_no;
+      if (supEl) supEl.textContent = r.data.supplier_name;
+      if (dateEl) dateEl.textContent = r.data.voucher_date;
+      if (grandEl) grandEl.textContent = `₹ ${(parseFloat(r.data.grand_total) || 0).toFixed(2)}`;
+      modal.style.display = "flex";
+    }
+
+    if (isModify) {
+      isPurchaseModifyMode = false;
+      currentModifyPurchaseVchId = null;
+      const titleEl = document.getElementById("purchase-entry-screen-title");
+      if (titleEl) titleEl.textContent = "Add Purchase Voucher (Inward Goods)";
+    }
+  };
+
   if (isPurchaseModifyMode && currentModifyPurchaseVchId) {
     if (window.backend && window.backend.modifyPurchaseVoucher) {
       window.backend.modifyPurchaseVoucher(activeCompany.id, currentModifyPurchaseVchId, JSON.stringify(payload), (resp) => {
+        if (btnSave) {
+          btnSave.disabled = false;
+          btnSave.textContent = "Post Purchase Voucher";
+        }
         try {
           const r = JSON.parse(resp);
           if (r.success) {
-            showNotification(`Purchase Voucher ${r.data.vch_no} modified successfully! Inward inventory reconciled.`);
-            isPurchaseModifyMode = false;
-            currentModifyPurchaseVchId = null;
-            const titleEl = document.getElementById("purchase-entry-screen-title");
-            if (titleEl) titleEl.textContent = "Add Purchase Voucher (Inward Goods)";
-            showScreen("view-purchase-list");
+            handlePostSuccess(r, true);
           } else {
             alert(`Failed to modify purchase voucher: ${r.error}`);
           }
@@ -8951,16 +9235,14 @@ function postPurchaseVoucher() {
 
   if (window.backend && window.backend.createPurchaseVoucher) {
     window.backend.createPurchaseVoucher(activeCompany.id, JSON.stringify(payload), (resp) => {
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.textContent = "Post Purchase Voucher";
+      }
       try {
         const r = JSON.parse(resp);
         if (r.success) {
-          showNotification(`Purchase Voucher ${r.data.vch_no} posted successfully! Inward inventory updated.`);
-          if (confirm(`Purchase ${r.data.vch_no} saved successfully!\nInventory and Accounts updated.\n\nOpen Purchase Register?`)) {
-            showScreen("view-purchase-list");
-          } else {
-            purchaseItemsData = [ createEmptyPurchaseItem() ];
-            initPurchaseEntryScreen();
-          }
+          handlePostSuccess(r, false);
         } else {
           alert(`Failed to post purchase voucher: ${r.error}`);
         }
@@ -8984,8 +9266,9 @@ function openModifyPurchaseVoucher(vchId) {
     const modIn = document.getElementById("pur-modify-vch-id");
     if (modIn) modIn.value = currentModifyPurchaseVchId;
 
-    const supplierSelect = document.getElementById("pur-supplier-select");
-    if (supplierSelect && vch.supplier_id) supplierSelect.value = vch.supplier_id;
+    loadSuppliersDropdown(vch.supplier_id);
+    loadGodownsDropdown(vch.godown_id);
+
     const supInvNo = document.getElementById("pur-supplier-inv-no");
     if (supInvNo) supInvNo.value = vch.supplier_invoice_no || "";
     const supInvDate = document.getElementById("pur-supplier-inv-date");
@@ -8997,31 +9280,33 @@ function openModifyPurchaseVoucher(vchId) {
     const paymentMode = document.getElementById("pur-payment-mode");
     if (paymentMode && vch.payment_mode) paymentMode.value = vch.payment_mode;
     const freight = document.getElementById("pur-freight-exp");
-    if (freight) freight.value = vch.freight_charges || "0";
+    if (freight) freight.value = (parseFloat(vch.freight_charges) || 0).toFixed(2);
     const handling = document.getElementById("pur-handling-exp");
-    if (handling) handling.value = vch.handling_charges || "0";
+    if (handling) handling.value = (parseFloat(vch.handling_charges) || 0).toFixed(2);
     const narration = document.getElementById("pur-narration");
     if (narration) narration.value = vch.narration || "";
+    const vchNoEl = document.getElementById("pur-vch-no");
+    if (vchNoEl && vch.vch_no) vchNoEl.value = vch.vch_no;
 
     const titleEl = document.getElementById("purchase-entry-screen-title");
-    if (titleEl) titleEl.textContent = `Modify Purchase Voucher: ${vch.vch_no}`;
+    if (titleEl) titleEl.textContent = `Modify Purchase Voucher: ${vch.vch_no} [Audit Reconciliation Active]`;
 
     if (Array.isArray(vch.items) && vch.items.length > 0) {
       purchaseItemsData = vch.items.map(it => ({
         item_id: it.item_id || "",
         barcode: it.barcode || "",
-        name: it.name || "",
+        name: it.name || it.item_name || "",
         batch_no: it.batch_no || "",
         expiry_date: it.expiry_date || "",
-        qty: parseFloat(it.qty) || 1,
+        qty: parseFloat(it.qty !== undefined ? it.qty : it.quantity) || 1,
         free_qty: parseFloat(it.free_qty) || 0,
         unit: it.unit || "Pcs",
-        cost_rate: parseFloat(it.cost_rate) || 0,
+        cost_rate: parseFloat(it.cost_rate !== undefined ? it.cost_rate : it.purchase_price) || 0,
         discount_pct: parseFloat(it.discount_pct) || 0,
         tax_rate: parseFloat(it.tax_rate) || 0,
         taxable_amount: parseFloat(it.taxable_amount) || 0,
         tax_amount: parseFloat(it.tax_amount) || 0,
-        line_total: parseFloat(it.line_total) || 0
+        line_total: parseFloat(it.line_total !== undefined ? it.line_total : it.total_amount) || 0
       }));
     } else {
       purchaseItemsData = [ createEmptyPurchaseItem() ];
@@ -9031,13 +9316,12 @@ function openModifyPurchaseVoucher(vchId) {
     showScreen("view-purchase-entry");
   };
 
-  if (window.backend && window.backend.listPurchaseVouchers) {
-    window.backend.listPurchaseVouchers(activeCompany.id, (resp) => {
+  if (window.backend && window.backend.getPurchaseVoucherDetails) {
+    window.backend.getPurchaseVoucherDetails(activeCompany.id, vchId, (resp) => {
       try {
         const r = JSON.parse(resp);
-        if (r.success && Array.isArray(r.data)) {
-          const found = r.data.find(v => v.id === vchId || v.vch_no === vchId);
-          loadVoucher(found);
+        if (r.success && r.data) {
+          loadVoucher(r.data);
           return;
         }
       } catch (e) {}
@@ -9047,99 +9331,148 @@ function openModifyPurchaseVoucher(vchId) {
 
 // --- Purchase Register ---
 function renderPurchaseRegister() {
-  if (!activeCompany || !window.backend || !window.backend.listPurchaseVouchers) return;
+  if (!activeCompany || !window.backend) return;
   const tbody = document.getElementById("pur-register-tbody");
   const emptyMsg = document.getElementById("pur-register-empty");
   const countLabel = document.getElementById("pur-register-count-label");
   const totalValEl = document.getElementById("pur-register-total-val");
+  const totalPaidEl = document.getElementById("pur-register-total-paid");
+  const totalBalEl = document.getElementById("pur-register-total-bal");
 
-  window.backend.listPurchaseVouchers(activeCompany.id, (resp) => {
+  const search = document.getElementById("pur-list-search")?.value.trim() || "";
+  const fromDate = document.getElementById("pur-list-from-date")?.value || "";
+  const toDate = document.getElementById("pur-list-to-date")?.value || "";
+  const supplierId = document.getElementById("pur-list-supplier-filter")?.value || "";
+  const status = document.getElementById("pur-list-status-filter")?.value || "";
+
+  const handleData = (r) => {
+    if (!r.success || !Array.isArray(r.data) || r.data.length === 0) {
+      if (tbody) tbody.innerHTML = "";
+      if (emptyMsg) emptyMsg.style.display = "block";
+      if (countLabel) countLabel.textContent = "Total Vouchers: 0";
+      if (totalValEl) totalValEl.textContent = "₹ 0.00";
+      if (totalPaidEl) totalPaidEl.textContent = "₹ 0.00";
+      if (totalBalEl) totalBalEl.textContent = "₹ 0.00";
+      return;
+    }
+
+    if (emptyMsg) emptyMsg.style.display = "none";
+    if (countLabel) countLabel.textContent = `Total Vouchers: ${r.data.length}`;
+    let totalVal = 0;
+    let totalPaid = 0;
+    let totalBal = 0;
+
+    if (tbody) {
+      tbody.innerHTML = "";
+      r.data.forEach((vch, idx) => {
+        const netAmt = parseFloat(vch.grand_total) || 0;
+        const paidAmt = parseFloat(vch.paid_amount) || 0;
+        const balAmt = Math.max(0, netAmt - paidAmt);
+        totalVal += netAmt;
+        totalPaid += paidAmt;
+        totalBal += balAmt;
+
+        let statusBadge = '<span class="stock-badge-critical" style="font-size:10px; padding:2px 6px;">UNPAID</span>';
+        if (paidAmt >= netAmt && netAmt > 0) {
+          statusBadge = '<span class="stock-badge-optimal" style="font-size:10px; padding:2px 6px;">PAID</span>';
+        } else if (paidAmt > 0) {
+          statusBadge = '<span class="stock-badge-warning" style="font-size:10px; padding:2px 6px;">PARTIAL</span>';
+        }
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="text-align: center; color: #64748b;">${idx + 1}</td>
+          <td>${vch.voucher_date || vch.created_at?.slice(0, 10)}</td>
+          <td style="font-weight: 700; color: #1e3a8a;">${vch.vch_no}</td>
+          <td style="font-weight: 600;">${vch.supplier_invoice_no}</td>
+          <td>${escapeHtml(vch.supplier_name || "Supplier")}</td>
+          <td style="text-align: center;">${vch.item_count || "-"}</td>
+          <td style="text-align: right;">₹ ${(parseFloat(vch.tax_amount) || 0).toFixed(2)}</td>
+          <td style="text-align: right; font-weight: 800; color: #0f172a;">₹ ${netAmt.toFixed(2)}</td>
+          <td style="text-align: right; color: #16a34a;">₹ ${paidAmt.toFixed(2)}</td>
+          <td style="text-align: right; font-weight: 700; color: ${balAmt > 0 ? "#dc2626" : "#475569"};">₹ ${balAmt.toFixed(2)}</td>
+          <td style="text-align: center;">${statusBadge}</td>
+          <td style="text-align: center;">
+            <button type="button" class="btn-classic pur-view-btn" data-id="${vch.id}" style="padding: 2px 6px; font-size: 11px; margin-right: 3px;" title="View Details">View</button>
+            <button type="button" class="btn-classic pur-modify-btn" data-id="${vch.id}" style="padding: 2px 6px; font-size: 11px; margin-right: 3px;" title="Modify Voucher">Modify</button>
+            <button type="button" class="btn-classic pur-print-btn" data-id="${vch.id}" style="padding: 2px 6px; font-size: 11px; background: #eff6ff; border-color: #93c5fd; color: #1d4ed8;" title="Print A4 Voucher">Print</button>
+          </td>
+        `;
+
+        tr.querySelector(".pur-view-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          viewPurchaseVoucherDetails(vch.id);
+        });
+
+        tr.querySelector(".pur-modify-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          openModifyPurchaseVoucher(vch.id);
+        });
+
+        tr.querySelector(".pur-print-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          openPrintPurchaseVoucher(vch.id);
+        });
+
+        tr.addEventListener("dblclick", () => {
+          openModifyPurchaseVoucher(vch.id);
+        });
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    if (totalValEl) totalValEl.textContent = `₹ ${totalVal.toFixed(2)}`;
+    if (totalPaidEl) totalPaidEl.textContent = `₹ ${totalPaid.toFixed(2)}`;
+    if (totalBalEl) totalBalEl.textContent = `₹ ${totalBal.toFixed(2)}`;
+  };
+
+  if (window.backend.listPurchaseVouchersFiltered) {
+    window.backend.listPurchaseVouchersFiltered(activeCompany.id, search, fromDate, toDate, supplierId, status, (resp) => {
+      try {
+        handleData(JSON.parse(resp));
+      } catch (e) {
+        console.error("Error listing filtered purchase vouchers:", e);
+      }
+    });
+  } else if (window.backend.listPurchaseVouchers) {
+    window.backend.listPurchaseVouchers(activeCompany.id, (resp) => {
+      try {
+        handleData(JSON.parse(resp));
+      } catch (e) {
+        console.error("Error listing purchase vouchers:", e);
+      }
+    });
+  }
+}
+
+// --- Purchase Voucher Print & View Modal ---
+function openPrintPurchaseVoucher(voucherId) {
+  if (!activeCompany || !window.backend || !window.backend.getPurchaseVoucherPrintHtml) return;
+  const modal = document.getElementById("modal-print-purchase-voucher");
+  const frame = document.getElementById("pur-print-preview-frame");
+  if (!modal || !frame) return;
+
+  currentPrintVoucherId = voucherId;
+  frame.innerHTML = `<div style="text-align:center; padding:40px; color:#64748b; font-size:14px;">Preparing A4 Purchase Voucher Layout...</div>`;
+  modal.style.display = "flex";
+
+  window.backend.getPurchaseVoucherPrintHtml(activeCompany.id, voucherId, (resp) => {
     try {
       const r = JSON.parse(resp);
-      if (r.success && Array.isArray(r.data)) {
-        if (r.data.length === 0) {
-          if (tbody) tbody.innerHTML = "";
-          if (emptyMsg) emptyMsg.style.display = "block";
-          if (countLabel) countLabel.textContent = "Total Vouchers: 0";
-          if (totalValEl) totalValEl.textContent = "₹ 0.00";
-          return;
-        }
-
-        if (emptyMsg) emptyMsg.style.display = "none";
-        if (countLabel) countLabel.textContent = `Total Vouchers: ${r.data.length}`;
-        let totalVal = 0;
-
-        if (tbody) {
-          tbody.innerHTML = "";
-          r.data.forEach((vch, idx) => {
-            const netAmt = parseFloat(vch.grand_total) || 0;
-            totalVal += netAmt;
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td style="text-align: center;">${idx + 1}</td>
-              <td>${vch.voucher_date || vch.created_at?.slice(0, 10)}</td>
-              <td style="font-weight: 700; color: #1e3a8a;">${vch.vch_no}</td>
-              <td style="font-weight: 600;">${vch.supplier_invoice_no}</td>
-              <td>${escapeHtml(vch.supplier_name || "Supplier")}</td>
-              <td style="text-align: center;">${vch.item_count || "-"}</td>
-              <td style="text-align: right;">₹ ${(parseFloat(vch.tax_amount) || 0).toFixed(2)}</td>
-              <td style="text-align: right; font-weight: 800; color: #0f172a;">₹ ${netAmt.toFixed(2)}</td>
-              <td style="text-align: center;"><span class="stock-badge-optimal">POSTED</span></td>
-              <td style="text-align: center;">
-                <button type="button" class="btn-classic pur-modify-btn" data-id="${vch.id}" style="padding: 2px 8px; font-size: 11px; margin-right: 4px;">Modify</button>
-                <button type="button" class="btn-classic pur-view-btn" data-id="${vch.id}" style="padding: 2px 8px; font-size: 11px;">View</button>
-              </td>
-            `;
-
-            tr.querySelector(".pur-modify-btn").addEventListener("click", (e) => {
-              e.stopPropagation();
-              openModifyPurchaseVoucher(vch.id);
-            });
-
-            tr.querySelector(".pur-view-btn").addEventListener("click", (e) => {
-              e.stopPropagation();
-              viewPurchaseVoucherDetails(vch.id);
-            });
-
-            tr.addEventListener("dblclick", () => {
-              openModifyPurchaseVoucher(vch.id);
-            });
-
-            tbody.appendChild(tr);
-          });
-        }
-        if (totalValEl) totalValEl.textContent = `₹ ${totalVal.toFixed(2)}`;
+      if (r.success && r.html) {
+        frame.innerHTML = r.html;
+      } else {
+        frame.innerHTML = `<div style="padding:20px; color:#ef4444;">Failed to generate print layout: ${r.error || "Unknown error"}</div>`;
       }
     } catch (e) {
-      console.error("Error listing purchase vouchers:", e);
+      frame.innerHTML = `<div style="padding:20px; color:#ef4444;">Error rendering print voucher: ${e.message}</div>`;
     }
   });
 }
 
 function viewPurchaseVoucherDetails(voucherId) {
-  if (!activeCompany || !window.backend || !window.backend.getPurchaseVoucherDetails) return;
-  window.backend.getPurchaseVoucherDetails(activeCompany.id, voucherId, (resp) => {
-    try {
-      const r = JSON.parse(resp);
-      if (r.success && r.data) {
-        const vch = r.data;
-        let msg = `PURCHASE VOUCHER: ${vch.vch_no}\n`;
-        msg += `Supplier: ${vch.supplier_name}\n`;
-        msg += `Supplier Bill: ${vch.supplier_invoice_no} (${vch.supplier_invoice_date})\n`;
-        msg += `Date: ${vch.voucher_date}\n\nITEMS:\n`;
-        (vch.items || []).forEach((it, i) => {
-          msg += `${i+1}. ${it.name} | Qty: ${it.quantity} ${it.unit || ''} | Rate: ₹${it.purchase_price} | Tax: ₹${it.tax_amount} | Total: ₹${it.total_amount}\n`;
-        });
-        msg += `\nSubtotal: ₹${vch.subtotal}\n`;
-        msg += `CGST: ₹${vch.cgst_amount} | SGST: ₹${vch.sgst_amount} | Round Off: ₹${vch.round_off}\n`;
-        msg += `GRAND TOTAL: ₹${vch.grand_total}\n`;
-        msg += `Payment Mode: ${vch.payment_mode || 'CREDIT'}\n`;
-        alert(msg);
-      }
-    } catch (e) {
-      console.error("Error viewing voucher details:", e);
-    }
-  });
+  openPrintPurchaseVoucher(voucherId);
 }
 
 // --- Supplier Master ---
@@ -9269,13 +9602,22 @@ function saveSupplierMaster() {
     return;
   }
 
+  const phone = (document.getElementById("sup-form-phone")?.value || "").trim();
+  if (phone) {
+    if (!/^\d{10}$/.test(phone)) {
+      alert("Invalid phone number: Supplier contact phone must be exactly 10 numeric digits.");
+      document.getElementById("sup-form-phone")?.focus();
+      return;
+    }
+  }
+
   const payload = {
     id: document.getElementById("sup-form-id")?.value || undefined,
     code: document.getElementById("sup-form-code")?.value.trim() || undefined,
     name: name,
     gstin: document.getElementById("sup-form-gstin")?.value.trim().toUpperCase() || undefined,
     pan: document.getElementById("sup-form-pan")?.value.trim().toUpperCase() || undefined,
-    phone: document.getElementById("sup-form-phone")?.value.trim() || undefined,
+    phone: phone || undefined,
     email: document.getElementById("sup-form-email")?.value.trim() || undefined,
     address: document.getElementById("sup-form-address")?.value.trim() || undefined,
     city: document.getElementById("sup-form-city")?.value.trim() || undefined,
@@ -10206,7 +10548,7 @@ function setupEnterpriseErpEventListeners() {
   const purHandling = document.getElementById("pur-handling-exp");
   if (purHandling) purHandling.addEventListener("input", calcPurchaseTotals);
 
-  // Purchase Register Buttons
+  // Purchase Register Buttons & Dynamic Filter Controls
   const btnPurListBack = document.getElementById("btn-pur-list-back");
   if (btnPurListBack) btnPurListBack.addEventListener("click", () => showScreen("view-dashboard"));
   const btnPurListClose = document.getElementById("btn-pur-list-close");
@@ -10215,6 +10557,160 @@ function setupEnterpriseErpEventListeners() {
   if (btnPurListAddNew) btnPurListAddNew.addEventListener("click", () => showScreen("view-purchase-entry"));
   const btnPurListRefresh = document.getElementById("btn-pur-list-refresh");
   if (btnPurListRefresh) btnPurListRefresh.addEventListener("click", renderPurchaseRegister);
+
+  // Search input with debounce
+  const purListSearch = document.getElementById("pur-list-search");
+  if (purListSearch) {
+    purListSearch.addEventListener("input", () => {
+      if (purListDebounceTimer) clearTimeout(purListDebounceTimer);
+      purListDebounceTimer = setTimeout(renderPurchaseRegister, 250);
+    });
+  }
+
+  // Date range and supplier/status filters
+  const purListFromDate = document.getElementById("pur-list-from-date");
+  if (purListFromDate) purListFromDate.addEventListener("change", renderPurchaseRegister);
+  const purListToDate = document.getElementById("pur-list-to-date");
+  if (purListToDate) purListToDate.addEventListener("change", renderPurchaseRegister);
+  const purListSupplierFilter = document.getElementById("pur-list-supplier-filter");
+  if (purListSupplierFilter) purListSupplierFilter.addEventListener("change", renderPurchaseRegister);
+  const purListStatusFilter = document.getElementById("pur-list-status-filter");
+  if (purListStatusFilter) purListStatusFilter.addEventListener("change", renderPurchaseRegister);
+
+  const btnPurListResetFilters = document.getElementById("btn-pur-list-reset-filters");
+  if (btnPurListResetFilters) {
+    btnPurListResetFilters.addEventListener("click", () => {
+      if (purListSearch) purListSearch.value = "";
+      if (purListFromDate) purListFromDate.value = "";
+      if (purListToDate) purListToDate.value = "";
+      if (purListSupplierFilter) purListSupplierFilter.value = "";
+      if (purListStatusFilter) purListStatusFilter.value = "";
+      renderPurchaseRegister();
+    });
+  }
+
+  // Rate Precedence & Price History Modal Event Listeners
+  const btnPurViewRateHist = document.getElementById("btn-pur-view-item-rate-history");
+  if (btnPurViewRateHist) {
+    btnPurViewRateHist.addEventListener("click", () => {
+      openItemPurchasePriceHistoryModal(currentSelectedPurchaseItemId, currentSelectedPurchaseItemName);
+    });
+  }
+  const btnClosePurPriceHist = document.getElementById("btn-close-purchase-price-history-modal");
+  if (btnClosePurPriceHist) {
+    btnClosePurPriceHist.addEventListener("click", () => {
+      const modal = document.getElementById("modal-purchase-price-history");
+      if (modal) modal.style.display = "none";
+    });
+  }
+
+  // Post-Posting Saved Confirmation Modal Event Listeners
+  const btnClosePurSaved = document.getElementById("btn-close-purchase-saved-modal");
+  if (btnClosePurSaved) {
+    btnClosePurSaved.addEventListener("click", () => {
+      const modal = document.getElementById("modal-purchase-saved");
+      if (modal) modal.style.display = "none";
+    });
+  }
+  const btnPurSavedNew = document.getElementById("btn-pur-saved-new");
+  if (btnPurSavedNew) {
+    btnPurSavedNew.addEventListener("click", () => {
+      const modal = document.getElementById("modal-purchase-saved");
+      if (modal) modal.style.display = "none";
+      purchaseItemsData = [ createEmptyPurchaseItem() ];
+      initPurchaseEntryScreen();
+    });
+  }
+  const btnPurSavedRegister = document.getElementById("btn-pur-saved-register");
+  if (btnPurSavedRegister) {
+    btnPurSavedRegister.addEventListener("click", () => {
+      const modal = document.getElementById("modal-purchase-saved");
+      if (modal) modal.style.display = "none";
+      showScreen("view-purchase-list");
+    });
+  }
+  const btnPurSavedPrint = document.getElementById("btn-pur-saved-print");
+  if (btnPurSavedPrint) {
+    btnPurSavedPrint.addEventListener("click", () => {
+      const modal = document.getElementById("modal-purchase-saved");
+      if (modal) modal.style.display = "none";
+      if (lastSavedPurchaseVoucherId) {
+        openPrintPurchaseVoucher(lastSavedPurchaseVoucherId);
+      }
+    });
+  }
+
+  // Print Preview Modal Event Listeners
+  const btnClosePrintPur = document.getElementById("btn-close-print-purchase-modal");
+  if (btnClosePrintPur) {
+    btnClosePrintPur.addEventListener("click", () => {
+      const modal = document.getElementById("modal-print-purchase-voucher");
+      if (modal) modal.style.display = "none";
+    });
+  }
+  const btnPurPrintBrowser = document.getElementById("btn-pur-print-browser");
+  if (btnPurPrintBrowser) {
+    btnPurPrintBrowser.addEventListener("click", () => {
+      const frame = document.getElementById("pur-print-preview-frame");
+      if (!frame) return;
+      const printWin = window.open("", "_blank", "width=850,height=1000");
+      if (printWin) {
+        printWin.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Purchase Voucher Print</title>
+              <style>
+                @page { size: A4 portrait; margin: 10mm; }
+                body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+              </style>
+            </head>
+            <body onload="window.print();">
+              ${frame.innerHTML}
+            </body>
+          </html>
+        `);
+        printWin.document.close();
+      } else {
+        window.print();
+      }
+    });
+  }
+  const btnPurPrintPdf = document.getElementById("btn-pur-print-pdf");
+  if (btnPurPrintPdf) {
+    btnPurPrintPdf.addEventListener("click", () => {
+      if (btnPurPrintPdf.disabled) return;
+      if (!currentPrintVoucherId || !activeCompany || !window.backend || !window.backend.printPurchaseVoucher) {
+        alert("Cannot generate PDF: No active company or purchase voucher selected.");
+        return;
+      }
+      const format = document.getElementById("pur-print-format-select")?.value || "A4";
+      const copies = parseInt(document.getElementById("pur-print-copies")?.value || "1", 10);
+      btnPurPrintPdf.disabled = true;
+      btnPurPrintPdf.textContent = "Generating PDF...";
+      try {
+        window.backend.printPurchaseVoucher(activeCompany.id, currentPrintVoucherId, format, copies, "", (resp) => {
+          btnPurPrintPdf.disabled = false;
+          btnPurPrintPdf.textContent = "Generate & Save PDF";
+          try {
+            const r = typeof resp === "string" ? JSON.parse(resp) : resp;
+            if (r.success) {
+              const savedFilename = r.filename || (r.filepath ? r.filepath.split(/[/\\]/).pop() : "Purchase_Voucher.pdf");
+              showNotification(`Saved to Downloads & opened: ${savedFilename}`);
+            } else {
+              alert(`Failed to generate PDF: ${r.error || "Unknown error"}`);
+            }
+          } catch (e) {
+            alert(`Error parsing PDF response: ${e.message}`);
+          }
+        });
+      } catch (err) {
+        btnPurPrintPdf.disabled = false;
+        btnPurPrintPdf.textContent = "Generate & Save PDF";
+        alert(`Error invoking PDF generator: ${err.message}`);
+      }
+    });
+  }
 
   // Supplier Master Buttons
   const btnSupBack = document.getElementById("btn-supplier-master-back");
@@ -10243,6 +10739,48 @@ function setupEnterpriseErpEventListeners() {
   });
   const btnSaveSupModal = document.getElementById("btn-save-supplier-modal");
   if (btnSaveSupModal) btnSaveSupModal.addEventListener("click", saveSupplierMaster);
+
+  // Supplier Form Phone strict 10-digit limit and validation
+  const supFormPhoneInput = document.getElementById("sup-form-phone");
+  if (supFormPhoneInput) {
+    supFormPhoneInput.addEventListener("keydown", (e) => {
+      const allowedKeys = ["Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Enter"];
+      if (allowedKeys.includes(e.key) || e.ctrlKey || e.metaKey) {
+        return;
+      }
+      if (!/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        return;
+      }
+      const currentVal = supFormPhoneInput.value || "";
+      const selectionLen = (supFormPhoneInput.selectionEnd || 0) - (supFormPhoneInput.selectionStart || 0);
+      if (currentVal.length >= 10 && selectionLen === 0) {
+        e.preventDefault();
+      }
+    });
+
+    supFormPhoneInput.addEventListener("paste", (e) => {
+      const pasteData = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+      if (!pasteData) return;
+      if (!/^\d+$/.test(pasteData)) {
+        e.preventDefault();
+        alert("Invalid input: Phone number must contain numeric digits only. Letters and special characters are not allowed.");
+        return;
+      }
+      if (pasteData.length !== 10) {
+        e.preventDefault();
+        alert(`Invalid phone number length: Pasted ${pasteData.length} digits. Supplier phone number must be exactly 10 digits.`);
+        return;
+      }
+    });
+
+    supFormPhoneInput.addEventListener("input", () => {
+      const val = supFormPhoneInput.value;
+      if (/[^\d]/.test(val)) {
+        supFormPhoneInput.value = val.replace(/[^\d]/g, "").slice(0, 10);
+      }
+    });
+  }
 
   // Supplier Ledger Modal
   const btnCloseSupLedger = document.getElementById("btn-close-supplier-ledger");
@@ -11242,6 +11780,18 @@ function setupThreeOptionWorkflowListeners() {
   }
 
   // Purchase Modify Modal
+  const btnPurOpenModify = document.getElementById("btn-pur-open-modify-modal");
+  if (btnPurOpenModify) {
+    btnPurOpenModify.addEventListener("click", () => {
+      openModal("modal-select-purchase-modify");
+      const sIn = document.getElementById("purchase-modify-modal-search");
+      if (sIn) {
+        sIn.value = "";
+        sIn.focus();
+      }
+      renderSelectPurchaseModifyModal();
+    });
+  }
   const btnClosePurMod = document.getElementById("btn-close-purchase-modify-modal");
   if (btnClosePurMod) btnClosePurMod.addEventListener("click", () => closeModal("modal-select-purchase-modify"));
   const purModSearch = document.getElementById("purchase-modify-modal-search");
@@ -11254,6 +11804,23 @@ function setupThreeOptionWorkflowListeners() {
       renderSelectPurchaseModifyModal();
     });
   }
+
+  // F2 Shortcut for Purchase Modify Search
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F2") {
+      const purScreen = document.getElementById("view-purchase-entry");
+      if (purScreen && (purScreen.classList.contains("active") || purScreen.style.display === "block" || purScreen.style.display === "flex")) {
+        e.preventDefault();
+        openModal("modal-select-purchase-modify");
+        const sIn = document.getElementById("purchase-modify-modal-search");
+        if (sIn) {
+          sIn.value = "";
+          sIn.focus();
+        }
+        renderSelectPurchaseModifyModal();
+      }
+    }
+  });
 }
 
 // Global Exports

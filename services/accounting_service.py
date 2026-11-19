@@ -6,6 +6,7 @@ Trial Balance, and Profit & Loss statements.
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from db.database import db_manager, DatabaseManager
+from services.company_service import resolve_cached_company_id
 from core.logging_config import logger
 
 
@@ -14,19 +15,8 @@ class AccountingService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
-        Rejects missing, empty, or unresolvable company contexts."""
-        cid = str(company_id or "").strip()
-        if not cid:
-            raise ValueError("Company context is required. Missing company identifier.")
-
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-            c_row = cursor.fetchone()
-            if c_row:
-                return c_row["id"]
-        raise ValueError(f"Invalid company context: '{cid}' not found.")
+        """Resolve company UUID whether passed UUID or company code with in-memory caching."""
+        return resolve_cached_company_id(self.db, company_id)
 
     def get_chart_of_accounts(self, company_id: str) -> List[Dict[str, Any]]:
         """Returns standard chart of accounts grouped by accounting nature."""

@@ -479,6 +479,8 @@ class PurchaseVoucher(Base):
     gross_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     discount_total: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     additional_expenses: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    freight_charges: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    handling_charges: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     taxable_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     cgst_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     sgst_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
@@ -527,11 +529,41 @@ class PurchaseVoucherItem(Base):
     sgst_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     igst_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     cess_amount: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    landed_cost: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     line_total: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     batch_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     expiry_date: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     voucher: Mapped["PurchaseVoucher"] = relationship("PurchaseVoucher", back_populates="items")
+
+
+class PurchasePriceHistory(Base):
+    __tablename__ = "purchase_price_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
+    item_id: Mapped[str] = mapped_column(String(36), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True)
+    supplier_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
+    voucher_id: Mapped[str] = mapped_column(String(36), ForeignKey("purchase_vouchers.id", ondelete="CASCADE"), nullable=False, index=True)
+    voucher_number: Mapped[str] = mapped_column(String(50), nullable=False)
+    supplier_invoice_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    purchase_date: Mapped[str] = mapped_column(String(20), nullable=False)
+    purchase_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    discount_percent: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    tax_rate: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    landed_cost: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    previous_rate: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    is_revision: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
+    revision_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+
+    __table_args__ = (
+        Index("idx_pph_lookup", "company_id", "item_id", "supplier_id", "purchase_date"),
+        Index("idx_pph_item_date", "company_id", "item_id", "purchase_date"),
+        Index("idx_pph_voucher", "voucher_id"),
+    )
 
 
 # ==============================================================================

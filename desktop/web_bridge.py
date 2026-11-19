@@ -3,6 +3,7 @@ Safe Qt WebChannel Bridge for Anti Matrix Billing ERP.
 Exposes specific, validated Python service methods to the JavaScript frontend.
 Never allows arbitrary SQL or unrestricted system access.
 """
+import os
 import json
 import uuid
 from datetime import datetime, timezone
@@ -10,6 +11,17 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import secrets
 from PyQt5.QtCore import QObject, pyqtSlot, pyqtSignal
+try:
+    from PyQt5.QtCore import QStandardPaths, QUrl
+except ImportError:
+    QStandardPaths = None
+    QUrl = None
+
+try:
+    from PyQt5.QtGui import QDesktopServices
+except ImportError:
+    QDesktopServices = None
+
 from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLineEdit
 try:
     from PyQt5.QtPrintSupport import QPrinterInfo
@@ -107,6 +119,16 @@ class BackendBridge(QObject):
     def _require_authenticated(self) -> Dict[str, Any]:
         """Verify that an authenticated backend session exists."""
         if not self._authenticated_session:
+            if self._traditional_session:
+                validated = traditional_session_registry.get_session(self._traditional_session.token)
+                if validated:
+                    self._traditional_session = validated
+                    return {
+                        "company_id": validated.company_id,
+                        "company_code": getattr(validated, "company_code", "") or validated.company_id,
+                        "user_id": validated.user_id,
+                        "role": validated.role_name
+                    }
             raise PermissionError("Authentication required: No active authenticated session.")
         return self._authenticated_session
 
@@ -116,14 +138,31 @@ class BackendBridge(QObject):
         matches the authenticated session's company.
         Returns the trusted canonical company UUID.
         """
-        session = self._require_authenticated()
         req_cid = str(requested_company_id or "").strip()
         if not req_cid:
             raise ValueError("Company context is required: Missing company identifier.")
+        req_cid_lower = req_cid.lower()
 
+        # Check Traditional session first if it matches requested company
+        if self._traditional_session:
+            validated = traditional_session_registry.get_session(self._traditional_session.token)
+            if validated:
+                self._traditional_session = validated
+                trad_cid = str(validated.company_id or "").strip().lower()
+                trad_code = str(getattr(validated, "company_code", "") or "").strip().lower()
+                if req_cid_lower == trad_cid or req_cid_lower == trad_code:
+                    return validated.company_id
+
+        # Check Authenticated session (Fast Billing)
+        if self._authenticated_session:
+            fast_cid = str(self._authenticated_session.get("company_id") or "").strip().lower()
+            fast_code = str(self._authenticated_session.get("company_code") or "").strip().lower()
+            if req_cid_lower == fast_cid or req_cid_lower == fast_code:
+                return self._authenticated_session["company_id"]
+
+        session = self._require_authenticated()
         session_cid = str(session.get("company_id") or "").strip().lower()
         session_code = str(session.get("company_code") or "").strip().lower()
-        req_cid_lower = req_cid.lower()
 
         if req_cid_lower != session_cid and req_cid_lower != session_code:
             raise PermissionError(
@@ -828,6 +867,7 @@ class BackendBridge(QObject):
             res = purchase_service.create_purchase_voucher(auth_cid, data)
             return json.dumps({"success": True, "data": res})
         except Exception as e:
+            logger.error(f"Error creating purchase voucher: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
     @pyqtSlot(str, str, str, result=str)
@@ -843,18 +883,51 @@ class BackendBridge(QObject):
 
     @pyqtSlot(str, str, result=str)
     def deletePurchaseVoucher(self, company_id: str, voucher_id: str) -> str:
-        try:
-            auth_cid = self._require_authorized_company(company_id)
-            purchase_service.delete_purchase_voucher(auth_cid, voucher_id)
-            return json.dumps({"success": True, "message": "Purchase voucher deleted."})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
+        # STRICT MANDATORY PROHIBITION: Posted purchase vouchers must NEVER be deleted or cancelled.
+        logger.warning(f"Attempt to delete purchase voucher {voucher_id} blocked by security policy.")
+        return json.dumps({
+            "success": False,
+            "error": "CRITICAL SECURITY RESTRICTION: Posted purchase vouchers must NEVER be deleted or cancelled. (Modifications are permitted with audit reconciliation)."
+        })
+
+    @pyqtSlot(str, str, result=str)
+    def cancelPurchaseVoucher(self, company_id: str, voucher_id: str) -> str:
+        # STRICT MANDATORY PROHIBITION: Posted purchase vouchers must NEVER be deleted or cancelled.
+        logger.warning(f"Attempt to cancel purchase voucher {voucher_id} blocked by security policy.")
+        return json.dumps({
+            "success": False,
+            "error": "CRITICAL SECURITY RESTRICTION: Posted purchase vouchers must NEVER be deleted or cancelled."
+        })
 
     @pyqtSlot(str, result=str)
     def listPurchaseVouchers(self, company_id: str) -> str:
         try:
             auth_cid = self._require_authorized_company(company_id)
             res = purchase_service.list_purchase_vouchers(auth_cid)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, str, str, str, result=str)
+    def listPurchaseVouchersFiltered(
+        self,
+        company_id: str,
+        search: str = "",
+        from_date: str = "",
+        to_date: str = "",
+        supplier_id: str = "",
+        status: str = ""
+    ) -> str:
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = purchase_service.list_purchase_vouchers(
+                auth_cid,
+                search_query=search or None,
+                from_date=from_date or None,
+                to_date=to_date or None,
+                supplier_id=supplier_id or None,
+                status=status or None
+            )
             return json.dumps({"success": True, "data": res})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
@@ -867,6 +940,202 @@ class BackendBridge(QObject):
             return json.dumps({"success": True, "data": res})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def getLatestPurchaseRate(self, company_id: str, item_id: str, supplier_id: str = "") -> str:
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = purchase_service.get_latest_purchase_rate(auth_cid, item_id, supplier_id or None)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getPurchasePriceHistory(self, company_id: str, item_id: str) -> str:
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = purchase_service.get_item_purchase_history(auth_cid, item_id)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, result=str)
+    def listGodowns(self, company_id: str) -> str:
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            res = purchase_service.list_godowns(auth_cid)
+            return json.dumps({"success": True, "data": res})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def getPurchaseVoucherPrintHtml(self, company_id: str, voucher_id: str) -> str:
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            vch = purchase_service.get_purchase_voucher_details(auth_cid, voucher_id)
+            if not vch:
+                return json.dumps({"success": False, "error": "Purchase voucher not found."})
+
+            company_info = {}
+            if self._traditional_session:
+                try:
+                    c = self._traditional_company_service.get_company(auth_cid)
+                    if c:
+                        company_info = {
+                            "name": c.get("name") or c.get("legal_name") or "Anti-Matrix Billing",
+                            "address": c.get("address") or "",
+                            "gstin": c.get("gstin") or "",
+                            "state": c.get("state") or "",
+                            "phone": c.get("phone") or "",
+                            "email": c.get("email") or "",
+                        }
+                except Exception:
+                    pass
+            if not company_info.get("name"):
+                try:
+                    cfg = company_service.get_config(auth_cid)
+                    company_info = {
+                        "name": cfg.get("company_name", "Anti-Matrix Billing"),
+                        "address": cfg.get("address", ""),
+                        "gstin": cfg.get("gstin", ""),
+                        "state": cfg.get("state", ""),
+                        "phone": cfg.get("phone", ""),
+                        "email": cfg.get("email", ""),
+                    }
+                except Exception:
+                    company_info = {"name": "Anti-Matrix Enterprises"}
+
+            html = printing_service.format_purchase_voucher_html(vch, company_info)
+            return json.dumps({"success": True, "html": html, "voucher": vch, "company": company_info})
+        except Exception as e:
+            logger.error(f"Error generating purchase print HTML: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, str, int, str, result=str)
+    def printPurchaseVoucher(
+        self,
+        company_id: str,
+        voucher_id: str,
+        paper_format: str = "A4",
+        copies: int = 1,
+        printer_name: str = ""
+    ) -> str:
+        """
+        Generates an authentic A4 Purchase Voucher PDF, saves it directly to the user's
+        operating system Downloads folder with collision avoidance, and automatically
+        opens the generated PDF in the default PDF application.
+        """
+        try:
+            auth_cid = self._require_authorized_company(company_id)
+            vch = purchase_service.get_purchase_voucher_details(auth_cid, voucher_id)
+            if not vch:
+                return json.dumps({"success": False, "error": "Purchase voucher not found."})
+
+            company_info = {}
+            if self._traditional_session:
+                try:
+                    c = self._traditional_company_service.get_company(auth_cid)
+                    if c:
+                        company_info = {
+                            "name": c.get("name") or c.get("legal_name") or "Anti-Matrix Billing",
+                            "address": c.get("address") or "",
+                            "gstin": c.get("gstin") or "",
+                            "state": c.get("state") or "",
+                            "phone": c.get("phone") or "",
+                            "email": c.get("email") or "",
+                        }
+                except Exception:
+                    pass
+            if not company_info.get("name"):
+                try:
+                    cfg = company_service.get_config(auth_cid)
+                    company_info = {
+                        "name": cfg.get("company_name", "Anti-Matrix Billing"),
+                        "address": cfg.get("address", ""),
+                        "gstin": cfg.get("gstin", ""),
+                        "state": cfg.get("state", ""),
+                        "phone": cfg.get("phone", ""),
+                        "email": cfg.get("email", ""),
+                    }
+                except Exception:
+                    company_info = {"name": "Anti-Matrix Enterprises"}
+
+            # Resolve OS Downloads directory dynamically
+            downloads_dir = None
+            if QStandardPaths:
+                try:
+                    dl_str = QStandardPaths.writableLocation(QStandardPaths.DownloadLocation)
+                    if dl_str:
+                        downloads_dir = Path(dl_str)
+                except Exception as e:
+                    logger.warning(f"Error querying QStandardPaths.DownloadLocation: {e}")
+
+            if not downloads_dir:
+                downloads_dir = Path.home() / "Downloads"
+
+            downloads_dir.mkdir(parents=True, exist_ok=True)
+
+            # Build sanitized filename and handle duplicate file collisions cleanly
+            vch_no_raw = str(vch.get("vch_no") or "PUR-000000").strip()
+            clean_vch_no = "".join(c for c in vch_no_raw if c.isalnum() or c in "-_") or "PUR-000000"
+            base_filename = f"Purchase_Voucher_{clean_vch_no}"
+            out_file = downloads_dir / f"{base_filename}.pdf"
+
+            if out_file.exists():
+                idx = 1
+                while out_file.exists():
+                    out_file = downloads_dir / f"{base_filename}_{idx}.pdf"
+                    idx += 1
+
+            # Generate genuine A4 PDF
+            printing_service.generate_pdf_purchase_voucher(vch, out_file, company_info)
+
+            # Verify file exists on disk and is non-empty
+            if not out_file.exists() or out_file.stat().st_size == 0:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Failed to generate purchase voucher PDF: target file is missing or empty at {out_file}"
+                })
+
+            # Auto-open generated PDF using operating system's default PDF application
+            opened = False
+            abs_pdf_path = str(out_file.resolve())
+
+            if QDesktopServices and QUrl:
+                try:
+                    opened = bool(QDesktopServices.openUrl(QUrl.fromLocalFile(abs_pdf_path)))
+                    logger.info(f"QDesktopServices.openUrl({abs_pdf_path}) -> {opened}")
+                except Exception as e:
+                    logger.warning(f"QDesktopServices failed to open PDF: {e}")
+
+            if not opened and hasattr(os, "startfile"):
+                try:
+                    os.startfile(abs_pdf_path)
+                    opened = True
+                    logger.info(f"os.startfile({abs_pdf_path}) succeeded")
+                except Exception as e:
+                    logger.warning(f"os.startfile failed for {abs_pdf_path}: {e}")
+
+            html = printing_service.format_purchase_voucher_html(vch, company_info)
+            return json.dumps({
+                "success": True,
+                "message": f"Purchase voucher PDF saved to Downloads and opened successfully.",
+                "filename": out_file.name,
+                "filepath": str(out_file),
+                "downloads_dir": str(downloads_dir),
+                "opened": opened,
+                "html": html
+            })
+        except Exception as e:
+            logger.error(f"Error printing purchase voucher: {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @pyqtSlot(str, str, result=str)
+    def generatePurchaseVoucherPdf(self, company_id: str, voucher_id: str) -> str:
+        """
+        Convenience slot: generates, saves to Downloads, and auto-opens purchase voucher PDF.
+        """
+        return self.printPurchaseVoucher(company_id, voucher_id, "A4", 1, "")
 
     @pyqtSlot(str, str, result=str)
     def createPurchaseReturn(self, company_id: str, json_data: str) -> str:

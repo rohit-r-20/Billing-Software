@@ -5,6 +5,7 @@ Manages Items, Units, HSN, Tax Categories, and Multi-Barcode Lookup.
 import uuid
 from typing import Dict, Any, List, Optional, Union
 from db.database import db_manager, DatabaseManager
+from services.company_service import resolve_cached_company_id
 from core.logging_config import logger
 
 
@@ -13,19 +14,8 @@ class CatalogueService:
         self.db = db or db_manager
 
     def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
-        Rejects missing, empty, or unresolvable company contexts."""
-        cid = str(company_id or "").strip()
-        if not cid:
-            raise ValueError("Company context is required. Missing company identifier.")
-
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-            c_row = cursor.fetchone()
-            if c_row:
-                return c_row["id"]
-        raise ValueError(f"Invalid company context: '{cid}' not found.")
+        """Resolve company UUID whether passed UUID or company code with in-memory caching."""
+        return resolve_cached_company_id(self.db, company_id)
 
     def _compute_is_verified(self, res: Dict[str, Any]) -> int:
         """Determines if product is verified and safe for checkout."""

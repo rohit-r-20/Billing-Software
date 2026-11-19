@@ -2137,6 +2137,17 @@
             </div>
           </div>
 
+          <!-- Purchase Rate Precedence & History Info Strip -->
+          <div id="pur-rate-info-strip" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 6px 12px; margin-bottom: 8px; font-size: 12px; color: #1e40af; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; color: #1e3a8a;">Rate Precedence:</span>
+              <span id="pur-rate-info-text">Product: - | Source: - | Rate: ₹0.00</span>
+            </div>
+            <button type="button" class="btn-classic" id="btn-pur-view-item-rate-history" style="padding: 2px 8px; font-size: 11px; background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; font-weight: 700;">
+              View Full Price History
+            </button>
+          </div>
+
           <!-- Purchase Grid Table -->
           <div class="voucher-grid-panel" style="flex: 1; min-height: 250px; background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;">
             <div class="vch-table-wrapper" style="flex: 1; overflow-y: auto;">
@@ -2214,6 +2225,7 @@
             <span id="pur-items-count-label" style="font-size: 12px; font-weight: 700; color: #1e40af;">Items: 0 | Total Qty: 0</span>
             <div style="display: flex; gap: 8px;">
               <button type="button" class="btn-classic" id="btn-pur-reset">Reset / Clear</button>
+              <button type="button" class="btn-classic" id="btn-pur-open-modify-modal">Find / Modify (F2)</button>
               <button type="button" class="btn-classic" id="btn-pur-register-nav">View Purchase Register (F5)</button>
               <button type="button" class="btn-classic primary-action-btn" id="btn-pur-save-post" style="background: #15803d; border-color: #166534; font-size: 13px; font-weight: 800; padding: 6px 20px;">
                 Post Purchase Voucher
@@ -2241,29 +2253,53 @@
         </div>
 
         <div class="master-form-body">
-          <div class="items-list-filter-bar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
-            <div class="items-search-box" style="flex: 1;">
+          <div class="items-list-filter-bar" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 4px;">
+            <div class="items-search-box" style="flex: 2; min-width: 200px;">
               <span class="search-icon" style="font-size: 11px; font-weight: 700; color: #64748b;">Find:</span>
-              <input type="text" id="pur-list-search" class="items-search-input" placeholder="Search by Voucher No, Supplier Bill No, or Supplier Name..." autocomplete="off" />
+              <input type="text" id="pur-list-search" class="items-search-input" placeholder="Search Voucher No, Bill No, Supplier..." autocomplete="off" />
             </div>
-            <button type="button" class="btn-classic primary-action-btn" id="btn-pur-list-add-new">+ Add Purchase</button>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #475569;">From:</span>
+              <input type="date" id="pur-list-from-date" class="input-meta-compact" style="width: 125px; padding: 4px 6px;" />
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #475569;">To:</span>
+              <input type="date" id="pur-list-to-date" class="input-meta-compact" style="width: 125px; padding: 4px 6px;" />
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center; min-width: 170px;">
+              <select id="pur-list-supplier-filter" class="select-box" style="height: 30px; font-size: 12px;">
+                <option value="">-- All Suppliers --</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center; width: 110px;">
+              <select id="pur-list-status-filter" class="select-box" style="height: 30px; font-size: 12px;">
+                <option value="">All Statuses</option>
+                <option value="UNPAID">Unpaid</option>
+                <option value="PARTIAL">Partial</option>
+                <option value="PAID">Paid</option>
+              </select>
+            </div>
+            <button type="button" class="btn-classic" id="btn-pur-list-reset-filters" title="Reset All Filters">Clear</button>
             <button type="button" class="btn-classic" id="btn-pur-list-refresh">Refresh</button>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-pur-list-add-new">+ Add Purchase</button>
           </div>
 
-          <div class="table-container full-height" style="height: calc(100% - 95px); background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
+          <div class="table-container full-height" style="height: calc(100% - 110px); background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow-y: auto;">
             <table class="companies-table" id="pur-register-table">
               <thead>
                 <tr>
-                  <th style="width: 45px; text-align: center;">#</th>
-                  <th style="width: 100px;">Date</th>
-                  <th style="width: 120px;">Voucher No</th>
-                  <th style="width: 130px;">Supplier Bill No</th>
-                  <th style="min-width: 220px;">Supplier Name</th>
-                  <th style="width: 80px; text-align: center;">Items</th>
-                  <th style="width: 110px; text-align: right;">Tax Amt (₹)</th>
-                  <th style="width: 120px; text-align: right;">Net Amount (₹)</th>
-                  <th style="width: 90px; text-align: center;">Status</th>
-                  <th style="width: 120px; text-align: center;">Actions</th>
+                  <th style="width: 40px; text-align: center;">Sl.</th>
+                  <th style="width: 95px;">Date</th>
+                  <th style="width: 115px;">Voucher No</th>
+                  <th style="width: 125px;">Supplier Bill No</th>
+                  <th style="min-width: 200px;">Supplier Name</th>
+                  <th style="width: 65px; text-align: center;">Items</th>
+                  <th style="width: 95px; text-align: right;">Tax Amt (₹)</th>
+                  <th style="width: 110px; text-align: right;">Net Amt (₹)</th>
+                  <th style="width: 100px; text-align: right;">Paid (₹)</th>
+                  <th style="width: 100px; text-align: right;">Balance (₹)</th>
+                  <th style="width: 85px; text-align: center;">Status</th>
+                  <th style="width: 140px; text-align: center;">Actions</th>
                 </tr>
               </thead>
               <tbody id="pur-register-tbody">
@@ -2275,10 +2311,12 @@
             </div>
           </div>
 
-          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <div class="master-bottom-bar" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 6px 12px; border-radius: 4px; border: 1px solid #cbd5e1;">
             <span id="pur-register-count-label" style="font-size: 12px; font-weight: 700; color: #1e40af;">Total Vouchers: 0</span>
-            <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
-              Total Purchase Value: <span id="pur-register-total-val" style="color: #1e3a8a;">₹ 0.00</span>
+            <div style="font-size: 12px; font-weight: 700; color: #0f172a; display: flex; gap: 16px;">
+              <span>Total Value: <strong id="pur-register-total-val" style="color: #1e3a8a;">₹ 0.00</strong></span>
+              <span>Total Paid: <strong id="pur-register-total-paid" style="color: #16a34a;">₹ 0.00</strong></span>
+              <span>Total Balance: <strong id="pur-register-total-bal" style="color: #dc2626;">₹ 0.00</strong></span>
             </div>
           </div>
         </div>
@@ -3532,7 +3570,7 @@
           <div class="comp-field-row-split" style="margin-bottom: 8px;">
             <div class="split-item">
               <label for="sup-form-phone">Contact Phone / Mobile</label>
-              <input type="tel" id="sup-form-phone" placeholder="10-digit mobile number" />
+              <input type="tel" id="sup-form-phone" placeholder="10-digit mobile number" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" autocomplete="off" />
             </div>
             <div class="split-item">
               <label for="sup-form-email">Email Address</label>
@@ -4134,6 +4172,116 @@
               <tbody id="purchase-modify-modal-tbody">
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Purchase Voucher Print & Preview (A4) -->
+    <div class="modal-overlay" id="modal-print-purchase-voucher" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 950px; max-width: 95vw; height: 90vh; display: flex; flex-direction: column;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Print Preview:</span>
+            <h2 id="print-purchase-voucher-title">Purchase Voucher (A4 ERP Layout)</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-print-purchase-modal">&times;</button>
+        </div>
+        <div style="padding: 8px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <span style="font-size: 12px; font-weight: 600;">Paper Format:</span>
+            <select id="pur-print-format-select" class="select-box" style="height: 30px; font-size: 12px;">
+              <option value="A4" selected>Standard A4 Portrait (Full ERP Voucher)</option>
+              <option value="A5">A5 Compact Voucher</option>
+            </select>
+            <span style="font-size: 12px; font-weight: 600; margin-left: 10px;">Copies:</span>
+            <input type="number" id="pur-print-copies" value="1" min="1" max="5" style="width: 50px; height: 30px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" />
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-classic" id="btn-pur-print-browser" style="font-weight: 700;">Print (System Dialog)</button>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-pur-print-pdf" style="font-weight: 700;">Generate &amp; Save PDF</button>
+          </div>
+        </div>
+        <div id="pur-print-preview-container" style="flex: 1; overflow-y: auto; background: #94a3b8; padding: 20px; display: flex; justify-content: center;">
+          <div id="pur-print-preview-frame" style="background: #ffffff; width: 210mm; min-height: 297mm; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 15mm; box-sizing: border-box;">
+            <!-- Rendered HTML -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Item Purchase Price History -->
+    <div class="modal-overlay" id="modal-purchase-price-history" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 850px; max-width: 95vw;">
+        <div class="create-comp-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Rate History:</span>
+            <h2 id="pur-price-history-title">Purchase Price History for Product</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-purchase-price-history-modal">&times;</button>
+        </div>
+        <div style="padding: 14px 16px;">
+          <div id="pur-price-history-subtitle" style="font-size: 12px; color: #475569; margin-bottom: 10px; font-weight: 600;"></div>
+          <div class="table-container" style="max-height: 380px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <table class="companies-table" id="pur-price-history-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px; text-align: center;">#</th>
+                  <th style="width: 95px;">Date</th>
+                  <th style="width: 115px;">Voucher No</th>
+                  <th style="min-width: 180px;">Supplier</th>
+                  <th style="width: 90px; text-align: right;">Rate (₹)</th>
+                  <th style="width: 65px; text-align: right;">Disc %</th>
+                  <th style="width: 65px; text-align: right;">Tax %</th>
+                  <th style="width: 95px; text-align: right;">Landed Cost</th>
+                  <th style="width: 85px; text-align: center;">Type</th>
+                </tr>
+              </thead>
+              <tbody id="pur-price-history-tbody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Purchase Saved Confirmation & Post-Posting Actions -->
+    <div class="modal-overlay" id="modal-purchase-saved" role="dialog" aria-modal="true" style="display: none;">
+      <div class="create-comp-dialog-box" style="width: 600px; max-width: 95vw;">
+        <div class="create-comp-header" style="background: #f0fdf4; border-bottom: 2px solid #22c55e;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px; color: #16a34a;">&#10004;</span>
+            <h2 style="color: #15803d;">Purchase Voucher Posted Successfully</h2>
+          </div>
+          <button type="button" class="dialog-close-btn" id="btn-close-purchase-saved-modal">&times;</button>
+        </div>
+        <div style="padding: 16px 20px;">
+          <div id="pur-saved-details-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b;">Internal Voucher No:</span>
+              <strong id="pur-saved-vch-no" style="color: #1e3a8a;">PUR-000001</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b;">Supplier Bill No:</span>
+              <span id="pur-saved-bill-no" style="font-weight: 600;">INV-12345</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b;">Supplier Name:</span>
+              <span id="pur-saved-supplier-name" style="font-weight: 600;">Supplier Master</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b;">Date:</span>
+              <span id="pur-saved-date">2026-11-16</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px; font-size: 15px;">
+              <span style="font-weight: 700;">Grand Total:</span>
+              <strong id="pur-saved-grand-total" style="color: #15803d;">₹ 0.00</strong>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+            <button type="button" class="btn-classic" id="btn-pur-saved-print" style="font-weight: 700; background: #eff6ff; border-color: #3b82f6; color: #1d4ed8;">View / Print Voucher</button>
+            <button type="button" class="btn-classic" id="btn-pur-saved-register" style="font-weight: 700;">Go to Register</button>
+            <button type="button" class="btn-classic primary-action-btn" id="btn-pur-saved-new" style="font-weight: 800; background: #15803d; border-color: #166534;">+ New Purchase Voucher</button>
           </div>
         </div>
       </div>

@@ -4,35 +4,121 @@ Manages suppliers, contact details, GSTIN, credit limits, payment terms,
 and supplier accounts payable ledgers.
 """
 import uuid
-from typing import Dict, Any, List, Optional
+import re
+from datetime import datetime, date
+from decimal import Decimal
+from typing import Dict, Any, List, Optional, Tuple
 from db.database import db_manager, DatabaseManager
+from services.company_service import resolve_cached_company_id
 from core.logging_config import logger
+
+
+def _sanitize_supplier_row(row_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Sanitize datetime and Decimal objects for JSON serialization."""
+    res = {}
+    for k, v in row_dict.items():
+        if isinstance(v, (datetime, date)):
+            res[k] = v.isoformat()
+        elif isinstance(v, Decimal):
+            res[k] = float(v)
+        else:
+            res[k] = v
+    return res
 
 
 class SupplierService:
     def __init__(self, db: Optional[DatabaseManager] = None):
         self.db = db or db_manager
 
-    def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
-        Rejects missing, empty, or unresolvable company contexts."""
+    def _ensure_suppliers_table(self, db_mgr: DatabaseManager) -> None:
+        """Ensure suppliers table exists in the target database."""
+        try:
+            with db_mgr.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS suppliers (
+                        id VARCHAR(36) PRIMARY KEY,
+                        company_id VARCHAR(36) NOT NULL,
+                        code VARCHAR(50) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        contact_person VARCHAR(255),
+                        mobile VARCHAR(50),
+                        email VARCHAR(255),
+                        gstin VARCHAR(15),
+                        pan VARCHAR(10),
+                        address TEXT,
+                        city VARCHAR(100),
+                        state VARCHAR(100) DEFAULT 'Tamilnadu',
+                        pincode VARCHAR(20),
+                        opening_balance NUMERIC(15, 2) DEFAULT 0.0,
+                        current_balance NUMERIC(15, 2) DEFAULT 0.0,
+                        credit_limit NUMERIC(15, 2) DEFAULT 0.0,
+                        payment_terms INTEGER DEFAULT 30,
+                        bank_name VARCHAR(255),
+                        bank_acc VARCHAR(100),
+                        ifsc VARCHAR(50),
+                        is_active INTEGER DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+                        UNIQUE (company_id, code),
+                        UNIQUE (company_id, name)
+                    );
+                """)
+                conn.commit()
+        except Exception as e:
+            logger.debug(f"ensure suppliers table note: {e}")
+
+    def _get_db_and_company_id(self, company_id: Optional[str]) -> Tuple[DatabaseManager, str]:
+        """
+        Resolves the appropriate DatabaseManager and canonical UUID for the company.
+        Checks traditional_db_manager if company exists there, otherwise self.db / db_manager.
+        """
         cid = str(company_id or "").strip()
         if not cid:
             raise ValueError("Company context is required. Missing company identifier.")
 
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-            c_row = cursor.fetchone()
-            if c_row:
-                return c_row["id"]
+        # 1. Check traditional database if it exists
+        try:
+            from db.traditional_database import traditional_db_manager
+            trad_mgr = DatabaseManager(database_url=traditional_db_manager.database_url)
+            with trad_mgr.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, code FROM companies WHERE id = ? OR UPPER(code) = ? LIMIT 1;", (cid, cid.upper()))
+                c_row = cursor.fetchone()
+                if c_row:
+                    actual_id = c_row["id"] if hasattr(c_row, "keys") or isinstance(c_row, dict) else c_row[0]
+                    self._ensure_suppliers_table(trad_mgr)
+                    return trad_mgr, actual_id
+        except Exception as e:
+            logger.debug(f"SupplierService trad_db check: {e}")
+
+        # 2. Check main database (self.db or db_manager)
+        target_db = self.db or db_manager
+        try:
+            with target_db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, code FROM companies WHERE id = ? OR UPPER(code) = ? LIMIT 1;", (cid, cid.upper()))
+                c_row = cursor.fetchone()
+                if c_row:
+                    actual_id = c_row["id"] if hasattr(c_row, "keys") or isinstance(c_row, dict) else c_row[0]
+                    self._ensure_suppliers_table(target_db)
+                    return target_db, actual_id
+        except Exception as e:
+            logger.debug(f"SupplierService primary_db check: {e}")
+
         raise ValueError(f"Invalid company context: '{cid}' not found.")
+
+    def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code."""
+        _, actual_cid = self._get_db_and_company_id(company_id)
+        return actual_cid
 
     def list_suppliers(self, company_id: str, query: str = "") -> List[Dict[str, Any]]:
         """List all active suppliers for a company, optionally matching a query."""
-        actual_comp_id = self._resolve_company_id(company_id)
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
         q = f"%{query.strip().upper()}%"
-        with self.db.get_connection() as conn:
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             if query.strip():
                 cursor.execute("""
@@ -51,35 +137,35 @@ class SupplierService:
                     WHERE company_id = ? AND is_active = 1
                     ORDER BY name ASC;
                 """, (actual_comp_id,))
-            return [dict(r) for r in cursor.fetchall()]
+            return [_sanitize_supplier_row(dict(r)) for r in cursor.fetchall()]
 
     def get_supplier_by_id(self, company_id: str, supplier_id: str) -> Optional[Dict[str, Any]]:
-        actual_comp_id = self._resolve_company_id(company_id)
-        with self.db.get_connection() as conn:
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT * FROM suppliers
                 WHERE company_id = ? AND id = ?;
             """, (actual_comp_id, supplier_id))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            return _sanitize_supplier_row(dict(row)) if row else None
 
     def find_supplier_by_name(self, company_id: str, name: str) -> Optional[Dict[str, Any]]:
-        actual_comp_id = self._resolve_company_id(company_id)
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
         norm_name = name.strip().upper()
-        with self.db.get_connection() as conn:
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT * FROM suppliers
                 WHERE company_id = ? AND UPPER(name) = ?;
             """, (actual_comp_id, norm_name))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            return _sanitize_supplier_row(dict(row)) if row else None
 
     def get_next_supplier_code(self, company_id: str) -> str:
         """Generates next supplier code e.g. SUP-001."""
-        actual_comp_id = self._resolve_company_id(company_id)
-        with self.db.get_connection() as conn:
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT code FROM suppliers WHERE company_id = ?;
@@ -101,10 +187,19 @@ class SupplierService:
 
     def save_supplier(self, company_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create or update a supplier record."""
-        actual_comp_id = self._resolve_company_id(company_id)
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
         name = (data.get("name") or "").strip().upper()
         if not name:
             raise ValueError("Supplier name is required.")
+
+        # Strict 10-digit phone number limit: letters/special characters blocked, must be exactly 10 digits
+        raw_phone = str(data.get("phone") or data.get("mobile") or "").strip()
+        if raw_phone:
+            if not (raw_phone.isdigit() and len(raw_phone) == 10):
+                raise ValueError("Contact phone number must be exactly 10 numeric digits.")
+            mobile = raw_phone
+        else:
+            mobile = ""
 
         supp_id = data.get("id") or str(uuid.uuid4())
         code = (data.get("code") or "").strip().upper()
@@ -112,7 +207,6 @@ class SupplierService:
             code = self.get_next_supplier_code(actual_comp_id)
 
         contact = (data.get("contact_person") or data.get("contact") or "").strip()
-        mobile = (data.get("mobile") or "").strip()
         email = (data.get("email") or "").strip()
         gstin = (data.get("gstin") or "").strip().upper()
         pan = (data.get("pan") or "").strip().upper()
@@ -127,7 +221,7 @@ class SupplierService:
         bank_acc = (data.get("bank_acc") or "").strip()
         ifsc = (data.get("ifsc") or "").strip().upper()
 
-        with self.db.get_connection() as conn:
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             # Check existing by ID
             cursor.execute("SELECT id, current_balance FROM suppliers WHERE company_id = ? AND id = ?;", (actual_comp_id, supp_id))
@@ -192,6 +286,24 @@ class SupplierService:
                 cursor.execute("SELECT id FROM suppliers WHERE company_id = ? AND name = ?;", (actual_comp_id, name))
                 actual_id = cursor.fetchone()["id"]
 
+            # Keep traditional accounts table in sync if accounts table exists
+            try:
+                cursor.execute("SELECT id FROM accounts WHERE company_id = ? AND id = ?;", (actual_comp_id, actual_id))
+                acc_row = cursor.fetchone()
+                if acc_row:
+                    cursor.execute("""
+                        UPDATE accounts SET
+                            name = ?, code = ?, phone = ?, email = ?, address = ?, gstin = ?, state = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE company_id = ? AND id = ?;
+                    """, (name, code, mobile, email, address, gstin, state, actual_comp_id, actual_id))
+                else:
+                    cursor.execute("""
+                        INSERT INTO accounts (id, company_id, code, name, account_type, phone, email, address, gstin, state, is_active, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 'Creditor', ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                    """, (actual_id, actual_comp_id, code, name, mobile, email, address, gstin, state))
+            except Exception as e:
+                logger.debug(f"accounts sync note: {e}")
+
             conn.commit()
 
         logger.info(f"Supplier {name} ({code}) saved for company {actual_comp_id}.")
@@ -200,13 +312,18 @@ class SupplierService:
             "code": code,
             "name": name,
             "gstin": gstin,
-            "state": state
+            "state": state,
+            "phone": mobile,
+            "mobile": mobile,
+            "credit_limit": credit_limit,
+            "current_balance": op_bal,
+            "opening_balance": op_bal
         }
 
     def update_supplier_balance(self, company_id: str, supplier_id: str, delta_amount: float) -> float:
         """Atomically adjusts a supplier's current balance (positive increases payable, negative decreases)."""
-        actual_comp_id = self._resolve_company_id(company_id)
-        with self.db.get_connection() as conn:
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE suppliers
@@ -221,39 +338,45 @@ class SupplierService:
 
     def get_supplier_ledger(self, company_id: str, supplier_id: str) -> Dict[str, Any]:
         """Returns chronological statement of purchases, returns, and payments for a supplier."""
-        actual_comp_id = self._resolve_company_id(company_id)
+        target_db, actual_comp_id = self._get_db_and_company_id(company_id)
         supplier = self.get_supplier_by_id(actual_comp_id, supplier_id)
         if not supplier:
             return {"supplier": None, "entries": [], "closing_balance": 0.0}
 
         entries = []
-        with self.db.get_connection() as conn:
+        with target_db.get_connection() as conn:
             cursor = conn.cursor()
             # Purchases
-            cursor.execute("""
-                SELECT 'PURCHASE' as type, vch_no, supplier_invoice_no, vch_date as date,
-                       grand_total as debit, amount_paid, payment_type, narration
-                FROM purchase_vouchers
-                WHERE company_id = ? AND supplier_id = ? AND is_cancelled = 0
-                ORDER BY vch_date ASC, created_at ASC;
-            """, (actual_comp_id, supplier_id))
-            purchases = [dict(r) for r in cursor.fetchall()]
+            try:
+                cursor.execute("""
+                    SELECT 'PURCHASE' as type, vch_no, supplier_invoice_no, vch_date as date,
+                           grand_total as debit, amount_paid, payment_type, narration
+                    FROM purchase_vouchers
+                    WHERE company_id = ? AND supplier_id = ? AND is_cancelled = 0
+                    ORDER BY vch_date ASC, created_at ASC;
+                """, (actual_comp_id, supplier_id))
+                purchases = [dict(r) for r in cursor.fetchall()]
+            except Exception:
+                purchases = []
 
             # Returns
-            cursor.execute("""
-                SELECT 'PURCHASE_RETURN' as type, vch_no, original_supplier_inv_no, vch_date as date,
-                       grand_total as credit, reason as narration
-                FROM purchase_returns
-                WHERE company_id = ? AND supplier_id = ?
-                ORDER BY vch_date ASC, created_at ASC;
-            """, (actual_comp_id, supplier_id))
-            returns = [dict(r) for r in cursor.fetchall()]
+            try:
+                cursor.execute("""
+                    SELECT 'PURCHASE_RETURN' as type, vch_no, original_supplier_inv_no, vch_date as date,
+                           grand_total as credit, reason as narration
+                    FROM purchase_returns
+                    WHERE company_id = ? AND supplier_id = ?
+                    ORDER BY vch_date ASC, created_at ASC;
+                """, (actual_comp_id, supplier_id))
+                returns = [dict(r) for r in cursor.fetchall()]
+            except Exception:
+                returns = []
 
         # Combine and compute running balance
         running = supplier.get("opening_balance", 0.0)
         combined = []
         combined.append({
-            "date": supplier.get("created_at", "")[:10],
+            "date": supplier.get("created_at", "")[:10] if supplier.get("created_at") else "",
             "type": "OPENING_BALANCE",
             "ref_no": "-",
             "debit": 0.0,
@@ -311,4 +434,3 @@ class SupplierService:
 
 
 supplier_service = SupplierService()
-

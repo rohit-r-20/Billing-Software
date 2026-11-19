@@ -5,41 +5,41 @@ stock adjustments, inter-godown/branch transfers, and real-time reconciliation.
 Shared identically by Traditional Billing and Fast Billing.
 """
 import uuid
+import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from db.database import db_manager, DatabaseManager
 from core.logging_config import logger
+from services.company_service import resolve_cached_company_id, get_cached_default_branch_id
+
+# In-memory short-TTL cache for evaluated low-stock alerts to prevent repetitive WAN evaluation storms
+_ALERTS_CACHE: Dict[Tuple[str, str, bool], Tuple[float, List[Dict[str, Any]]]] = {}
+_ALERTS_CACHE_TTL: float = 30.0  # seconds
+
+
+def invalidate_alerts_cache(company_id: Optional[str] = None):
+    """Invalidates the in-memory alerts cache for a company or globally when inventory movements occur."""
+    if company_id:
+        keys_to_del = [k for k in _ALERTS_CACHE if k[0] == company_id]
+        for k in keys_to_del:
+            _ALERTS_CACHE.pop(k, None)
+    else:
+        _ALERTS_CACHE.clear()
 
 
 class InventoryService:
     def __init__(self, db: Optional[DatabaseManager] = None):
         self.db = db or db_manager
 
-    def _resolve_company_id(self, company_id: Optional[str]) -> str:
-        """Resolve company UUID whether passed UUID or company code (e.g. COMP0001).
-        Rejects missing, empty, or unresolvable company contexts."""
-        cid = str(company_id or "").strip()
-        if not cid:
-            raise ValueError("Company context is required. Missing company identifier.")
+    def invalidate_alerts_cache(self, company_id: Optional[str] = None):
+        invalidate_alerts_cache(company_id)
 
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE id = ? OR UPPER(code) = ?;", (cid, cid.upper()))
-            c_row = cursor.fetchone()
-            if c_row:
-                return c_row["id"]
-        raise ValueError(f"Invalid company context: '{cid}' not found.")
+    def _resolve_company_id(self, company_id: Optional[str]) -> str:
+        """Resolve company UUID whether passed UUID or company code with in-memory caching."""
+        return resolve_cached_company_id(self.db, company_id)
 
     def _get_default_branch_id(self, company_id: str) -> Optional[str]:
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (company_id,))
-            row = cursor.fetchone()
-            if row:
-                return row["id"]
-            cursor.execute("SELECT id FROM branches WHERE company_id = ? LIMIT 1;", (company_id,))
-            row2 = cursor.fetchone()
-            return row2["id"] if row2 else None
+        return get_cached_default_branch_id(self.db, company_id)
 
     def get_stock(self, company_id: str, item_id: str, branch_id: Optional[str] = None) -> float:
         """Returns the current authoritative available quantity for an item."""
@@ -350,6 +350,7 @@ class InventoryService:
 
             conn.commit()
 
+        invalidate_alerts_cache(actual_comp_id)
         try:
             self.evaluate_low_stock_alerts(actual_comp_id)
         except Exception as e:
@@ -444,6 +445,7 @@ class InventoryService:
 
             conn.commit()
 
+        invalidate_alerts_cache(actual_comp_id)
         # Trigger automatic low-stock evaluation after stock transfer
         try:
             self.evaluate_low_stock_alerts(actual_comp_id)
@@ -738,7 +740,7 @@ class InventoryService:
 
             # Preload active/dismissed alerts in one query to avoid N roundtrips
             cursor.execute("""
-                SELECT id, item_id, branch_id, status, created_at 
+                SELECT id, item_id, branch_id, status, created_at, available_qty, threshold, min_stock_level, reorder_level, severity
                 FROM low_stock_alerts
                 WHERE company_id = ? AND status IN ('ACTIVE', 'DISMISSED');
             """, (actual_comp_id,))
@@ -819,12 +821,14 @@ class InventoryService:
 
                     # If notification disabled for this item/branch, resolve existing active alert if any
                     if not alert_enabled:
-                        cursor.execute("""
-                            UPDATE low_stock_alerts
-                            SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
-                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
-                              AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, curr_item_id, target_branch_id, target_branch_id))
+                        existing = existing_alerts_map.get((curr_item_id, target_branch_id))
+                        if existing:
+                            cursor.execute("""
+                                UPDATE low_stock_alerts
+                                SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
+                                WHERE id = ?;
+                            """, (existing["id"],))
+                            del existing_alerts_map[(curr_item_id, target_branch_id)]
                         continue
 
                     available = float(it["available_qty"])
@@ -841,12 +845,14 @@ class InventoryService:
 
                     # If neither reorder level nor min stock level is set, resolve existing alert if any
                     if eff_threshold is None:
-                        cursor.execute("""
-                            UPDATE low_stock_alerts
-                            SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
-                            WHERE company_id = ? AND item_id = ? AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
-                              AND status IN ('ACTIVE', 'DISMISSED');
-                        """, (actual_comp_id, curr_item_id, target_branch_id, target_branch_id))
+                        existing = existing_alerts_map.get((curr_item_id, target_branch_id))
+                        if existing:
+                            cursor.execute("""
+                                UPDATE low_stock_alerts
+                                SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP, last_evaluated_at = CURRENT_TIMESTAMP
+                                WHERE id = ?;
+                            """, (existing["id"],))
+                            del existing_alerts_map[(curr_item_id, target_branch_id)]
                         continue
 
                     if is_low_stock:
@@ -876,12 +882,25 @@ class InventoryService:
                             alert_id = existing["id"]
                             current_status = existing["status"]
                             alert_created_at = existing["created_at"]
-                            cursor.execute("""
-                                UPDATE low_stock_alerts
-                                SET available_qty = ?, threshold = ?, min_stock_level = ?, reorder_level = ?,
-                                    suggested_reorder_qty = ?, severity = ?, last_evaluated_at = CURRENT_TIMESTAMP
-                                WHERE id = ?;
-                            """, (available, eff_threshold, min_lvl, reorder_lvl, suggested_qty, severity, alert_id))
+                            # Only execute network UPDATE if values actually changed to avoid WAN freeze
+                            old_avail = existing.get("available_qty")
+                            old_thresh = existing.get("threshold")
+                            old_sev = existing.get("severity")
+                            needs_update = False
+                            if old_avail is None or abs(float(old_avail) - available) > 0.0001:
+                                needs_update = True
+                            elif old_thresh is None or abs(float(old_thresh) - eff_threshold) > 0.0001:
+                                needs_update = True
+                            elif old_sev != severity:
+                                needs_update = True
+
+                            if needs_update:
+                                cursor.execute("""
+                                    UPDATE low_stock_alerts
+                                    SET available_qty = ?, threshold = ?, min_stock_level = ?, reorder_level = ?,
+                                        suggested_reorder_qty = ?, severity = ?, last_evaluated_at = CURRENT_TIMESTAMP
+                                    WHERE id = ?;
+                                """, (available, eff_threshold, min_lvl, reorder_lvl, suggested_qty, severity, alert_id))
                         else:
                             alert_id = str(uuid.uuid4())
                             current_status = "ACTIVE"
@@ -1001,7 +1020,15 @@ class InventoryService:
                     })
                 return resolved
 
-        all_alerts = self.evaluate_low_stock_alerts(actual_comp_id)
+        eval_cache_key = ("__eval__", actual_comp_id)
+        now = time.time()
+        cached_eval = _ALERTS_CACHE.get(eval_cache_key)
+        if cached_eval and (now - cached_eval[0] < _ALERTS_CACHE_TTL):
+            all_alerts = list(cached_eval[1])
+        else:
+            all_alerts = self.evaluate_low_stock_alerts(actual_comp_id)
+            _ALERTS_CACHE[eval_cache_key] = (time.time(), list(all_alerts))
+
         if not include_dismissed:
             all_alerts = [a for a in all_alerts if a["status"] == "ACTIVE"]
 
@@ -1029,6 +1056,7 @@ class InventoryService:
                     WHERE company_id = ? AND status = 'ACTIVE';
                 """, (actual_comp_id,))
             conn.commit()
+        invalidate_alerts_cache(actual_comp_id)
         return True
 
 

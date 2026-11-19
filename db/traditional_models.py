@@ -364,3 +364,119 @@ class SaleInvoice(TraditionalBase):
         ),
         Index("ix_sales_invoices_scope_date", "company_id", "branch_id", "vch_date"),
     )
+
+
+class PurchaseVoucher(TraditionalBase):
+    __tablename__ = "purchase_vouchers"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
+    godown_id = Column(String(36), nullable=True)
+    vch_no = Column(String(50), nullable=False)
+    supplier_invoice_no = Column(String(100), nullable=False)
+    supplier_invoice_date = Column(String(20), nullable=False)
+    vch_date = Column(String(20), nullable=False)
+    supplier_id = Column(String(36), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    supplier_name = Column(String(255), nullable=False)
+    supplier_gstin = Column(String(20), nullable=True)
+    supplier_address = Column(Text, nullable=True)
+    supplier_state = Column(String(100), default="Tamilnadu", nullable=True)
+    place_of_supply = Column(String(100), default="Tamilnadu", nullable=True)
+    payment_type = Column(String(50), default="CREDIT", nullable=True)
+    due_date = Column(String(20), nullable=True)
+    purchase_type = Column(String(50), default="GST Purchase", nullable=True)
+    narration = Column(Text, nullable=True)
+    gross_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    discount_total = Column(Numeric(12, 2), default=0.0, nullable=True)
+    additional_expenses = Column(Numeric(12, 2), default=0.0, nullable=True)
+    freight_charges = Column(Numeric(12, 2), default=0.0, nullable=True)
+    handling_charges = Column(Numeric(12, 2), default=0.0, nullable=True)
+    taxable_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    cgst_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    sgst_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    igst_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    cess_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    round_off = Column(Numeric(12, 2), default=0.0, nullable=True)
+    grand_total = Column(Numeric(12, 2), default=0.0, nullable=False)
+    amount_paid = Column(Numeric(12, 2), default=0.0, nullable=True)
+    outstanding_balance = Column(Numeric(12, 2), default=0.0, nullable=True)
+    is_draft = Column(Integer, default=0, nullable=True)
+    is_cancelled = Column(Integer, default=0, nullable=True)
+    created_by = Column(String(100), default="Admin", nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now, nullable=True)
+
+    company = relationship("Company")
+    branch = relationship("Branch")
+    items = relationship("PurchaseVoucherItem", back_populates="voucher", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "vch_no", name="uq_trad_purchase_vouchers_comp_vchno"),
+    )
+
+
+class PurchaseVoucherItem(TraditionalBase):
+    __tablename__ = "purchase_voucher_items"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    voucher_id = Column(String(36), ForeignKey("purchase_vouchers.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(String(36), ForeignKey("items.id", ondelete="SET NULL"), nullable=True, index=True)
+    sn = Column(Integer, default=1, nullable=True)
+    name = Column(String(255), nullable=True)
+    item_name = Column(String(255), nullable=True)
+    barcode = Column(String(100), nullable=True)
+    hsn = Column(String(50), nullable=True)
+    qty = Column(Numeric(12, 3), nullable=False)
+    free_qty = Column(Numeric(12, 3), default=0.0, nullable=True)
+    unit = Column(String(20), default="Pcs.", nullable=True)
+    purchase_rate = Column(Numeric(12, 2), default=0.0, nullable=False)
+    discount_percent = Column(Numeric(5, 2), default=0.0, nullable=True)
+    discount_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    taxable_amount = Column(Numeric(12, 2), default=0.0, nullable=False)
+    tax_rate = Column(Numeric(5, 2), default=18.0, nullable=True)
+    cgst_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    sgst_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    igst_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    cess_amount = Column(Numeric(12, 2), default=0.0, nullable=True)
+    landed_cost = Column(Numeric(12, 2), default=0.0, nullable=True)
+    line_total = Column(Numeric(12, 2), default=0.0, nullable=False)
+    batch_no = Column(String(100), nullable=True)
+    expiry_date = Column(String(20), nullable=True)
+
+    voucher = relationship("PurchaseVoucher", back_populates="items")
+    item = relationship("Item")
+
+
+class PurchasePriceHistory(TraditionalBase):
+    __tablename__ = "purchase_price_history"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    company_id = Column(String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
+    item_id = Column(String(36), ForeignKey("items.id", ondelete="CASCADE"), nullable=False, index=True)
+    supplier_id = Column(String(36), nullable=True, index=True)
+    voucher_id = Column(String(36), ForeignKey("purchase_vouchers.id", ondelete="CASCADE"), nullable=False, index=True)
+    voucher_number = Column(String(50), nullable=False)
+    supplier_invoice_no = Column(String(100), nullable=True)
+    purchase_date = Column(String(20), nullable=False)
+    purchase_rate = Column(Numeric(12, 2), nullable=False)
+    qty = Column(Numeric(12, 3), nullable=False)
+    discount_percent = Column(Numeric(5, 2), default=0.0, nullable=True)
+    tax_rate = Column(Numeric(5, 2), default=0.0, nullable=True)
+    landed_cost = Column(Numeric(12, 2), default=0.0, nullable=True)
+    previous_rate = Column(Numeric(12, 2), default=0.0, nullable=True)
+    is_revision = Column(Integer, default=0, nullable=True)
+    revision_notes = Column(Text, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, nullable=False)
+
+    company = relationship("Company")
+    branch = relationship("Branch")
+    item = relationship("Item")
+    voucher = relationship("PurchaseVoucher")
+
+    __table_args__ = (
+        Index("ix_trad_pph_lookup", "company_id", "item_id", "supplier_id", "purchase_date"),
+        Index("ix_trad_pph_item_date", "company_id", "item_id", "purchase_date"),
+        Index("ix_trad_pph_voucher", "voucher_id"),
+    )

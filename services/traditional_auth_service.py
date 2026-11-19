@@ -80,6 +80,7 @@ class TraditionalSession:
     role_name: str
     username: str
     display_name: str
+    company_code: str = ""
     created_at: datetime = field(default_factory=utc_now)
     last_activity: datetime = field(default_factory=utc_now)
     idle_timeout_seconds: int = 8 * 3600    # 8 hours idle timeout
@@ -113,6 +114,7 @@ class TraditionalSessionRegistry:
         display_name: Optional[str] = None,
         idle_timeout_seconds: int = 8 * 3600,
         shift_limit_seconds: int = 24 * 3600,
+        company_code: str = "",
     ) -> str:
         token = secrets.token_urlsafe(32)
         session = TraditionalSession(
@@ -123,6 +125,7 @@ class TraditionalSessionRegistry:
             role_name=role_name,
             username=username,
             display_name=display_name or username,
+            company_code=company_code,
             created_at=utc_now(),
             last_activity=utc_now(),
             idle_timeout_seconds=idle_timeout_seconds,
@@ -282,6 +285,7 @@ class TraditionalAuthService:
                 role_name=matched_role,
                 username=user.username,
                 display_name=user.full_name or user.username,
+                company_code=comp.code,
             )
 
             return {

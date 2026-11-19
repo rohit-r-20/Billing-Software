@@ -20,6 +20,20 @@ from desktop.web_bridge import BackendBridge
 from core.configuration import config
 from core.logging_config import logger
 
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+    _WM_SYSCOMMAND = 0x0112
+    _SC_RESTORE = 0xF120
+    _SC_MAXIMIZE = 0xF030
+    _SC_SIZE = 0xF000
+    _WM_NCLBUTTONDBLCLK = 0x00A3
+    _WM_NCLBUTTONDOWN = 0x00A1
+    _HTCAPTION = 2
+    _HTMAXBUTTON = 9
+else:
+    wintypes = None
+
 
 class CustomWebPage(QWebEnginePage):
     """Custom page to intercept console logs for auditing and debugging."""
@@ -193,39 +207,27 @@ class MainWindow(QMainWindow):
 
     def nativeEvent(self, eventType, message):
         """Windows native message hook to intercept low-level window sizing, double-click, and restoration."""
-        if sys.platform == "win32" and eventType == b"windows_generic_MSG":
+        if sys.platform == "win32" and wintypes and eventType == b"windows_generic_MSG":
             try:
-                import ctypes
-                from ctypes import wintypes
-
                 msg = wintypes.MSG.from_address(int(message))
-                WM_SYSCOMMAND = 0x0112
-                SC_RESTORE = 0xF120
-                SC_MAXIMIZE = 0xF030
-                SC_SIZE = 0xF000
-                WM_NCLBUTTONDBLCLK = 0x00A3
-                WM_NCLBUTTONDOWN = 0x00A1
-                HTCAPTION = 2
-                HTMAXBUTTON = 9
-
-                if msg.message == WM_SYSCOMMAND:
+                if msg.message == _WM_SYSCOMMAND:
                     cmd = msg.wParam & 0xFFF0
-                    if cmd == SC_RESTORE:
+                    if cmd == _SC_RESTORE:
                         # If minimized, restore back to full maximized state
                         if self.isMinimized():
                             self.showMaximized()
                             return True, 0
                         # If already open/maximized, block un-maximizing to normal window
                         return True, 0
-                    elif cmd in (SC_SIZE, SC_MAXIMIZE):
+                    elif cmd in (_SC_SIZE, _SC_MAXIMIZE):
                         # Prevent manual window sizing and unmaximizing
                         return True, 0
-                elif msg.message == WM_NCLBUTTONDOWN:
-                    if msg.wParam == HTMAXBUTTON:
+                elif msg.message == _WM_NCLBUTTONDOWN:
+                    if msg.wParam == _HTMAXBUTTON:
                         # Swallow click on the native Maximize/Restore button
                         return True, 0
-                elif msg.message == WM_NCLBUTTONDBLCLK:
-                    if msg.wParam == HTCAPTION:
+                elif msg.message == _WM_NCLBUTTONDBLCLK:
+                    if msg.wParam == _HTCAPTION:
                         # Prevent double-clicking the title bar from unmaximizing the window
                         return True, 0
             except Exception as e:

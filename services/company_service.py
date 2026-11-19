@@ -10,6 +10,107 @@ from core.logging_config import logger
 
 RECOGNIZED_SYSTEM_ROLES = frozenset({"Administrator", "Store Manager", "Manager", "Cashier"})
 
+# Process-wide in-memory cache to eliminate repetitive network round-trips for static tenant/branch contexts
+_COMPANY_ID_CACHE: Dict[str, str] = {}
+_DEFAULT_BRANCH_ID_CACHE: Dict[str, Optional[str]] = {}
+
+
+def resolve_cached_company_id(db: Optional[DatabaseManager], company_id: Optional[str]) -> str:
+    """
+    Resolves canonical company UUID with in-memory caching.
+    Eliminates redundant network round-trips over WAN for static company IDs.
+    Checks the primary db connection first; if not found, checks traditional_db_manager.
+    """
+    cid = str(company_id or "").strip()
+    if not cid:
+        raise ValueError("Company context is required. Missing company identifier.")
+
+    if cid in _COMPANY_ID_CACHE:
+        return _COMPANY_ID_CACHE[cid]
+    if cid.upper() in _COMPANY_ID_CACHE:
+        return _COMPANY_ID_CACHE[cid.upper()]
+
+    # 1. Primary db check
+    if db is not None:
+        try:
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, code FROM companies WHERE id = ? OR UPPER(code) = ? LIMIT 1;", (cid, cid.upper()))
+                c_row = cursor.fetchone()
+                if c_row:
+                    actual_id = c_row["id"] if hasattr(c_row, "keys") or isinstance(c_row, dict) else c_row[0]
+                    code = (c_row["code"] if "code" in c_row.keys() else c_row[1]) if hasattr(c_row, "keys") else ""
+                    _COMPANY_ID_CACHE[cid] = actual_id
+                    _COMPANY_ID_CACHE[actual_id] = actual_id
+                    if code:
+                        _COMPANY_ID_CACHE[code] = actual_id
+                        _COMPANY_ID_CACHE[code.upper()] = actual_id
+                    return actual_id
+        except Exception as e:
+            logger.debug(f"resolve_cached_company_id primary check: {e}")
+
+    # 2. Traditional database check
+    try:
+        from db.traditional_database import traditional_db_manager
+        trad_mgr = DatabaseManager(database_url=traditional_db_manager.database_url)
+        with trad_mgr.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, code FROM companies WHERE id = ? OR UPPER(code) = ? LIMIT 1;", (cid, cid.upper()))
+            c_row = cursor.fetchone()
+            if c_row:
+                actual_id = c_row["id"] if hasattr(c_row, "keys") or isinstance(c_row, dict) else c_row[0]
+                code = (c_row["code"] if "code" in c_row.keys() else c_row[1]) if hasattr(c_row, "keys") else ""
+                _COMPANY_ID_CACHE[cid] = actual_id
+                _COMPANY_ID_CACHE[actual_id] = actual_id
+                if code:
+                    _COMPANY_ID_CACHE[code] = actual_id
+                    _COMPANY_ID_CACHE[code.upper()] = actual_id
+                return actual_id
+    except Exception as e:
+        logger.debug(f"resolve_cached_company_id traditional check: {e}")
+
+    raise ValueError(f"Invalid company context: '{cid}' not found.")
+
+
+def get_cached_default_branch_id(db: DatabaseManager, company_id: str) -> Optional[str]:
+    """
+    Resolves default branch UUID for a company with in-memory caching.
+    Eliminates redundant network round-trips over WAN for static branch IDs.
+    """
+    actual_cid = resolve_cached_company_id(db, company_id)
+    if actual_cid in _DEFAULT_BRANCH_ID_CACHE:
+        return _DEFAULT_BRANCH_ID_CACHE[actual_cid]
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        row = None
+        try:
+            cursor.execute("SELECT id FROM branches WHERE company_id = ? AND is_default = 1;", (actual_cid,))
+            row = cursor.fetchone()
+        except Exception:
+            row = None
+
+        if row:
+            branch_id = row["id"]
+        else:
+            cursor.execute("SELECT id FROM branches WHERE company_id = ? LIMIT 1;", (actual_cid,))
+            row2 = cursor.fetchone()
+            branch_id = row2["id"] if row2 else None
+
+        _DEFAULT_BRANCH_ID_CACHE[actual_cid] = branch_id
+        return branch_id
+
+
+def invalidate_company_cache(company_id: Optional[str] = None):
+    """Invalidates company and branch cache entries on company update or creation."""
+    if company_id:
+        _COMPANY_ID_CACHE.pop(company_id, None)
+        _COMPANY_ID_CACHE.pop(company_id.upper(), None)
+        _DEFAULT_BRANCH_ID_CACHE.pop(company_id, None)
+    else:
+        _COMPANY_ID_CACHE.clear()
+        _DEFAULT_BRANCH_ID_CACHE.clear()
+
 
 class CompanyService:
     def __init__(self, db: Optional[DatabaseManager] = None):
@@ -323,6 +424,7 @@ class CompanyService:
 
             conn.commit()
 
+        invalidate_company_cache(comp_id)
         logger.info(f"Company {name} ({code}) created successfully.")
         return {
             "id": comp_id,
